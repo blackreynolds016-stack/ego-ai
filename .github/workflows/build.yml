@@ -23,33 +23,35 @@ jobs:
       - name: Create Android project
         run: |
           npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3 jimp@0.22
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 jimp@0.22
           npx cap init "EGO AI" com.egoai.app --web-dir=www
           npx cap add android
 
       - name: App icon
         continue-on-error: true
         run: |
-          mkdir -p assets
           node -e "
             const Jimp = require('jimp');
             (async () => {
               const src = await Jimp.read('icon.png');
-              const makeSquare = async (size) => {
+              const sizes = {
+                'mipmap-mdpi': 48,
+                'mipmap-hdpi': 72,
+                'mipmap-xhdpi': 96,
+                'mipmap-xxhdpi': 144,
+                'mipmap-xxxhdpi': 192
+              };
+              for (const [dir, size] of Object.entries(sizes)) {
                 const img = src.clone();
                 img.cover(size, size);
-                img.background(0x000000FF);
-                return img;
-              };
-              const icon = await makeSquare(1024);
-              await icon.writeAsync('assets/icon.png');
-              await icon.writeAsync('assets/icon-foreground.png');
-              const splash = await makeSquare(2732);
-              await splash.writeAsync('assets/splash.png');
-              console.log('icon assets ready');
+                const base = 'android/app/src/main/res/' + dir;
+                await img.writeAsync(base + '/ic_launcher.png');
+                await img.writeAsync(base + '/ic_launcher_round.png');
+                await img.writeAsync(base + '/ic_launcher_foreground.png');
+              }
+              console.log('icons written');
             })().catch(e => { console.error(e); process.exit(1); });
           "
-          npx --yes @capacitor/assets generate --android
 
       - name: Build debug APK
         run: |
