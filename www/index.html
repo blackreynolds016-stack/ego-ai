@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EGO AI</title>
+<style>
+:root{--bg:#0a0710;--panel:#15101f;--line:#2a1f40;--violet:#8b5cf6;--text:#ece8f5;--muted:#8d84a6}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:22px;font-weight:800;letter-spacing:.5px}
+header h1 span{color:var(--violet)}
+header button{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 12px;font-size:13px}
+#chat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:86%;padding:10px 14px;border-radius:16px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;font-size:15px}
+.user{align-self:flex-end;background:var(--violet);color:#fff;border-bottom-right-radius:4px}
+.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+.empty{margin:auto;text-align:center;color:var(--muted);font-size:15px}
+.empty b{display:block;color:var(--text);font-size:20px;margin-bottom:6px}
+form{display:flex;gap:8px;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line)}
+textarea{flex:1;resize:none;max-height:120px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:11px 14px;font:inherit;font-size:15px}
+textarea:focus,button:focus-visible{outline:2px solid var(--violet);outline-offset:1px}
+#send{background:var(--violet);color:#fff;border:0;border-radius:14px;padding:0 18px;font-weight:700;font-size:15px}
+#send:disabled{opacity:.5}
+</style>
+</head>
+<body>
+<header><h1>EGO <span>AI</span></h1><button id="clear" type="button">Nuevo chat</button></header>
+<main id="chat"></main>
+<form id="form">
+<textarea id="input" rows="1" placeholder="Escribe un mensaje"></textarea>
+<button id="send" type="submit">Enviar</button>
+</form>
+<script>
+const API = "https://proud-glade-48c1.blackreynolds016.workers.dev";
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const send = document.getElementById("send");
+let history = [];
+try { history = JSON.parse(localStorage.getItem("ego_history") || "[]"); } catch (e) {}
+
+function save() { try { localStorage.setItem("ego_history", JSON.stringify(history.slice(-30))); } catch (e) {} }
+function add(role, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + (role === "user" ? "user" : "bot");
+  d.textContent = text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+function render() {
+  chat.innerHTML = "";
+  if (!history.length) {
+    chat.innerHTML = '<div class="empty"><b>Hola, soy EGO AI</b>Escribe abajo para empezar.</div>';
+    return;
+  }
+  history.forEach(m => add(m.role, m.content));
+}
+document.getElementById("clear").onclick = () => { history = []; save(); render(); };
+input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; });
+
+document.getElementById("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  if (!history.length) chat.innerHTML = "";
+  input.value = ""; input.style.height = "auto";
+  history.push({ role: "user", content: text });
+  add("user", text);
+  const wait = add("bot", "Escribiendo...");
+  send.disabled = true;
+  try {
+    const r = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: history.slice(-20) })
+    });
+    const data = await r.json();
+    wait.textContent = data.reply;
+    history.push({ role: "assistant", content: data.reply });
+  } catch (err) {
+    wait.textContent = "No pude conectar. Revisa tu internet e inténtalo de nuevo.";
+    history.pop();
+  }
+  save();
+  send.disabled = false;
+  chat.scrollTop = chat.scrollHeight;
+});
+render();
+</script>
+</body>
+</html>
