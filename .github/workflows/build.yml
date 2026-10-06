@@ -31,9 +31,9 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p assets
-          cp icon.png assets/icon.png
-          cp icon.png assets/icon-foreground.png
-          cp icon.png assets/splash.png
+          convert icon.png -resize 1024x1024^ -gravity center -extent 1024x1024 -background black -alpha remove -colorspace sRGB assets/icon.png
+          cp assets/icon.png assets/icon-foreground.png
+          convert icon.png -resize 2732x2732 -gravity center -background black -extent 2732x2732 -colorspace sRGB assets/splash.png
           npx --yes @capacitor/assets generate --android
 
       - name: Build debug APK
