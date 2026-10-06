@@ -23,7 +23,7 @@ jobs:
       - name: Create Android project
         run: |
           npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3
           npx cap init "EGO AI" com.egoai.app --web-dir=www
           npx cap add android
 
@@ -31,9 +31,10 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p assets
-          if [ -f icon.png ]; then cp icon.png assets/icon.png; else convert -size 1024x1024 xc:'#060208' -fill '#8b3dff' -draw 'roundrectangle 232,232 792,792 140,140' assets/icon.png; fi
-          npm install @capacitor/assets
-          npx capacitor-assets generate --android
+          cp icon.png assets/icon.png
+          cp icon.png assets/icon-foreground.png
+          cp icon.png assets/splash.png
+          npx --yes @capacitor/assets generate --android
 
       - name: Build debug APK
         run: |
