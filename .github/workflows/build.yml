@@ -23,7 +23,7 @@ jobs:
       - name: Create Android project
         run: |
           npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3 jimp@0.22
           npx cap init "EGO AI" com.egoai.app --web-dir=www
           npx cap add android
 
@@ -31,9 +31,24 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p assets
-          convert icon.png -resize 1024x1024^ -gravity center -extent 1024x1024 -background black -alpha remove -colorspace sRGB assets/icon.png
-          cp assets/icon.png assets/icon-foreground.png
-          convert icon.png -resize 2732x2732 -gravity center -background black -extent 2732x2732 -colorspace sRGB assets/splash.png
+          node -e "
+            const Jimp = require('jimp');
+            (async () => {
+              const src = await Jimp.read('icon.png');
+              const makeSquare = async (size) => {
+                const img = src.clone();
+                img.cover(size, size);
+                img.background(0x000000FF);
+                return img;
+              };
+              const icon = await makeSquare(1024);
+              await icon.writeAsync('assets/icon.png');
+              await icon.writeAsync('assets/icon-foreground.png');
+              const splash = await makeSquare(2732);
+              await splash.writeAsync('assets/splash.png');
+              console.log('icon assets ready');
+            })().catch(e => { console.error(e); process.exit(1); });
+          "
           npx --yes @capacitor/assets generate --android
 
       - name: Build debug APK
