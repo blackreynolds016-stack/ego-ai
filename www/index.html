@@ -5,16 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EGO AI</title>
 <style>
-:root{--bg:#0a0710;--panel:#15101f;--line:#2a1f40;--v:#8b5cf6;--text:#ece8f5;--muted:#8d84a6}
-:root[data-theme="light"]{--bg:#f5f3fa;--panel:#ffffff;--line:#e1dcf0;--v:#7c3aed;--text:#1c1428;--muted:#6b6280}
+:root{--bg:#060208;--panel:#120a1e;--line:#3a2466;--v:#8b3dff;--v2:#c084fc;--text:#f0e9ff;--muted:#9a8ab8}
+:root[data-theme="light"]{--bg:#f3effa;--panel:#ffffff;--line:#e1d4f7;--v:#7c3aed;--v2:#a855f7;--text:#1c1428;--muted:#6b6280}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
-header{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
-header button.icon{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;width:34px;height:34px;font-size:16px}
-header h1{margin:0;font-size:19px;font-weight:800;flex:1}
-header h1 span{color:var(--v)}
-select,header button{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:12px}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0);background:radial-gradient(ellipse at top,#1a0a33 0%,var(--bg) 60%)}
+header{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--line);background:var(--panel)}
+header button.icon{background:var(--bg);border:1px solid var(--line);color:var(--v2);border-radius:10px;width:38px;height:38px;font-size:16px;box-shadow:0 0 10px #8b3dff55}
+.htitle{flex:1}
+.htitle h1{margin:0;font-size:19px;font-weight:800}
+.htitle h1 span{color:var(--v2);text-shadow:0 0 12px var(--v)}
+.htitle small{color:var(--muted);font-size:11px}
+select{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:12px}
 #layout{flex:1;display:flex;overflow:hidden;position:relative}
 #side{width:230px;min-width:230px;border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:8px;transition:margin-left .2s}
 #side.hidden{margin-left:-230px}
@@ -22,16 +24,16 @@ select,header button{background:var(--panel);border:1px solid var(--line);color:
 .chatitem.active{background:var(--line)}
 .chatitem span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chatitem button{background:none;border:0;color:var(--muted);font-size:14px;padding:2px 4px}
-#newchat{width:100%;background:var(--v);color:#fff;border:0;border-radius:9px;padding:9px;font-weight:700;font-size:13px;margin-bottom:10px}
+#newchat{width:100%;background:var(--v);color:#fff;border:0;border-radius:9px;padding:9px;font-weight:700;font-size:13px;margin-bottom:10px;box-shadow:0 0 14px #8b3dff66}
 #main{flex:1;display:flex;flex-direction:column;min-width:0}
 #chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
 .msg{line-height:1.5;font-size:15px;word-wrap:break-word;max-width:100%}
-.user{align-self:flex-end;max-width:85%;background:var(--v);color:#fff;padding:10px 14px;border-radius:16px 16px 4px 16px;white-space:pre-wrap}
+.user{align-self:flex-end;max-width:85%;background:linear-gradient(135deg,var(--v),var(--v2));color:#fff;padding:10px 14px;border-radius:16px 16px 4px 16px;white-space:pre-wrap;box-shadow:0 0 16px #8b3dff55}
 .bot{align-self:stretch}
 .bot p{margin:0 0 10px}.bot h2,.bot h3,.bot h4{margin:14px 0 6px}
 .bot ul,.bot ol{margin:0 0 10px;padding-left:22px}
 .bot code{background:var(--line);padding:1px 5px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
-.bot a{color:var(--v)}
+.bot a{color:var(--v2)}
 .bot img{max-width:100%;border-radius:12px;display:block;margin:6px 0}
 .code{background:var(--bg);border:1px solid var(--line);border-radius:10px;margin:0 0 10px;overflow:hidden}
 .ch{display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:4px 10px;font-size:12px;color:var(--muted)}
@@ -39,12 +41,18 @@ select,header button{background:var(--panel);border:1px solid var(--line);color:
 .code pre{margin:0;padding:10px;overflow-x:auto;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.45}
 .act{display:flex;gap:4px;margin-top:2px}
 .dots{color:var(--muted)}
-.empty{margin:auto;text-align:center;color:var(--muted)}
-.empty b{display:block;color:var(--text);font-size:22px;margin-bottom:12px}
-.chip{display:block;width:100%;margin:8px 0;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:11px;font-size:14px}
-form{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line)}
-textarea{flex:1;resize:none;max-height:130px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:11px 14px;font:inherit;font-size:15px}
-#send{background:var(--v);color:#fff;border:0;border-radius:14px;padding:0 16px;font-weight:700;font-size:15px}
+.empty{margin:auto;text-align:center;color:var(--muted);width:100%;max-width:420px}
+.empty b{display:block;color:var(--text);font-size:26px;margin-bottom:16px}
+.empty b span{color:var(--v2)}
+.chip{display:flex;align-items:center;gap:12px;width:100%;margin:8px 0;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:14px;padding:13px;font-size:14px;text-align:left;box-shadow:0 0 10px #8b3dff22}
+.chip .ic{font-size:20px}
+.chip .tx{flex:1}
+.chip .tx b{display:block;font-size:14px}
+.chip .tx small{color:var(--muted);font-size:12px}
+.chip .arrow{color:var(--v2)}
+form{display:flex;gap:8px;align-items:center;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line);background:var(--panel)}
+textarea{flex:1;resize:none;max-height:130px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:20px;padding:11px 16px;font:inherit;font-size:15px}
+#send{background:linear-gradient(135deg,var(--v),var(--v2));color:#fff;border:0;border-radius:50%;width:42px;height:42px;font-size:16px;box-shadow:0 0 14px #8b3dff66}
 .overlay{position:fixed;inset:0;background:#000a;display:none;z-index:5}
 @media(max-width:640px){#side{position:absolute;top:0;bottom:0;left:0;z-index:10;height:100%}#side.hidden{margin-left:-230px}}
 </style>
@@ -52,7 +60,7 @@ textarea{flex:1;resize:none;max-height:130px;background:var(--panel);color:var(-
 <body>
 <header>
 <button class="icon" id="toggleSide" type="button">☰</button>
-<h1>EGO <span>AI</span></h1>
+<div class="htitle"><h1>EGO <span>AI</span></h1><small>Tu mente, sin límites</small></div>
 <select id="persona">
 <option value="normal">Normal</option>
 <option value="dev">Programador</option>
@@ -72,8 +80,8 @@ textarea{flex:1;resize:none;max-height:130px;background:var(--panel);color:var(-
 <div id="main">
 <main id="chat"></main>
 <form id="form">
-<textarea id="input" rows="1" placeholder="Pregunta algo, o escribe /imagen una descripción"></textarea>
-<button id="send" type="submit">Enviar</button>
+<textarea id="input" rows="1" placeholder="Escribe tu mensaje... o /imagen una descripción"></textarea>
+<button id="send" type="submit">➤</button>
 </form>
 </div>
 </div>
@@ -81,7 +89,7 @@ textarea{flex:1;resize:none;max-height:130px;background:var(--panel);color:var(-
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="mi creador";
-const BASE="Eres EGO AI, un asistente de nivel experto creado el "+CREATED+" por "+CREATOR+" usando Cloudflare Workers y un modelo de lenguaje. Si te preguntan quién te creó o cuándo, responde con estos datos. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. Responde en el idioma del usuario.";
+const BASE="Eres EGO AI, un asistente de nivel experto creado el "+CREATED+" por "+CREATOR+" usando Cloudflare Workers. Si te preguntan quién te creó o cuándo, responde con estos datos. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. Responde en el idioma del usuario.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -130,15 +138,18 @@ const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
 function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(last?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 function renderChat(){chat.innerHTML="";const c=cur();
-if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b><button class="chip">Explícame algo difícil de forma simple</button><button class="chip">Escríbeme un código para...</button><button class="chip">/imagen un paisaje futurista</button></div>';return}
+if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te <span>ayudo</span>?</b>'+
+'<button class="chip"><span class="ic">✨</span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span><span class="arrow">›</span></button>'+
+'<button class="chip"><span class="ic">&lt;/&gt;</span><span class="tx"><b>Escribe un código para...</b><small>o lo que necesites</small></span><span class="arrow">›</span></button>'+
+'<button class="chip"><span class="ic">🚀</span><span class="tx"><b>/imagen un paisaje futuro</b><small>o una idea loca</small></span><span class="arrow">›</span></button></div>';return}
 c.msgs.forEach((m,i)=>{const d=bubble(m.role==="user"?"user":"bot");if(m.role==="user")d.textContent=m.content;else finish(d,m.content,i===c.msgs.length-1)});scroll()}
 document.getElementById("newchat").onclick=()=>{curId=null;renderList();renderChat();if(window.innerWidth<=640)toggleSide(true)};
 function toggleSide(hide){if(hide===undefined)hide=!side.classList.contains("hidden");side.classList.toggle("hidden",hide);overlay.style.display=hide?"none":"block"}
 document.getElementById("toggleSide").onclick=()=>toggleSide();
 overlay.onclick=()=>toggleSide(true);
 document.getElementById("theme").onclick=()=>{const t=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);sv("ego_theme",t);document.getElementById("theme").textContent=t==="dark"?"🌙":"☀️"};
-chat.addEventListener("click",e=>{const t=e.target;
-if(t.classList.contains("chip")){input.value=t.textContent;input.focus();return}
+chat.addEventListener("click",e=>{const t=e.target.closest("[data-a],.chip,.cc");if(!t)return;
+if(t.classList.contains("chip")){const txt=t.querySelector("b").textContent;input.value=txt;input.focus();return}
 if(t.classList.contains("cc")){navigator.clipboard.writeText(t.closest(".code").querySelector("pre").textContent);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200);return}
 const a=t.dataset.a;if(!a||busy)return;
 const msg=t.closest(".msg");
@@ -148,14 +159,14 @@ sel.onchange=()=>sv("ego_p",sel.value);
 input.addEventListener("input",()=>{input.style.height="auto";input.style.height=input.scrollHeight+"px"});
 function typeOut(d,text){return new Promise(res=>{let i=0;const st=Math.max(3,Math.ceil(text.length/160));
 const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},18)})}
-async function ask(){const c=cur();busy=true;stop=false;send.textContent="Detener";
+async function ask(){const c=cur();busy=true;stop=false;send.textContent="■";
 const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
 let reply=null;
 try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[sel.value]},...c.msgs.slice(-24)]})});
 reply=(await r.json()).reply}catch(e){}
 if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
 else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
-busy=false;send.textContent="Enviar";scroll()}
+busy=false;send.textContent="➤";scroll()}
 document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();
 if(busy){stop=true;return}
 let text=input.value.trim();if(!text)return;
