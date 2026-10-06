@@ -31,7 +31,7 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p assets
-          convert -size 1024x1024 xc:'#0a0710' -fill '#8b5cf6' -draw 'roundrectangle 232,232 792,792 140,140' -fill '#0a0710' -draw 'rectangle 340,340 400,684' -draw 'rectangle 340,340 684,400' -draw 'rectangle 340,480 620,540' -draw 'rectangle 340,624 684,684' assets/icon.png
+          if [ -f icon.png ]; then cp icon.png assets/icon.png; else convert -size 1024x1024 xc:'#060208' -fill '#8b3dff' -draw 'roundrectangle 232,232 792,792 140,140' assets/icon.png; fi
           npm install @capacitor/assets
           npx capacitor-assets generate --android
 
