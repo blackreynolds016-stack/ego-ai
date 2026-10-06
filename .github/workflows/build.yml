@@ -26,10 +26,18 @@ jobs:
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           npx cap init "EGO AI" com.egoai.app --web-dir=www
           npx cap add android
-          npx cap sync android
+
+      - name: App icon
+        continue-on-error: true
+        run: |
+          mkdir -p assets
+          convert -size 1024x1024 xc:'#0a0710' -fill '#8b5cf6' -draw 'roundrectangle 232,232 792,792 140,140' -fill '#0a0710' -draw 'rectangle 340,340 400,684' -draw 'rectangle 340,340 684,400' -draw 'rectangle 340,480 620,540' -draw 'rectangle 340,624 684,684' assets/icon.png
+          npm install @capacitor/assets
+          npx capacitor-assets generate --android
 
       - name: Build debug APK
         run: |
+          npx cap sync android
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
