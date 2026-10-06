@@ -5,89 +5,115 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EGO AI</title>
 <style>
-:root{--bg:#0a0710;--panel:#15101f;--line:#2a1f40;--violet:#8b5cf6;--text:#ece8f5;--muted:#8d84a6}
+:root{--bg:#0a0710;--panel:#15101f;--line:#2a1f40;--v:#8b5cf6;--text:#ece8f5;--muted:#8d84a6}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
-header h1{margin:0;font-size:22px;font-weight:800;letter-spacing:.5px}
-header h1 span{color:var(--violet)}
-header button{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 12px;font-size:13px}
-#chat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
-.msg{max-width:86%;padding:10px 14px;border-radius:16px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;font-size:15px}
-.user{align-self:flex-end;background:var(--violet);color:#fff;border-bottom-right-radius:4px}
-.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
-.empty{margin:auto;text-align:center;color:var(--muted);font-size:15px}
-.empty b{display:block;color:var(--text);font-size:20px;margin-bottom:6px}
-form{display:flex;gap:8px;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line)}
-textarea{flex:1;resize:none;max-height:120px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:11px 14px;font:inherit;font-size:15px}
-textarea:focus,button:focus-visible{outline:2px solid var(--violet);outline-offset:1px}
-#send{background:var(--violet);color:#fff;border:0;border-radius:14px;padding:0 18px;font-weight:700;font-size:15px}
-#send:disabled{opacity:.5}
+header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:21px;font-weight:800;flex:1}
+header h1 span{color:var(--v)}
+select,header button{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:13px}
+#chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+.msg{line-height:1.5;font-size:15px;word-wrap:break-word;max-width:100%}
+.user{align-self:flex-end;max-width:85%;background:var(--v);color:#fff;padding:10px 14px;border-radius:16px 16px 4px 16px;white-space:pre-wrap}
+.bot{align-self:stretch}
+.bot p{margin:0 0 10px}.bot h2,.bot h3,.bot h4,.bot h5{margin:14px 0 6px}
+.bot ul,.bot ol{margin:0 0 10px;padding-left:22px}
+.bot code{background:#251a3a;padding:1px 5px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.bot a{color:#b69bff}
+.code{background:#0f0b18;border:1px solid var(--line);border-radius:10px;margin:0 0 10px;overflow:hidden}
+.ch{display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:4px 10px;font-size:12px;color:var(--muted)}
+.ch button,.act button{background:none;border:0;color:var(--muted);font-size:12px;padding:4px 6px}
+.code pre{margin:0;padding:10px;overflow-x:auto;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.45}
+.code pre,.bot .code code{background:none}
+.act{display:flex;gap:4px;margin-top:2px}
+.dots{color:var(--muted)}
+.empty{margin:auto;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--text);font-size:22px;margin-bottom:12px}
+.chip{display:block;width:100%;margin:8px 0;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:11px;font-size:14px}
+form{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line)}
+textarea{flex:1;resize:none;max-height:130px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:11px 14px;font:inherit;font-size:15px}
+textarea:focus,button:focus-visible,select:focus-visible{outline:2px solid var(--v)}
+#send{background:var(--v);color:#fff;border:0;border-radius:14px;padding:0 16px;font-weight:700;font-size:15px}
 </style>
 </head>
 <body>
-<header><h1>EGO <span>AI</span></h1><button id="clear" type="button">Nuevo chat</button></header>
+<header>
+<h1>EGO <span>AI</span></h1>
+<select id="persona">
+<option value="normal">Normal</option>
+<option value="dev">Programador</option>
+<option value="teacher">Profesor</option>
+<option value="creative">Creativo</option>
+<option value="direct">Directo</option>
+</select>
+<button id="clear" type="button">Nuevo</button>
+</header>
 <main id="chat"></main>
 <form id="form">
-<textarea id="input" rows="1" placeholder="Escribe un mensaje"></textarea>
+<textarea id="input" rows="1" placeholder="Pregunta lo que quieras"></textarea>
 <button id="send" type="submit">Enviar</button>
 </form>
 <script>
-const API = "https://proud-glade-48c1.blackreynolds016.workers.dev";
-const chat = document.getElementById("chat");
-const input = document.getElementById("input");
-const send = document.getElementById("send");
-let history = [];
-try { history = JSON.parse(localStorage.getItem("ego_history") || "[]"); } catch (e) {}
-
-function save() { try { localStorage.setItem("ego_history", JSON.stringify(history.slice(-30))); } catch (e) {} }
-function add(role, text) {
-  const d = document.createElement("div");
-  d.className = "msg " + (role === "user" ? "user" : "bot");
-  d.textContent = text;
-  chat.appendChild(d);
-  chat.scrollTop = chat.scrollHeight;
-  return d;
-}
-function render() {
-  chat.innerHTML = "";
-  if (!history.length) {
-    chat.innerHTML = '<div class="empty"><b>Hola, soy EGO AI</b>Escribe abajo para empezar.</div>';
-    return;
-  }
-  history.forEach(m => add(m.role, m.content));
-}
-document.getElementById("clear").onclick = () => { history = []; save(); render(); };
-input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; });
-
-document.getElementById("form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-  if (!history.length) chat.innerHTML = "";
-  input.value = ""; input.style.height = "auto";
-  history.push({ role: "user", content: text });
-  add("user", text);
-  const wait = add("bot", "Escribiendo...");
-  send.disabled = true;
-  try {
-    const r = await fetch(API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history.slice(-20) })
-    });
-    const data = await r.json();
-    wait.textContent = data.reply;
-    history.push({ role: "assistant", content: data.reply });
-  } catch (err) {
-    wait.textContent = "No pude conectar. Revisa tu internet e inténtalo de nuevo.";
-    history.pop();
-  }
-  save();
-  send.disabled = false;
-  chat.scrollTop = chat.scrollHeight;
-});
+const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
+const BASE="Eres EGO AI, un asistente de nivel experto. Piensa con cuidado antes de responder, verifica datos y lógica, y da respuestas completas, precisas y bien estructuradas (títulos, listas, ejemplos, código funcional en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. Responde en el idioma del usuario.";
+const P={normal:"",dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",teacher:" Eres un profesor paciente: explica desde cero, con analogías y ejemplos, y comprueba comprensión.",creative:" Eres creativo y original: ideas distintas, estilo vivo, varias opciones.",direct:" Sé breve y directo: la respuesta primero, sin relleno."};
+const chat=document.getElementById("chat"),input=document.getElementById("input"),send=document.getElementById("send"),sel=document.getElementById("persona");
+let history=[],busy=false,stop=false;
+const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+history=ld("ego_h",[]);sel.value=ld("ego_p","normal");
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const inl=t=>t.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<i>$2</i>").replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+function md(src){
+if((src.match(/```/g)||[]).length%2)src+="\n```";
+const bl=[];
+const s=esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{bl.push('<div class="code"><div class="ch"><span>'+(l||"código")+'</span><button class="cc" type="button">Copiar</button></div><pre>'+c+"</pre></div>");return"\u0000"+(bl.length-1)+"\u0000"});
+const out=[];let list=null;
+const close=()=>{if(list){out.push("</"+list+">");list=null}};
+const open=t=>{if(list!==t){close();out.push("<"+t+">");list=t}};
+for(const line of s.split("\n")){let m;
+if(m=line.match(/^\u0000(\d+)\u0000$/)){close();out.push(bl[m[1]])}
+else if(m=line.match(/^(#{1,4})\s+(.*)/)){close();const n=m[1].length+1;out.push("<h"+n+">"+inl(m[2])+"</h"+n+">")}
+else if(m=line.match(/^\s*[-*]\s+(.*)/)){open("ul");out.push("<li>"+inl(m[1])+"</li>")}
+else if(m=line.match(/^\s*\d+[.)]\s+(.*)/)){open("ol");out.push("<li>"+inl(m[1])+"</li>")}
+else if(!line.trim())close();
+else{close();out.push("<p>"+inl(line)+"</p>")}}
+close();return out.join("");}
+const scroll=()=>{chat.scrollTop=chat.scrollHeight};
+function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
+function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(last?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
+function render(){chat.innerHTML="";
+if(!history.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b><button class="chip">Explícame algo difícil de forma simple</button><button class="chip">Escríbeme un código para...</button><button class="chip">Dame un plan para aprender algo nuevo</button></div>';return}
+history.forEach((m,i)=>{const d=bubble(m.role==="user"?"user":"bot");if(m.role==="user")d.textContent=m.content;else finish(d,m.content,i===history.length-1)});scroll()}
+chat.addEventListener("click",e=>{const t=e.target;
+if(t.classList.contains("chip")){input.value=t.textContent;input.focus();return}
+if(t.classList.contains("cc")){navigator.clipboard.writeText(t.closest(".code").querySelector("pre").textContent);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200);return}
+const a=t.dataset.a;if(!a||busy)return;
+const msg=t.closest(".msg");
+if(a==="copy"){navigator.clipboard.writeText(msg.dataset.raw);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200)}
+if(a==="regen"){history.pop();sv("ego_h",history);msg.remove();ask()}});
+sel.onchange=()=>sv("ego_p",sel.value);
+document.getElementById("clear").onclick=()=>{if(busy)return;history=[];sv("ego_h",history);render()};
+input.addEventListener("input",()=>{input.style.height="auto";input.style.height=input.scrollHeight+"px"});
+function typeOut(d,text){return new Promise(res=>{let i=0;const st=Math.max(3,Math.ceil(text.length/160));
+const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},18)})}
+async function ask(){busy=true;stop=false;send.textContent="Detener";
+const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
+let reply=null;
+try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[sel.value]},...history.slice(-24)]})});
+reply=(await r.json()).reply}catch(e){}
+if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";history.pop();sv("ego_h",history)}
+else{await typeOut(d,reply);history.push({role:"assistant",content:reply});sv("ego_h",history.slice(-40));finish(d,reply,true)}
+busy=false;send.textContent="Enviar";scroll()}
+document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();
+if(busy){stop=true;return}
+const text=input.value.trim();if(!text)return;
+if(!history.length)chat.innerHTML="";
+chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
+input.value="";input.style.height="auto";
+history.push({role:"user",content:text});sv("ego_h",history.slice(-40));
+bubble("user").textContent=text;ask()});
 render();
 </script>
 </body>
