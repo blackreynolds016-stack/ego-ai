@@ -53,6 +53,12 @@ jobs:
             })().catch(e => { console.error(e); process.exit(1); });
           "
 
+      - name: Add Android permissions
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          grep -q "RECORD_AUDIO" "$MANIFEST" || sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />#' "$MANIFEST"
+          cat "$MANIFEST"
+
       - name: Build debug APK
         run: |
           npx cap sync android
