@@ -87,7 +87,7 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 </header>
 <div id="layout">
 <div class="overlay" id="overlay"></div>
-<div id="side">
+<div id="side" class="hidden">
 <button id="newchat" type="button">+ Nuevo chat</button>
 <div id="list"></div>
 </div>
@@ -110,8 +110,8 @@ try{
 
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
-const CREATOR="mi creador";
-const BASE="Eres EGO AI, un asistente de nivel experto creado el "+CREATED+" por "+CREATOR+" usando Cloudflare Workers. Si te preguntan quién te creó o cuándo, responde con estos datos. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. Responde en el idioma del usuario.";
+const CREATOR="Ernesto Hernández";
+const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+" usando Cloudflare Workers. Si te preguntan quién te creó o cuándo, responde con estos datos exactos. Fuiste creado para resolver tareas difíciles, con conocimiento amplio en muchas áreas. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo con certeza, dilo sin inventar en vez de adivinar. Responde en el idioma del usuario.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -338,7 +338,7 @@ if(!chat.querySelector(".msg"))chat.innerHTML="";
 chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
 c.msgs.push({role:"user",content:text});saveChats();renderList();
 bubble("user").textContent=text;ask()});
-if(window.innerWidth<=640){side.classList.add("hidden")}
+if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
 document.body.classList.add("ready");
 
