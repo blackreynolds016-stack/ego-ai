@@ -9,6 +9,10 @@
 :root[data-theme="dark"]{--bg:#1a1714;--panel:#211d19;--line:#3a332c;--v:#da8a5f;--v2:#e8a579;--text:#ece6dd;--muted:#9c9186;--userbg:#2a241e}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",system-ui,Roboto,sans-serif}
+body{opacity:0}
+body.ready{opacity:1;transition:opacity .12s}
+body{opacity:0;transition:opacity .18s ease}
+body.ready{opacity:1}
 body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
 header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
 header button.icon{position:relative;background:linear-gradient(160deg,#ffffff,#e4ddd0);border:1px solid #d8cfbe;color:#6b5f4d;border-radius:12px;width:38px;height:38px;font-size:16px;box-shadow:0 2px 5px #0000001a,inset 0 1px 1px #ffffffcc,inset 0 -2px 3px #00000014}
@@ -91,6 +95,8 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 <main id="chat"></main>
 <form id="form">
 <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="fileInput" accept="image/*,.txt,.md,.csv,.json,.log" style="display:none">
+<button class="toolbtn" id="fileBtn" type="button" title="Adjuntar archivo"><svg viewBox="0 0 24 24" fill="none"><path d="M16.5 6.5 8.4 14.6a3 3 0 0 0 4.24 4.24l8.1-8.1a5 5 0 0 0-7.07-7.07l-8.1 8.1a7 7 0 0 0 9.9 9.9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 <button class="toolbtn" id="camBtn" type="button" title="Tomar foto"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z" fill="currentColor"/><circle cx="12" cy="13" r="3.2" fill="var(--panel)"/></svg></button>
 <button class="toolbtn" id="micBtn" type="button" title="Hablar"><svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" fill="currentColor"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
 <textarea id="input" rows="1" placeholder="Escribe tu mensaje... o /imagen / /buscar"></textarea>
@@ -152,7 +158,8 @@ if((src.match(/```/g)||[]).length%2)src+="\n```";
 const bl=[];
 const s=esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{bl.push('<div class="code"><div class="ch"><span>'+(l||"código")+'</span><button class="cc" type="button">Copiar</button></div><pre>'+c+"</pre></div>");return"\u0000"+(bl.length-1)+"\u0000"});
 const out=[];let listT=null;
-const close=()=>{if(listT){out.push("</"+listT+">");listT=null}};const open=t=>{if(listT!==t){close();out.push("<"+t+">");listT=t}};
+const close=()=>{if(listT){out.push("</"+listT+">");listT=null}};
+const open=t=>{if(listT!==t){close();out.push("<"+t+">");listT=t}};
 for(const line of s.split("\n")){let m;
 if(m=line.match(/^\u0000(\d+)\u0000$/)){close();out.push(bl[m[1]])}
 else if(m=line.match(/^(#{1,4})\s+(.*)/)){close();const n=m[1].length+1;out.push("<h"+n+">"+inl(m[2])+"</h"+n+">")}
@@ -165,8 +172,7 @@ const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
 function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button><button data-a="speak" type="button">🔊 Leer</button>'+(last?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 let maleVoice=null;
-function pickVoice(){
-const voices=speechSynthesis.getVoices();
+function pickVoice(){const voices=speechSynthesis.getVoices();
 const es=voices.filter(v=>v.lang&&v.lang.startsWith("es"));
 const pool=es.length?es:voices;
 maleVoice=pool.find(v=>/male|hombre|varon|jorge|diego|carlos|pablo|miguel/i.test(v.name))||pool[0]||null;
@@ -217,6 +223,38 @@ micBtn.onclick=()=>{micBtn.classList.add("rec");try{rec.start()}catch(e){micBtn.
 }else{
 micBtn.onclick=()=>alert("Tu Android no soporta reconocimiento de voz en esta vista.");
 }
+const fileBtn=document.getElementById("fileBtn"),fileInput=document.getElementById("fileInput");
+fileBtn.onclick=()=>fileInput.click();
+fileInput.onchange=()=>{
+const file=fileInput.files[0];if(!file)return;
+let c=cur();if(!c){c={id:Date.now(),title:file.name,msgs:[]};chats.push(c);curId=c.id}
+if(!chat.querySelector(".msg"))chat.innerHTML="";
+if(file.type.startsWith("image/")){
+const reader=new FileReader();
+reader.onload=async()=>{
+const dataUrl=reader.result;
+const userMsg={role:"user",content:[
+{type:"text",text:"Analiza esta imagen con detalle: describe qué ves y, si hay algún problema, error o duda visible, explícalo y ayúdame a resolverlo."},
+{type:"image_url",image_url:{url:dataUrl}}
+]};
+c.msgs.push(userMsg);saveChats();renderList();
+const ub=bubble("user");ub.innerHTML='Imagen: '+esc(file.name)+'<img class="thumb" src="'+dataUrl+'">';
+await ask();
+};
+reader.readAsDataURL(file);
+}else{
+const reader=new FileReader();
+reader.onload=async()=>{
+const text=String(reader.result).slice(0,12000);
+const prompt="Archivo adjunto: "+file.name+"\n\n"+text+"\n\nAnaliza este archivo, resume su contenido y ayúdame con cualquier problema que encuentres.";
+c.msgs.push({role:"user",content:prompt});saveChats();renderList();
+bubble("user").textContent="📎 "+file.name;
+await ask();
+};
+reader.readAsText(file);
+}
+fileInput.value="";
+};
 camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
@@ -237,8 +275,10 @@ reader.readAsDataURL(file);
 camInput.value="";
 };
 input.addEventListener("input",()=>{input.style.height="auto";input.style.height=input.scrollHeight+"px"});
-function typeOut(d,text){return new Promise(res=>{let i=0;const st=Math.max(3,Math.ceil(text.length/160));
-const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},18)})}
+function typeOut(d,text){
+if(text.length>1500){d.innerHTML=md(text);scroll();return Promise.resolve()}
+return new Promise(res=>{let i=0;const st=Math.max(6,Math.ceil(text.length/60));
+const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},22)})}
 async function searchAndAsk(query,c,d){
 let context="";
 try{
@@ -300,6 +340,7 @@ c.msgs.push({role:"user",content:text});saveChats();renderList();
 bubble("user").textContent=text;ask()});
 if(window.innerWidth<=640){side.classList.add("hidden")}
 renderList();renderChat();
+document.body.classList.add("ready");
 
 }catch(e){console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
 });
