@@ -84,6 +84,9 @@ textarea{flex:1;resize:none;max-height:130px;background:var(--bg);color:var(--te
 </div>
 </div>
 <script>
+window.addEventListener('DOMContentLoaded', function(){
+try{
+
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="mi creador";
@@ -96,14 +99,26 @@ creative:" Eres creativo y original: ideas distintas, estilo vivo, varias opcion
 direct:" Sé breve y directo: la respuesta primero, sin relleno.",
 security:" Eres experto en ciberseguridad defensiva y educativa: explicas cómo funcionan las amenazas para que el usuario se proteja, cómo revisar y asegurar su propia red, router o dispositivos, buenas prácticas y conceptos de pentesting ético sobre sistemas propios o con autorización. No das instrucciones para atacar sistemas de terceros sin autorización ni creas malware."
 };
-const chat=document.getElementById("chat"),input=document.getElementById("input"),send=document.getElementById("send"),sel=document.getElementById("persona"),list=document.getElementById("list"),side=document.getElementById("side"),overlay=document.getElementById("overlay");
+const chat=document.getElementById("chat"),input=document.getElementById("input"),send=document.getElementById("send"),list=document.getElementById("list"),side=document.getElementById("side"),overlay=document.getElementById("overlay");
+const personaBtn=document.getElementById("personaBtn"),personaMenu=document.getElementById("personaMenu");
+const PLABEL={normal:"Normal",dev:"Programador",teacher:"Profesor",creative:"Creativo",direct:"Directo",security:"Seguridad"};
 let busy=false,stop=false;
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let chats=ld("ego_chats",null);
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
 let curId=ld("ego_cur",chats[0]?chats[0].id:null);
-sel.value=ld("ego_p","normal");
+let currentPersona=ld("ego_p","normal");
+personaBtn.textContent=PLABEL[currentPersona]+" ▾";
+Object.keys(PLABEL).forEach(key=>{
+const it=document.createElement("div");
+it.className="pmitem"+(key===currentPersona?" active":"");
+it.textContent=PLABEL[key];
+it.onclick=()=>{currentPersona=key;sv("ego_p",key);personaBtn.textContent=PLABEL[key]+" ▾";personaMenu.style.display="none";
+personaMenu.querySelectorAll(".pmitem").forEach(x=>x.classList.remove("active"));it.classList.add("active")};
+personaMenu.appendChild(it)});
+personaBtn.onclick=()=>{personaMenu.style.display=personaMenu.style.display==="none"?"block":"none"};
+document.addEventListener("click",e=>{if(!document.getElementById("personaWrap").contains(e.target))personaMenu.style.display="none"});
 document.documentElement.setAttribute("data-theme",ld("ego_theme","light"));
 document.getElementById("theme").textContent=ld("ego_theme","light")==="dark"?"☀️":"🌙";
 function cur(){return chats.find(c=>c.id===curId)}
@@ -153,14 +168,13 @@ const a=t.dataset.a;if(!a||busy)return;
 const msg=t.closest(".msg");
 if(a==="copy"){navigator.clipboard.writeText(msg.dataset.raw);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200)}
 if(a==="regen"){const c=cur();c.msgs.pop();saveChats();msg.remove();ask()}});
-sel.onchange=()=>sv("ego_p",sel.value);
 input.addEventListener("input",()=>{input.style.height="auto";input.style.height=input.scrollHeight+"px"});
 function typeOut(d,text){return new Promise(res=>{let i=0;const st=Math.max(3,Math.ceil(text.length/160));
 const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},18)})}
 async function ask(){const c=cur();busy=true;stop=false;send.textContent="■";
 const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
 let reply=null;
-try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[sel.value]},...c.msgs.slice(-24)]})});
+try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},...c.msgs.slice(-24)]})});
 reply=(await r.json()).reply}catch(e){}
 if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
 else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
@@ -189,6 +203,9 @@ c.msgs.push({role:"user",content:text});saveChats();renderList();
 bubble("user").textContent=text;ask()});
 if(window.innerWidth<=640){side.classList.add("hidden")}
 renderList();renderChat();
+
+}catch(e){console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
+});
 </script>
 </body>
 </html>
