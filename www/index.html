@@ -152,8 +152,7 @@ if((src.match(/```/g)||[]).length%2)src+="\n```";
 const bl=[];
 const s=esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{bl.push('<div class="code"><div class="ch"><span>'+(l||"código")+'</span><button class="cc" type="button">Copiar</button></div><pre>'+c+"</pre></div>");return"\u0000"+(bl.length-1)+"\u0000"});
 const out=[];let listT=null;
-const close=()=>{if(listT){out.push("</"+listT+">");listT=null}};
-const open=t=>{if(listT!==t){close();out.push("<"+t+">");listT=t}};
+const close=()=>{if(listT){out.push("</"+listT+">");listT=null}};const open=t=>{if(listT!==t){close();out.push("<"+t+">");listT=t}};
 for(const line of s.split("\n")){let m;
 if(m=line.match(/^\u0000(\d+)\u0000$/)){close();out.push(bl[m[1]])}
 else if(m=line.match(/^(#{1,4})\s+(.*)/)){close();const n=m[1].length+1;out.push("<h"+n+">"+inl(m[2])+"</h"+n+">")}
@@ -240,4 +239,70 @@ camInput.value="";
 input.addEventListener("input",()=>{input.style.height="auto";input.style.height=input.scrollHeight+"px"});
 function typeOut(d,text){return new Promise(res=>{let i=0;const st=Math.max(3,Math.ceil(text.length/160));
 const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},18)})}
-async function sea
+async function searchAndAsk(query,c,d){
+let context="";
+try{
+const r=await fetch("https://api.duckduckgo.com/?q="+encodeURIComponent(query)+"&format=json&no_html=1&skip_disambig=1");
+const j=await r.json();
+const parts=[];
+if(j.AbstractText)parts.push(j.AbstractText);
+if(j.RelatedTopics)j.RelatedTopics.slice(0,5).forEach(t=>{if(t.Text)parts.push(t.Text)});
+context=parts.join("\n").slice(0,1500);
+}catch(e){}
+const prompt=context
+?"Resultados de una búsqueda en internet sobre \""+query+"\":\n"+context+"\n\nCon base en esto, responde de forma clara y completa a: "+query
+:"No obtuve resultados útiles de internet para \""+query+"\". Responde con tu mejor conocimiento, y dilo si la información puede no estar actualizada.";
+busy=true;stop=false;send.textContent="■";
+let reply=null;
+try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},{role:"user",content:prompt}]})});
+reply=(await r.json()).reply}catch(e){}
+if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
+else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
+busy=false;send.textContent="➤";scroll()}
+async function ask(){const c=cur();busy=true;stop=false;send.textContent="■";
+const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
+let reply=null;
+try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},...c.msgs.slice(-24)]})});
+reply=(await r.json()).reply}catch(e){}
+if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
+else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
+busy=false;send.textContent="➤";scroll()}
+document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();
+if(busy){stop=true;return}
+let text=input.value.trim();if(!text)return;
+input.value="";input.style.height="auto";
+const searchMatch=text.match(/^\/buscar\s+(.+)/i);
+if(searchMatch){
+let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
+c.msgs.push({role:"user",content:text});saveChats();renderList();
+if(!chat.querySelector(".msg"))chat.innerHTML="";
+bubble("user").textContent=text;
+const d=bubble("bot");d.innerHTML='<span class="dots">Buscando en internet…</span>';scroll();
+searchAndAsk(searchMatch[1],c,d);
+return}
+const imgMatch=text.match(/^\/imagen\s+(.+)/i);
+if(imgMatch){
+let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
+c.msgs.push({role:"user",content:text});
+if(!chat.querySelector(".msg"))chat.innerHTML="";
+bubble("user").textContent=text;
+const url="https://image.pollinations.ai/prompt/"+encodeURIComponent(imgMatch[1])+"?width=768&height=768&nologo=true";
+const reply="Imagen generada para: "+imgMatch[1]+"\n\n![imagen]("+url+")";
+c.msgs.push({role:"assistant",content:reply});saveChats();renderList();
+const d=bubble("bot");finish(d,reply,true);scroll();
+return}
+let c=cur();
+if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
+if(!c.title)c.title=text.slice(0,30);
+if(!chat.querySelector(".msg"))chat.innerHTML="";
+chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
+c.msgs.push({role:"user",content:text});saveChats();renderList();
+bubble("user").textContent=text;ask()});
+if(window.innerWidth<=640){side.classList.add("hidden")}
+renderList();renderChat();
+
+}catch(e){console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
+});
+</script>
+</body>
+</html>
