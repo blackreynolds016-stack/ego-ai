@@ -5,71 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EGO AI</title>
 <style>
-:root{--bg:#060208;--panel:#120a1e;--line:#3a2466;--v:#8b3dff;--v2:#c084fc;--text:#f0e9ff;--muted:#9a8ab8}
-:root[data-theme="light"]{--bg:#f3effa;--panel:#ffffff;--line:#e1d4f7;--v:#7c3aed;--v2:#a855f7;--text:#1c1428;--muted:#6b6280}
+:root{--bg:#faf7f2;--panel:#ffffff;--line:#e8e2d8;--v:#c2693f;--v2:#da8a5f;--text:#2b2621;--muted:#8a8178;--userbg:#f0e8dd}
+:root[data-theme="dark"]{--bg:#1a1714;--panel:#211d19;--line:#3a332c;--v:#da8a5f;--v2:#e8a579;--text:#ece6dd;--muted:#9c9186;--userbg:#2a241e}
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0);background:radial-gradient(ellipse at top,#1a0a33 0%,var(--bg) 60%)}
-header{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--line);background:var(--panel)}
-header button.icon{background:var(--bg);border:1px solid var(--line);color:var(--v2);border-radius:10px;width:38px;height:38px;font-size:16px;box-shadow:0 0 10px #8b3dff55}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",system-ui,Roboto,sans-serif}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+header button.icon{background:none;border:none;color:var(--muted);border-radius:8px;width:34px;height:34px;font-size:17px}
 .htitle{flex:1}
-.htitle h1{margin:0;font-size:19px;font-weight:800}
-.htitle h1 span{color:var(--v2);text-shadow:0 0 12px var(--v)}
+.htitle h1{margin:0;font-size:17px;font-weight:600;letter-spacing:-.2px}
+.htitle h1 span{color:var(--v)}
 .htitle small{color:var(--muted);font-size:11px}
 select{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:12px}
 #layout{flex:1;display:flex;overflow:hidden;position:relative}
-#side{width:230px;min-width:230px;border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:8px;transition:margin-left .2s}
+#side{width:230px;min-width:230px;border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:10px;transition:margin-left .2s}
 #side.hidden{margin-left:-230px}
-.chatitem{display:flex;align-items:center;gap:6px;padding:9px 10px;border-radius:9px;font-size:13px;margin-bottom:4px;cursor:pointer}
-.chatitem.active{background:var(--line)}
+.chatitem{display:flex;align-items:center;gap:6px;padding:9px 10px;border-radius:10px;font-size:13px;margin-bottom:3px;cursor:pointer;color:var(--muted)}
+.chatitem.active{background:var(--userbg);color:var(--text)}
 .chatitem span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chatitem button{background:none;border:0;color:var(--muted);font-size:14px;padding:2px 4px}
-#newchat{width:100%;background:var(--v);color:#fff;border:0;border-radius:9px;padding:9px;font-weight:700;font-size:13px;margin-bottom:10px;box-shadow:0 0 14px #8b3dff66}
+.chatitem button{background:none;border:0;color:var(--muted);font-size:13px;padding:2px 4px}
+#newchat{width:100%;background:var(--v);color:#fff;border:0;border-radius:10px;padding:10px;font-weight:600;font-size:13px;margin-bottom:12px}
 #main{flex:1;display:flex;flex-direction:column;min-width:0}
-#chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
-.msg{line-height:1.5;font-size:15px;word-wrap:break-word;max-width:100%}
-.user{align-self:flex-end;max-width:85%;background:linear-gradient(135deg,var(--v),var(--v2));color:#fff;padding:10px 14px;border-radius:16px 16px 4px 16px;white-space:pre-wrap;box-shadow:0 0 16px #8b3dff55}
+#chat{flex:1;overflow-y:auto;padding:20px 16px;display:flex;flex-direction:column;gap:18px;max-width:720px;width:100%;margin:0 auto}
+.msg{line-height:1.6;font-size:15.5px;word-wrap:break-word;max-width:100%}
+.user{align-self:flex-end;max-width:82%;background:var(--userbg);color:var(--text);padding:11px 16px;border-radius:18px 18px 4px 18px;white-space:pre-wrap}
 .bot{align-self:stretch}
-.bot p{margin:0 0 10px}.bot h2,.bot h3,.bot h4{margin:14px 0 6px}
-.bot ul,.bot ol{margin:0 0 10px;padding-left:22px}
-.bot code{background:var(--line);padding:1px 5px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
-.bot a{color:var(--v2)}
-.bot img{max-width:100%;border-radius:12px;display:block;margin:6px 0}
-.code{background:var(--bg);border:1px solid var(--line);border-radius:10px;margin:0 0 10px;overflow:hidden}
-.ch{display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:4px 10px;font-size:12px;color:var(--muted)}
+.bot p{margin:0 0 12px}.bot h2,.bot h3,.bot h4{margin:16px 0 8px;font-weight:600}
+.bot ul,.bot ol{margin:0 0 12px;padding-left:22px}
+.bot code{background:var(--userbg);padding:1px 6px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.bot a{color:var(--v)}
+.bot img{max-width:100%;border-radius:12px;display:block;margin:8px 0}
+.code{background:var(--bg);border:1px solid var(--line);border-radius:10px;margin:0 0 12px;overflow:hidden}
+.ch{display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:5px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
 .ch button,.act button{background:none;border:0;color:var(--muted);font-size:12px;padding:4px 6px}
-.code pre{margin:0;padding:10px;overflow-x:auto;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.45}
-.act{display:flex;gap:4px;margin-top:2px}
+.code pre{margin:0;padding:12px;overflow-x:auto;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5}
+.act{display:flex;gap:4px;margin-top:4px}
 .dots{color:var(--muted)}
 .empty{margin:auto;text-align:center;color:var(--muted);width:100%;max-width:420px}
-.empty b{display:block;color:var(--text);font-size:26px;margin-bottom:16px}
-.empty b span{color:var(--v2)}
-.chip{display:flex;align-items:center;gap:12px;width:100%;margin:8px 0;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:14px;padding:13px;font-size:14px;text-align:left;box-shadow:0 0 10px #8b3dff22}
-.chip .ic{font-size:20px}
+.empty b{display:block;color:var(--text);font-size:26px;font-weight:600;margin-bottom:20px}
+.chip{display:flex;align-items:center;gap:12px;width:100%;margin:8px 0;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:14px;padding:13px;font-size:14px;text-align:left}
+.chip .ic{font-size:18px;color:var(--v)}
 .chip .tx{flex:1}
-.chip .tx b{display:block;font-size:14px}
+.chip .tx b{display:block;font-size:14px;font-weight:500}
 .chip .tx small{color:var(--muted);font-size:12px}
-.chip .arrow{color:var(--v2)}
-form{display:flex;gap:8px;align-items:center;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line);background:var(--panel)}
-textarea{flex:1;resize:none;max-height:130px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:20px;padding:11px 16px;font:inherit;font-size:15px}
-#send{background:linear-gradient(135deg,var(--v),var(--v2));color:#fff;border:0;border-radius:50%;width:42px;height:42px;font-size:16px;box-shadow:0 0 14px #8b3dff66}
-.overlay{position:fixed;inset:0;background:#000a;display:none;z-index:5}
+form{display:flex;gap:8px;align-items:center;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line);background:var(--panel);max-width:720px;width:100%;margin:0 auto}
+textarea{flex:1;resize:none;max-height:130px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:22px;padding:12px 18px;font:inherit;font-size:15px}
+#send{background:var(--v);color:#fff;border:0;border-radius:50%;width:42px;height:42px;font-size:16px}
+.overlay{position:fixed;inset:0;background:#0006;display:none;z-index:5}
 @media(max-width:640px){#side{position:absolute;top:0;bottom:0;left:0;z-index:10;height:100%}#side.hidden{margin-left:-230px}}
+
+.pmitem{padding:10px 14px;font-size:13px;color:var(--text);cursor:pointer}
+.pmitem:hover{background:var(--userbg)}
+.pmitem.active{color:var(--v);font-weight:600}
 </style>
 </head>
 <body>
 <header>
 <button class="icon" id="toggleSide" type="button">☰</button>
 <div class="htitle"><h1>EGO <span>AI</span></h1><small>Tu mente, sin límites</small></div>
-<select id="persona">
-<option value="normal">Normal</option>
-<option value="dev">Programador</option>
-<option value="teacher">Profesor</option>
-<option value="creative">Creativo</option>
-<option value="direct">Directo</option>
-<option value="security">Seguridad</option>
-</select>
-<button class="icon" id="theme" type="button">🌙</button>
+<div id="personaWrap" style="position:relative">
+<button class="icon" id="personaBtn" type="button" style="width:auto;padding:6px 10px;font-size:12px;white-space:nowrap">Normal ▾</button>
+<div id="personaMenu" style="display:none;position:absolute;right:0;top:40px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;z-index:20;min-width:140px;box-shadow:0 4px 18px #0004"></div>
+</div>
+<button class="icon" id="theme" type="button">☀️</button>
 </header>
 <div id="layout">
 <div class="overlay" id="overlay"></div>
@@ -106,8 +104,8 @@ let chats=ld("ego_chats",null);
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
 let curId=ld("ego_cur",chats[0]?chats[0].id:null);
 sel.value=ld("ego_p","normal");
-document.documentElement.setAttribute("data-theme",ld("ego_theme","dark"));
-document.getElementById("theme").textContent=ld("ego_theme","dark")==="dark"?"🌙":"☀️";
+document.documentElement.setAttribute("data-theme",ld("ego_theme","light"));
+document.getElementById("theme").textContent=ld("ego_theme","light")==="dark"?"☀️":"🌙";
 function cur(){return chats.find(c=>c.id===curId)}
 function saveChats(){sv("ego_chats",chats);sv("ego_cur",curId)}
 function renderList(){list.innerHTML="";chats.slice().reverse().forEach(c=>{
@@ -138,16 +136,16 @@ const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
 function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(last?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 function renderChat(){chat.innerHTML="";const c=cur();
-if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te <span>ayudo</span>?</b>'+
-'<button class="chip"><span class="ic">✨</span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span><span class="arrow">›</span></button>'+
-'<button class="chip"><span class="ic">&lt;/&gt;</span><span class="tx"><b>Escribe un código para...</b><small>o lo que necesites</small></span><span class="arrow">›</span></button>'+
-'<button class="chip"><span class="ic">🚀</span><span class="tx"><b>/imagen un paisaje futuro</b><small>o una idea loca</small></span><span class="arrow">›</span></button></div>';return}
+if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b>'+
+'<button class="chip"><span class="ic">✦</span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span></button>'+
+'<button class="chip"><span class="ic">&lt;/&gt;</span><span class="tx"><b>Escribe un código para...</b><small>o lo que necesites</small></span></button>'+
+'<button class="chip"><span class="ic">◐</span><span class="tx"><b>/imagen un paisaje futuro</b><small>o una idea loca</small></span></button></div>';return}
 c.msgs.forEach((m,i)=>{const d=bubble(m.role==="user"?"user":"bot");if(m.role==="user")d.textContent=m.content;else finish(d,m.content,i===c.msgs.length-1)});scroll()}
 document.getElementById("newchat").onclick=()=>{curId=null;renderList();renderChat();if(window.innerWidth<=640)toggleSide(true)};
 function toggleSide(hide){if(hide===undefined)hide=!side.classList.contains("hidden");side.classList.toggle("hidden",hide);overlay.style.display=hide?"none":"block"}
 document.getElementById("toggleSide").onclick=()=>toggleSide();
 overlay.onclick=()=>toggleSide(true);
-document.getElementById("theme").onclick=()=>{const t=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);sv("ego_theme",t);document.getElementById("theme").textContent=t==="dark"?"🌙":"☀️"};
+document.getElementById("theme").onclick=()=>{const t=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);sv("ego_theme",t);document.getElementById("theme").textContent=t==="dark"?"☀️":"🌙"};
 chat.addEventListener("click",e=>{const t=e.target.closest("[data-a],.chip,.cc");if(!t)return;
 if(t.classList.contains("chip")){const txt=t.querySelector("b").textContent;input.value=txt;input.focus();return}
 if(t.classList.contains("cc")){navigator.clipboard.writeText(t.closest(".code").querySelector("pre").textContent);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200);return}
@@ -189,6 +187,7 @@ if(!chat.querySelector(".msg"))chat.innerHTML="";
 chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
 c.msgs.push({role:"user",content:text});saveChats();renderList();
 bubble("user").textContent=text;ask()});
+if(window.innerWidth<=640){side.classList.add("hidden")}
 renderList();renderChat();
 </script>
 </body>
