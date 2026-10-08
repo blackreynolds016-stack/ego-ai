@@ -59,33 +59,46 @@ jobs:
           grep -q "RECORD_AUDIO" "$MANIFEST" || sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />#' "$MANIFEST"
           cat "$MANIFEST"
 
-      - name: Remove native splash screen entirely
-        run: |
-          node -e "
-            const fs = require('fs');
-            const manifestPath = 'android/app/src/main/AndroidManifest.xml';
-            let manifest = fs.readFileSync(manifestPath, 'utf8');
-            const before = manifest;
-            manifest = manifest.replace(/android:theme=\"@style\/AppTheme\.NoActionBarLaunch\"/g, 'android:theme=\"@style/AppTheme.NoActionBar\"');
-            if (manifest === before) {
-              console.log('WARNING: no launch theme reference found to replace, check manually');
-            } else {
-              console.log('MainActivity now launches directly with AppTheme.NoActionBar, no splash theme');
-            }
-            fs.writeFileSync(manifestPath, manifest);
-          "
-          grep -n "android:theme" android/app/src/main/AndroidManifest.xml || true
-
-      - name: Simplify launch style (no splash items)
+      - name: Minimize and recolor the mandatory splash
         continue-on-error: true
         run: |
           node -e "
             const fs = require('fs');
+            const BG = '#faf7f2';
+
+            const colorsPath = 'android/app/src/main/res/values/colors.xml';
+            let colors = fs.existsSync(colorsPath) ? fs.readFileSync(colorsPath, 'utf8') : '<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n</resources>';
+            if (!colors.includes('name=\"app_bg\"')) {
+              colors = colors.replace('</resources>', '    <color name=\"app_bg\">' + BG + '</color>\n</resources>');
+            }
+            fs.writeFileSync(colorsPath, colors);
+
             const stylesPath = 'android/app/src/main/res/values/styles.xml';
             let styles = fs.readFileSync(stylesPath, 'utf8');
-            styles = styles.replace(/<style name=\"AppTheme\.NoActionBarLaunch\"[^>]*>[\s\S]*?<\/style>/, '');
+            styles = styles.replace(/<item name=\"android:windowSplashScreenBackground\">[^<]*<\/item>/, '');
+            styles = styles.replace(/<item name=\"android:windowSplashScreenAnimationDuration\">[^<]*<\/item>/, '');
+            styles = styles.replace(
+              /(<style name=\"AppTheme\.NoActionBarLaunch\"[^>]*>)/,
+              '\$1\n        <item name=\"android:windowSplashScreenBackground\">@color/app_bg</item>\n        <item name=\"android:windowSplashScreenAnimationDuration\">0</item>\n        <item name=\"android:windowBackground\">@color/app_bg</item>'
+            );
+            styles = styles.replace(
+              /(<style name=\"AppTheme\"[^>]*>)/,
+              '\$1\n        <item name=\"android:windowBackground\">@color/app_bg</item>'
+            );
             fs.writeFileSync(stylesPath, styles);
-            console.log('Launch-only style block removed');
+            console.log('splash recolored + duration set to 0');
+          "
+
+      - name: Match WebView background to app color
+        continue-on-error: true
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = 'capacitor.config.json';
+            const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            cfg.backgroundColor = '#faf7f2';
+            fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
+            console.log('capacitor.config.json backgroundColor set');
           "
 
       - name: Build debug APK
