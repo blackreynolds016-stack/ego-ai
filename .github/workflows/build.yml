@@ -62,11 +62,28 @@ jobs:
       - name: Shorten native splash
         continue-on-error: true
         run: |
-          COLORS="android/app/src/main/res/values/colors.xml"
-          STYLES="android/app/src/main/res/values/styles.xml"
-          sed -i 's|</resources>|    <color name="splash_background">#faf7f2</color>\n</resources>|' "$COLORS" || true
-          sed -i '/Theme.SplashScreen/a\        <item name="android:windowSplashScreenBackground">@color/splash_background</item>\n        <item name="android:windowSplashScreenAnimationDuration">1</item>' "$STYLES" || true
-          sed -i 's|<item name="android:background">@drawable/splash</item>|<item name="android:background">@color/splash_background</item>|' "$STYLES" || true
+          node -e "
+            const fs = require('fs');
+            const colorsPath = 'android/app/src/main/res/values/colors.xml';
+            const stylesPath = 'android/app/src/main/res/values/styles.xml';
+            try {
+              let colors = fs.existsSync(colorsPath) ? fs.readFileSync(colorsPath, 'utf8') : '<?xml version=\"1.0\" encoding=\"utf-8\"?><resources></resources>';
+              if (!colors.includes('splash_background')) {
+                colors = colors.replace('</resources>', '    <color name=\"splash_background\">#faf7f2</color>\n</resources>');
+              }
+              fs.writeFileSync(colorsPath, colors);
+              console.log('colors.xml updated');
+            } catch (e) { console.error('colors.xml skip:', e.message); }
+            try {
+              let styles = fs.readFileSync(stylesPath, 'utf8');
+              if (styles.includes('Theme.SplashScreen') && !styles.includes('windowSplashScreenBackground')) {
+                styles = styles.replace(/(Theme\.SplashScreen[^>]*>)/, '\$1\n        <item name=\"android:windowSplashScreenBackground\">@color/splash_background</item>\n        <item name=\"android:windowSplashScreenAnimationDuration\">1</item>');
+              }
+              styles = styles.replace('<item name=\"android:background\">@drawable/splash</item>', '<item name=\"android:background\">@color/splash_background</item>');
+              fs.writeFileSync(stylesPath, styles);
+              console.log('styles.xml updated');
+            } catch (e) { console.error('styles.xml skip:', e.message); }
+          "
 
       - name: Build debug APK
         run: |
@@ -79,3 +96,4 @@ jobs:
         with:
           name: EGO-AI-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          
