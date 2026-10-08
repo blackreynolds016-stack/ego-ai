@@ -59,6 +59,15 @@ jobs:
           grep -q "RECORD_AUDIO" "$MANIFEST" || sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />#' "$MANIFEST"
           cat "$MANIFEST"
 
+      - name: Shorten native splash
+        continue-on-error: true
+        run: |
+          COLORS="android/app/src/main/res/values/colors.xml"
+          STYLES="android/app/src/main/res/values/styles.xml"
+          sed -i 's|</resources>|    <color name="splash_background">#faf7f2</color>\n</resources>|' "$COLORS" || true
+          sed -i '/Theme.SplashScreen/a\        <item name="android:windowSplashScreenBackground">@color/splash_background</item>\n        <item name="android:windowSplashScreenAnimationDuration">1</item>' "$STYLES" || true
+          sed -i 's|<item name="android:background">@drawable/splash</item>|<item name="android:background">@color/splash_background</item>|' "$STYLES" || true
+
       - name: Build debug APK
         run: |
           npx cap sync android
