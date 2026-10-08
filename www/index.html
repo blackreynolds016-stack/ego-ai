@@ -64,6 +64,10 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 .toolbtn.rec{background:linear-gradient(160deg,#ff8a7a,#d8432f);color:#fff;border-color:#d8432f;animation:pulse 1s infinite}
 @keyframes pulse{0%{box-shadow:0 0 0 0 #e0525255}70%{box-shadow:0 0 0 10px #e0525200}100%{box-shadow:0 0 0 0 #e0525200}}
 .thumb{max-width:220px;border-radius:14px;display:block;margin-top:6px}
+#attachPreview{display:none;align-items:center;gap:8px;padding:8px 12px;max-width:720px;width:100%;margin:0 auto}
+#attachPreview img{width:46px;height:46px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+#attachPreview span{flex:1;font-size:12px;color:var(--muted)}
+#attachPreview button{background:var(--userbg);border:1px solid var(--line);color:var(--text);border-radius:50%;width:26px;height:26px;font-size:13px}
 .overlay{position:fixed;inset:0;background:#0006;display:none;z-index:5}
 @media(max-width:640px){#side{position:absolute;top:0;bottom:0;left:0;z-index:10;height:100%}#side.hidden{margin-left:-230px}}
 
@@ -90,6 +94,7 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 </div>
 <div id="main">
 <main id="chat"></main>
+<div id="attachPreview"><img id="attachPreviewImg" src=""><span id="attachPreviewName"></span><button id="attachPreviewRemove" type="button">✕</button></div>
 <form id="form">
 <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="fileInput" accept="image/*,.txt,.md,.csv,.json,.log" style="display:none">
@@ -108,7 +113,7 @@ try{
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+" usando Cloudflare Workers. SOLO si te preguntan explícitamente quién te creó, cuándo, o algo sobre tu origen, responde con estos datos exactos; en cualquier otro mensaje (como saludos) NO menciones nada de esto. Fuiste creado para resolver tareas difíciles, con conocimiento amplio en muchas áreas. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo con certeza, dilo sin inventar en vez de adivinar. Responde en el idioma del usuario. Saluda de forma breve y natural, sin presentarte con datos que nadie pidió.";
+const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+". SOLO si te preguntan explícitamente quién te creó, cuándo, o algo sobre tu origen, responde con estos datos exactos; en cualquier otro mensaje (como saludos) NO menciones nada de esto. Fuiste creado para resolver tareas difíciles, con conocimiento amplio en muchas áreas. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo con certeza, dilo sin inventar en vez de adivinar. Responde en el idioma del usuario. Saluda de forma breve y natural, sin presentarte con datos que nadie pidió.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -160,9 +165,9 @@ const open=t=>{if(listT!==t){close();out.push("<"+t+">");listT=t}};
 for(const line of s.split("\n")){let m;
 if(m=line.match(/^\u0000(\d+)\u0000$/)){close();out.push(bl[m[1]])}
 else if(m=line.match(/^(#{1,4})\s+(.*)/)){close();const n=m[1].length+1;out.push("<h"+n+">"+inl(m[2])+"</h"+n+">")}
-else if(m=line.match(/^\s*[-*]\s+(.*)/)){open("ul");out.push("<li>"+inl(m[1])+"</li>")}
-else if(m=line.match(/^\s*\d+[.)]\s+(.*)/)){open("ol");out.push("<li>"+inl(m[1])+"</li>")}
-else if(!line.trim())close();else{close();out.push("<p>"+inl(line)+"</p>")}}
+else if(m=line.match(/^\s*[-*]\s+(.*)/)){open("ul");out.push("<li>"+inl(m[1])+"</li>")}else if(m=line.match(/^\s*\d+[.)]\s+(.*)/)){open("ol");out.push("<li>"+inl(m[1])+"</li>")}
+else if(!line.trim())close();
+else{close();out.push("<p>"+inl(line)+"</p>")}}
 close();return out.join("");}
 const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
@@ -205,33 +210,26 @@ micBtn.onclick=()=>{micBtn.classList.add("rec");try{rec.start()}catch(e){micBtn.
 micBtn.onclick=()=>alert("Tu Android no soporta reconocimiento de voz en esta vista.");
 }
 const fileBtn=document.getElementById("fileBtn"),fileInput=document.getElementById("fileInput");
+const attachPreview=document.getElementById("attachPreview"),attachPreviewImg=document.getElementById("attachPreviewImg"),attachPreviewName=document.getElementById("attachPreviewName"),attachPreviewRemove=document.getElementById("attachPreviewRemove");
+let pendingAttachment=null;
+function setAttachment(dataUrl,name,isImage,rawText){
+pendingAttachment={dataUrl,name,isImage,rawText};
+attachPreview.style.display="flex";
+attachPreviewImg.style.display=isImage?"block":"none";
+if(isImage)attachPreviewImg.src=dataUrl;
+attachPreviewName.textContent=name;
+input.focus();}
+attachPreviewRemove.onclick=()=>{pendingAttachment=null;attachPreview.style.display="none"};
 fileBtn.onclick=()=>fileInput.click();
 fileInput.onchange=()=>{
 const file=fileInput.files[0];if(!file)return;
-let c=cur();if(!c){c={id:Date.now(),title:file.name,msgs:[]};chats.push(c);curId=c.id}
-if(!chat.querySelector(".msg"))chat.innerHTML="";
 if(file.type.startsWith("image/")){
 const reader=new FileReader();
-reader.onload=async()=>{
-const dataUrl=reader.result;
-const userMsg={role:"user",content:[
-{type:"text",text:"Analiza esta imagen con detalle: describe qué ves y, si hay algún problema, error o duda visible, explícalo y ayúdame a resolverlo."},
-{type:"image_url",image_url:{url:dataUrl}}
-]};
-c.msgs.push(userMsg);saveChats();renderList();
-const ub=bubble("user");ub.innerHTML='Imagen: '+esc(file.name)+'<img class="thumb" src="'+dataUrl+'">';
-await ask();
-};
+reader.onload=()=>setAttachment(reader.result,file.name,true);
 reader.readAsDataURL(file);
 }else{
 const reader=new FileReader();
-reader.onload=async()=>{
-const text=String(reader.result).slice(0,12000);
-const prompt="Archivo adjunto: "+file.name+"\n\n"+text+"\n\nAnaliza este archivo, resume su contenido y ayúdame con cualquier problema que encuentres.";
-c.msgs.push({role:"user",content:prompt});saveChats();renderList();
-bubble("user").textContent="📎 "+file.name;
-await ask();
-};
+reader.onload=()=>setAttachment(null,file.name,false,String(reader.result).slice(0,12000));
 reader.readAsText(file);
 }
 fileInput.value="";
@@ -240,18 +238,7 @@ camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
 const reader=new FileReader();
-reader.onload=async()=>{
-const dataUrl=reader.result;
-let c=cur();if(!c){c={id:Date.now(),title:"Foto",msgs:[]};chats.push(c);curId=c.id}
-if(!chat.querySelector(".msg"))chat.innerHTML="";
-const userMsg={role:"user",content:[
-{type:"text",text:"Analiza esta imagen con detalle: describe qué ves y, si hay algún problema, error o duda visible, explícalo y ayúdame a resolverlo."},
-{type:"image_url",image_url:{url:dataUrl}}
-]};
-c.msgs.push(userMsg);saveChats();renderList();
-const ub=bubble("user");ub.innerHTML='Foto enviada<img class="thumb" src="'+dataUrl+'">';
-await ask();
-};
+reader.onload=()=>setAttachment(reader.result,"Foto",true);
 reader.readAsDataURL(file);
 camInput.value="";
 };
@@ -289,7 +276,26 @@ else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveCh
 busy=false;send.textContent="➤";scroll()}
 document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();
 if(busy){stop=true;return}
-let text=input.value.trim();if(!text)return;
+let text=input.value.trim();
+if(pendingAttachment){
+const att=pendingAttachment;pendingAttachment=null;attachPreview.style.display="none";
+input.value="";input.style.height="auto";
+let c=cur();if(!c){c={id:Date.now(),title:att.name,msgs:[]};chats.push(c);curId=c.id}
+if(!chat.querySelector(".msg"))chat.innerHTML="";
+if(att.isImage){
+const question=text||"Analiza esta imagen con detalle: describe qué ves y, si hay algún problema, error o duda visible, explícalo y ayúdame a resolverlo.";
+const userMsg={role:"user",content:[{type:"text",text:question},{type:"image_url",image_url:{url:att.dataUrl}}]};
+c.msgs.push(userMsg);saveChats();renderList();
+const ub=bubble("user");ub.innerHTML=esc(text||"Imagen enviada")+'<img class="thumb" src="'+att.dataUrl+'">';
+}else{
+const question=text||"Analiza este archivo, resume su contenido y ayúdame con cualquier problema que encuentres.";
+const prompt="Archivo adjunto: "+att.name+"\n\n"+att.rawText+"\n\n"+question;
+c.msgs.push({role:"user",content:prompt});saveChats();renderList();
+bubble("user").textContent="📎 "+att.name+(text?" — "+text:"");
+}
+ask();
+return}
+if(!text)return;
 input.value="";input.style.height="auto";
 const searchMatch=text.match(/^\/buscar\s+(.+)/i);
 if(searchMatch){
