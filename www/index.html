@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#faf7f2">
+<meta name="color-scheme" content="light dark">
 <title>EGO AI</title>
 <style>
 :root{--bg:#faf7f2;--panel:#ffffff;--line:#e8e2d8;--v:#c2693f;--v2:#da8a5f;--text:#2b2621;--muted:#8a8178;--userbg:#f0e8dd}
@@ -107,7 +109,7 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 </div>
 </div>
 <script>
-window.addEventListener('DOMContentLoaded', function(){
+function init(){
 try{
 
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
@@ -130,7 +132,7 @@ const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){retu
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let chats=ld("ego_chats",null);
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
-let curId=null;
+let curId=ld("ego_cur",null);
 let currentPersona=ld("ego_p","normal");
 personaBtn.textContent=PLABEL[currentPersona]+" ▾";
 Object.keys(PLABEL).forEach(key=>{
@@ -196,7 +198,7 @@ if(t.classList.contains("cc")){navigator.clipboard.writeText(t.closest(".code").
 const a=t.dataset.a;if(!a||busy)return;
 const msg=t.closest(".msg");
 if(a==="copy"){navigator.clipboard.writeText(msg.dataset.raw);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200)}
-if(a==="regen"){const c=cur();c.msgs.pop();saveChats();msg.remove();ask()}});
+if(a==="regen"){const c=cur();if(c&&c.msgs.length){c.msgs.pop();saveChats();msg.remove();ask()}}});
 
 const micBtn=document.getElementById("micBtn"),camBtn=document.getElementById("camBtn"),camInput=document.getElementById("camInput");
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -212,6 +214,8 @@ micBtn.onclick=()=>alert("Tu Android no soporta reconocimiento de voz en esta vi
 const fileBtn=document.getElementById("fileBtn"),fileInput=document.getElementById("fileInput");
 const attachPreview=document.getElementById("attachPreview"),attachPreviewImg=document.getElementById("attachPreviewImg"),attachPreviewName=document.getElementById("attachPreviewName"),attachPreviewRemove=document.getElementById("attachPreviewRemove");
 let pendingAttachment=null;
+// Reduce imágenes antes de guardar/enviar: más rápido y no satura localStorage
+function downscale(dataUrl){return new Promise(res=>{const img=new Image();img.onload=()=>{const max=1024;const sc=Math.min(1,max/Math.max(img.width,img.height));const w=Math.max(1,Math.round(img.width*sc)),h=Math.max(1,Math.round(img.height*sc));const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);res(cv.toDataURL("image/jpeg",0.82));};img.onerror=()=>res(dataUrl);img.src=dataUrl;});}
 function setAttachment(dataUrl,name,isImage,rawText){
 pendingAttachment={dataUrl,name,isImage,rawText};
 attachPreview.style.display="flex";
@@ -225,7 +229,7 @@ fileInput.onchange=()=>{
 const file=fileInput.files[0];if(!file)return;
 if(file.type.startsWith("image/")){
 const reader=new FileReader();
-reader.onload=()=>setAttachment(reader.result,file.name,true);
+reader.onload=async()=>setAttachment(await downscale(reader.result),file.name,true);
 reader.readAsDataURL(file);
 }else{
 const reader=new FileReader();
@@ -238,7 +242,7 @@ camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
 const reader=new FileReader();
-reader.onload=()=>setAttachment(reader.result,"Foto",true);
+reader.onload=async()=>setAttachment(await downscale(reader.result),"Foto",true);
 reader.readAsDataURL(file);
 camInput.value="";
 };
@@ -262,17 +266,19 @@ const prompt=context
 busy=true;stop=false;send.textContent="■";
 let reply=null;
 try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},{role:"user",content:prompt}]})});
-reply=(await r.json()).reply}catch(e){}
-if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
-else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
+if(!r.ok)throw new Error("HTTP "+r.status);
+const data=await r.json();reply=data.reply;}catch(e){reply=null;}
+if(typeof reply!=="string"||!reply.trim()){reply="No se pudo obtener respuesta del servidor. Revisa tu conexión a internet e inténtalo de nuevo.";}
+await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true);
 busy=false;send.textContent="➤";scroll()}
-async function ask(){const c=cur();busy=true;stop=false;send.textContent="■";
+async function ask(){const c=cur();if(!c){busy=false;send.textContent="➤";return;}busy=true;stop=false;send.textContent="■";
 const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
 let reply=null;
 try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},...c.msgs.slice(-24)]})});
-reply=(await r.json()).reply}catch(e){}
-if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
-else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
+if(!r.ok)throw new Error("HTTP "+r.status);
+const data=await r.json();reply=data.reply;}catch(e){reply=null;}
+if(typeof reply!=="string"||!reply.trim()){reply="No se pudo obtener respuesta del servidor. Revisa tu conexión a internet e inténtalo de nuevo.";}
+await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true);
 busy=false;send.textContent="➤";scroll()}
 document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();
 if(busy){stop=true;return}
@@ -328,7 +334,8 @@ if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
 
 }catch(e){console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
-});
+}
+if(document.readyState==='loading'){window.addEventListener('DOMContentLoaded',init);}else{init();}
 </script>
 </body>
 </html>
