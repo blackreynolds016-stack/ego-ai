@@ -111,7 +111,7 @@ try{
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+" usando Cloudflare Workers. Si te preguntan quién te creó o cuándo, responde con estos datos exactos. Fuiste creado para resolver tareas difíciles, con conocimiento amplio en muchas áreas. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo con certeza, dilo sin inventar en vez de adivinar. Responde en el idioma del usuario.";
+const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+" usando Cloudflare Workers. SOLO si te preguntan explícitamente quién te creó, cuándo, o algo sobre tu origen, responde con estos datos exactos; en cualquier otro mensaje (como saludos) NO menciones nada de esto. Fuiste creado para resolver tareas difíciles, con conocimiento amplio en muchas áreas. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo con certeza, dilo sin inventar en vez de adivinar. Responde en el idioma del usuario. Saluda de forma breve y natural, sin presentarte con datos que nadie pidió.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -128,7 +128,7 @@ const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){retu
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let chats=ld("ego_chats",null);
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
-let curId=ld("ego_cur",chats[0]?chats[0].id:null);
+let curId=null;
 let currentPersona=ld("ego_p","normal");
 personaBtn.textContent=PLABEL[currentPersona]+" ▾";
 Object.keys(PLABEL).forEach(key=>{
@@ -276,9 +276,8 @@ camInput.value="";
 };
 input.addEventListener("input",()=>{input.style.height="auto";input.style.height=input.scrollHeight+"px"});
 function typeOut(d,text){
-if(text.length>1500){d.innerHTML=md(text);scroll();return Promise.resolve()}
-return new Promise(res=>{let i=0;const st=Math.max(6,Math.ceil(text.length/60));
-const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},22)})}
+return new Promise(res=>{let i=0;const steps=Math.min(90,Math.max(30,Math.ceil(text.length/25)));const st=Math.max(2,Math.ceil(text.length/steps));
+const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},20)})}
 async function searchAndAsk(query,c,d){
 let context="";
 try{
