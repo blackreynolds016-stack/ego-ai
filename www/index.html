@@ -9,8 +9,7 @@
 :root[data-theme="dark"]{--bg:#1a1714;--panel:#211d19;--line:#3a332c;--v:#da8a5f;--v2:#e8a579;--text:#ece6dd;--muted:#9c9186;--userbg:#2a241e}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",system-ui,Roboto,sans-serif}
-body{opacity:0}
-body.ready{opacity:1;transition:opacity .12s}
+
 body{opacity:0;transition:opacity .18s ease}
 body.ready{opacity:1}
 body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
@@ -83,6 +82,7 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 <button class="icon" id="personaBtn" type="button" style="width:auto;padding:6px 10px;font-size:12px;white-space:nowrap">Normal ▾</button>
 <div id="personaMenu" style="display:none;position:absolute;right:0;top:40px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;z-index:20;min-width:140px;box-shadow:0 4px 18px #0004"></div>
 </div>
+<button class="icon" id="autoSpeakBtn" type="button" title="Leer respuestas en voz alta">🔇</button>
 <button class="icon" id="theme" type="button">☀️</button>
 </header>
 <div id="layout">
@@ -140,6 +140,10 @@ personaMenu.querySelectorAll(".pmitem").forEach(x=>x.classList.remove("active"))
 personaMenu.appendChild(it)});
 personaBtn.onclick=()=>{personaMenu.style.display=personaMenu.style.display==="none"?"block":"none"};
 document.addEventListener("click",e=>{if(!document.getElementById("personaWrap").contains(e.target))personaMenu.style.display="none"});
+let autoSpeak=ld("ego_autospeak",false);
+const autoSpeakBtn=document.getElementById("autoSpeakBtn");
+autoSpeakBtn.textContent=autoSpeak?"🔊":"🔇";
+autoSpeakBtn.onclick=()=>{autoSpeak=!autoSpeak;sv("ego_autospeak",autoSpeak);autoSpeakBtn.textContent=autoSpeak?"🔊":"🔇";if(!autoSpeak&&currentAudio){currentAudio.pause()}if(!autoSpeak&&("speechSynthesis" in window))speechSynthesis.cancel()};
 document.documentElement.setAttribute("data-theme",ld("ego_theme","light"));
 document.getElementById("theme").textContent=ld("ego_theme","light")==="dark"?"☀️":"🌙";
 function cur(){return chats.find(c=>c.id===curId)}
@@ -172,19 +176,32 @@ const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
 function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button><button data-a="speak" type="button">🔊 Leer</button>'+(last?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 let maleVoice=null;
-function pickVoice(){const voices=speechSynthesis.getVoices();
+function pickVoice(){
+const voices=speechSynthesis.getVoices();
 const es=voices.filter(v=>v.lang&&v.lang.startsWith("es"));
 const pool=es.length?es:voices;
-maleVoice=pool.find(v=>/male|hombre|varon|jorge|diego|carlos|pablo|miguel/i.test(v.name))||pool[0]||null;
-}
+maleVoice=pool.find(v=>/male|hombre|varon|jorge|diego|carlos|pablo|miguel/i.test(v.name))||pool[0]||null;}
 if("speechSynthesis" in window){speechSynthesis.onvoiceschanged=pickVoice;pickVoice()}
-function speak(text){
+function speakFallback(text){
 if(!("speechSynthesis" in window))return;
 speechSynthesis.cancel();
-const u=new SpeechSynthesisUtterance(text.replace(/[`*#_]/g,"").replace(/!\[.*?\]\(.*?\)/g,""));
+const u=new SpeechSynthesisUtterance(text);
 if(maleVoice)u.voice=maleVoice;
 u.pitch=0.85;u.rate=1;u.lang=maleVoice?maleVoice.lang:"es-ES";
 speechSynthesis.speak(u)}
+let currentAudio=null;
+async function speak(rawText){
+const text=rawText.replace(/[`*#_]/g,"").replace(/!\[.*?\]\(.*?\)/g,"");
+if(currentAudio){currentAudio.pause();currentAudio=null}
+if("speechSynthesis" in window)speechSynthesis.cancel();
+try{
+const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tts:text})});
+if(!r.ok)throw new Error("tts http error");
+const blob=await r.blob();
+const url=URL.createObjectURL(blob);
+currentAudio=new Audio(url);
+currentAudio.play();
+}catch(e){speakFallback(text)}}
 function renderChat(){chat.innerHTML="";const c=cur();
 if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b>'+
 '<button class="chip"><span class="ic">✦</span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span></button>'+
@@ -296,7 +313,7 @@ let reply=null;
 try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},{role:"user",content:prompt}]})});
 reply=(await r.json()).reply}catch(e){}
 if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
-else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
+else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true);if(autoSpeak)speak(reply)}
 busy=false;send.textContent="➤";scroll()}
 async function ask(){const c=cur();busy=true;stop=false;send.textContent="■";
 const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
@@ -304,7 +321,7 @@ let reply=null;
 try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},...c.msgs.slice(-24)]})});
 reply=(await r.json()).reply}catch(e){}
 if(reply===null){d.textContent="Sin conexión. Revisa tu internet e inténtalo de nuevo.";c.msgs.pop();saveChats()}
-else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
+else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true);if(autoSpeak)speak(reply)}
 busy=false;send.textContent="➤";scroll()}
 document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();
 if(busy){stop=true;return}
@@ -339,7 +356,6 @@ c.msgs.push({role:"user",content:text});saveChats();renderList();
 bubble("user").textContent=text;ask()});
 if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
-document.body.classList.add("ready");
 
 }catch(e){console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
 });
