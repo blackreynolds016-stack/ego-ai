@@ -20,6 +20,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Ensure web assets are in www
+        run: |
+          mkdir -p www
+          if [ ! -f www/index.html ] && [ -f index.html ]; then cp index.html www/index.html; fi
+          ls -la www
+
       - name: Create Android project
         run: |
           npm init -y
@@ -59,34 +65,59 @@ jobs:
           grep -q "RECORD_AUDIO" "$MANIFEST" || sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />#' "$MANIFEST"
           cat "$MANIFEST"
 
-      - name: Minimize and recolor the mandatory splash
-        continue-on-error: true
+      - name: Remove splash animation (instant open, solid bg color)
         run: |
           node -e "
             const fs = require('fs');
+            const path = require('path');
             const BG = '#faf7f2';
+            const res = 'android/app/src/main/res';
 
-            const colorsPath = 'android/app/src/main/res/values/colors.xml';
-            let colors = fs.existsSync(colorsPath) ? fs.readFileSync(colorsPath, 'utf8') : '<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n</resources>';
-            if (!colors.includes('name=\"app_bg\"')) {
-              colors = colors.replace('</resources>', '    <color name=\"app_bg\">' + BG + '</color>\n</resources>');
+            // 1) Transparent drawable so no icon shows on the Android 12+ splash
+            fs.mkdirSync(path.join(res, 'drawable'), { recursive: true });
+            fs.writeFileSync(
+              path.join(res, 'drawable', 'transparent.xml'),
+              '<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<shape xmlns:android=\"http://schemas.android.com/apk/res/android\" android:shape=\"rectangle\"><solid android:color=\"#00000000\"/></shape>'
+            );
+
+            // 2) app_bg color available in values (and values-night if present)
+            const ensureColor = (dir) => {
+              const p = path.join(res, dir, 'colors.xml');
+              fs.mkdirSync(path.join(res, dir), { recursive: true });
+              let c = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n</resources>';
+              if (!c.includes('name=\"app_bg\"')) {
+                c = c.replace('</resources>', '    <color name=\"app_bg\">' + BG + '</color>\n</resources>');
+              }
+              fs.writeFileSync(p, c);
+            };
+            ensureColor('values');
+            if (fs.existsSync(path.join(res, 'values-night'))) ensureColor('values-night');
+
+            // 3) Patch every themes.xml / styles.xml found (Capacitor 6 uses themes.xml)
+            const patch = (file) => {
+              if (!fs.existsSync(file)) return false;
+              let s = fs.readFileSync(file, 'utf8');
+              s = s.replace(/<item name=\"android:windowSplashScreenBackground\">[^<]*<\/item>\s*/g, '');
+              s = s.replace(/<item name=\"android:windowSplashScreenAnimatedIcon\">[^<]*<\/item>\s*/g, '');
+              s = s.replace(/<item name=\"android:windowSplashScreenAnimationDuration\">[^<]*<\/item>\s*/g, '');
+              s = s.replace(/<item name=\"android:windowBackground\">[^<]*<\/item>\s*/g, '');
+              const launchItems = '\n        <item name=\"android:windowSplashScreenBackground\">@color/app_bg</item>\n        <item name=\"android:windowSplashScreenAnimatedIcon\">@drawable/transparent</item>\n        <item name=\"android:windowSplashScreenAnimationDuration\">0</item>\n        <item name=\"android:windowBackground\">@color/app_bg</item>';
+              if (/<style name=\"AppTheme\.NoActionBarLaunch\"[^>]*>/.test(s)) {
+                s = s.replace(/(<style name=\"AppTheme\.NoActionBarLaunch\"[^>]*>)/, '\$1' + launchItems);
+              }
+              if (/<style name=\"AppTheme\"[^>]*>/.test(s)) {
+                s = s.replace(/(<style name=\"AppTheme\"[^>]*>)/, '\$1\n        <item name=\"android:windowBackground\">@color/app_bg</item>');
+              }
+              fs.writeFileSync(file, s);
+              return true;
+            };
+            let patched = false;
+            for (const dir of ['values', 'values-night', 'values-v31', 'values-night-v31']) {
+              if (patch(path.join(res, dir, 'themes.xml'))) patched = true;
+              if (patch(path.join(res, dir, 'styles.xml'))) patched = true;
             }
-            fs.writeFileSync(colorsPath, colors);
-
-            const stylesPath = 'android/app/src/main/res/values/styles.xml';
-            let styles = fs.readFileSync(stylesPath, 'utf8');
-            styles = styles.replace(/<item name=\"android:windowSplashScreenBackground\">[^<]*<\/item>/, '');
-            styles = styles.replace(/<item name=\"android:windowSplashScreenAnimationDuration\">[^<]*<\/item>/, '');
-            styles = styles.replace(
-              /(<style name=\"AppTheme\.NoActionBarLaunch\"[^>]*>)/,
-              '\$1\n        <item name=\"android:windowSplashScreenBackground\">@color/app_bg</item>\n        <item name=\"android:windowSplashScreenAnimationDuration\">0</item>\n        <item name=\"android:windowBackground\">@color/app_bg</item>'
-            );
-            styles = styles.replace(
-              /(<style name=\"AppTheme\"[^>]*>)/,
-              '\$1\n        <item name=\"android:windowBackground\">@color/app_bg</item>'
-            );
-            fs.writeFileSync(stylesPath, styles);
-            console.log('splash recolored + duration set to 0');
+            if (!patched) { console.warn('WARNING: no themes.xml/styles.xml found to patch.'); }
+            else { console.log('Splash patched: transparent icon, animationDuration=0, bg=' + BG); }
           "
 
       - name: Match WebView background to app color
@@ -112,4 +143,3 @@ jobs:
         with:
           name: EGO-AI-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
