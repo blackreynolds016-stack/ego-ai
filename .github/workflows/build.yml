@@ -79,4 +79,3 @@ jobs:
         with:
           name: EGO-AI-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
