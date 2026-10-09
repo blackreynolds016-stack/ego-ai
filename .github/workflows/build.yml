@@ -128,7 +128,7 @@ jobs:
             console.log('icons written, bg ' + hex);
           })().catch(e => { console.error(e); process.exit(1); });
           EOF
-               - name: Add Android permissions
+                - name: Add Android permissions
         run: |
           node <<'EOF'
           const fs = require('fs');
