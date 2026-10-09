@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>EGO AI</title>
 <script>(function(){try{var t=JSON.parse(localStorage.getItem("ego_theme"));if(t!=="dark"&&t!=="light")t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}})()</script>
 <style>
@@ -75,6 +75,23 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 .pmitem{padding:10px 14px;font-size:13px;color:var(--text);cursor:pointer}
 .pmitem:hover{background:var(--userbg)}
 .pmitem.active{color:var(--v);font-weight:600}
+#side{display:flex;flex-direction:column;overflow:hidden}
+#newchat{flex-shrink:0}
+#list{flex:1;overflow-y:auto;min-height:0}
+.acct{flex-shrink:0;border-top:1px solid var(--line);padding-top:10px;margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:14px;padding:11px;font-size:13px;font-weight:600}
+:root[data-theme="dark"] .gbtn{background:#2a241e;color:var(--text);border-color:var(--line)}
+.gbtn svg{width:18px;height:18px;flex-shrink:0}
+.sbtn{width:100%;background:none;border:1px solid var(--line);color:var(--muted);border-radius:14px;padding:9px;font-size:12px}
+.urow{display:flex;align-items:center;gap:10px}
+.av{width:36px;height:36px;border-radius:50%;background:var(--v);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;overflow:hidden;flex-shrink:0}
+.av img{width:100%;height:100%;object-fit:cover}
+.uinfo{flex:1;min-width:0}
+.uinfo b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uinfo small{color:var(--muted);font-size:11px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#000d;color:#fff;padding:10px 16px;border-radius:14px;font-size:13px;z-index:50;display:none;max-width:86%;text-align:center}
+#chat{contain:content;overscroll-behavior:contain}
+button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -92,6 +109,7 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 <div id="side" class="hidden">
 <button id="newchat" type="button">+ Nuevo chat</button>
 <div id="list"></div>
+<div class="acct" id="acct"></div>
 </div>
 <div id="main">
 <main id="chat"></main>
@@ -107,6 +125,7 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 </form>
 </div>
 </div>
+<div id="toast"></div>
 <script>
 window.addEventListener('DOMContentLoaded', function(){
 try{
@@ -114,7 +133,7 @@ try{
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+". SOLO si te preguntan explícitamente quién te creó, cuándo, o algo sobre tu origen, responde con estos datos exactos; en cualquier otro mensaje (como saludos) NO menciones nada de esto. Fuiste creado para resolver tareas difíciles, con conocimiento amplio en muchas áreas. Piensa con cuidado, verifica datos y lógica, y da respuestas completas y bien estructuradas (títulos, listas, código en bloques con lenguaje). Si algo es ambiguo, asume lo más razonable y dilo; si no sabes algo con certeza, dilo sin inventar en vez de adivinar. Responde en el idioma del usuario. Saluda de forma breve y natural, sin presentarte con datos que nadie pidió.";
+const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+". Menciona esto SOLO si te preguntan por tu origen o creador. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -132,6 +151,7 @@ const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch
 let chats=ld("ego_chats",null);
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
 let curId=null;
+const Cloud={on:false,user:null,queue(){},remove(){}};
 let currentPersona=ld("ego_p","normal");
 personaBtn.textContent=PLABEL[currentPersona]+" ▾";
 Object.keys(PLABEL).forEach(key=>{
@@ -146,18 +166,22 @@ document.addEventListener("click",e=>{if(!document.getElementById("personaWrap")
 const SYS=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";const TH0=ld("ego_theme",SYS);document.documentElement.setAttribute("data-theme",TH0);
 document.getElementById("theme").textContent=TH0==="dark"?"☀️":"🌙";
 function cur(){return chats.find(c=>c.id===curId)}
+function persistable(){return chats.map(ch=>({...ch,msgs:ch.msgs.map(m=>(m.thumb&&Array.isArray(m.content))?{...m,content:m.content.map(p=>p.type==="image_url"?{type:"image_url",image_url:{url:m.thumb}}:p)}:m)}))}
 function saveChats(){
-if(!sv("ego_chats",chats)){
-const c=cur(),last=c&&c.msgs[c.msgs.length-1];
-chats.forEach(ch=>ch.msgs.forEach(m=>{if(m!==last&&Array.isArray(m.content))m.content=((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen]"}));
-sv("ego_chats",chats)}
-sv("ego_cur",curId)}
+const c=cur();let changed=false;
+if(c&&c.msgs.length!==c.n){c.n=c.msgs.length;c.updated=Date.now();changed=true}
+if(!sv("ego_chats",persistable())){
+const last=c&&c.msgs[c.msgs.length-1];
+chats.forEach(ch=>ch.msgs.forEach(m=>{if(m!==last&&Array.isArray(m.content)){m.content=((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen]";delete m.thumb}}));
+sv("ego_chats",persistable())}
+sv("ego_cur",curId);
+if(changed&&c&&Cloud.on)Cloud.queue(c)}
 function renderList(){list.innerHTML="";chats.slice().reverse().forEach(c=>{
 const d=document.createElement("div");d.className="chatitem"+(c.id===curId?" active":"");
 d.innerHTML='<span></span><button data-del="'+c.id+'">✕</button>';
 d.querySelector("span").textContent=c.title||"Nuevo chat";
 d.onclick=e=>{if(e.target.dataset.del)return;curId=c.id;saveChats();renderList();renderChat();if(window.innerWidth<=640)toggleSide(true)};
-d.querySelector("button").onclick=e=>{e.stopPropagation();chats=chats.filter(x=>x.id!==c.id);if(curId===c.id)curId=chats[0]?chats[0].id:null;saveChats();renderList();renderChat()};
+d.querySelector("button").onclick=e=>{e.stopPropagation();chats=chats.filter(x=>x.id!==c.id);Cloud.remove(c.id);if(curId===c.id)curId=chats[0]?chats[0].id:null;saveChats();renderList();renderChat()};
 list.appendChild(d)})}
 const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const inl=t=>t.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<i>$2</i>").replace(/!\[([^\]]*)\]\((https?:[^)\s]+)\)/g,'<img src="$2" alt="$1" loading="lazy">').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
@@ -218,9 +242,9 @@ micBtn.onclick=()=>alert("Tu Android no soporta reconocimiento de voz en esta vi
 const fileBtn=document.getElementById("fileBtn"),fileInput=document.getElementById("fileInput");
 const attachPreview=document.getElementById("attachPreview"),attachPreviewImg=document.getElementById("attachPreviewImg"),attachPreviewName=document.getElementById("attachPreviewName"),attachPreviewRemove=document.getElementById("attachPreviewRemove");
 let pendingAttachment=null;
-function shrink(dataUrl,cb){const im=new Image();im.onload=()=>{const k=Math.min(1,1024/Math.max(im.width,im.height));const w=Math.round(im.width*k),h=Math.round(im.height*k);const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(im,0,0,w,h);cb(cv.toDataURL("image/jpeg",0.8))};im.onerror=()=>cb(dataUrl);im.src=dataUrl}
-function setAttachment(dataUrl,name,isImage,rawText){
-pendingAttachment={dataUrl,name,isImage,rawText};
+function shrink(dataUrl,cb){const im=new Image();im.onload=()=>{const mk=(max,q)=>{const k=Math.min(1,max/Math.max(im.width,im.height));const cv=document.createElement("canvas");cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);return cv.toDataURL("image/jpeg",q)};cb(mk(1024,0.8),mk(320,0.6))};im.onerror=()=>cb(dataUrl,dataUrl);im.src=dataUrl}
+function setAttachment(dataUrl,name,isImage,rawText,thumb){
+pendingAttachment={dataUrl,name,isImage,rawText,thumb};
 attachPreview.style.display="flex";
 attachPreviewImg.style.display=isImage?"block":"none";
 if(isImage)attachPreviewImg.src=dataUrl;
@@ -232,7 +256,7 @@ fileInput.onchange=()=>{
 const file=fileInput.files[0];if(!file)return;
 if(file.type.startsWith("image/")){
 const reader=new FileReader();
-reader.onload=()=>shrink(reader.result,u=>setAttachment(u,file.name,true));
+reader.onload=()=>shrink(reader.result,(u,t)=>setAttachment(u,file.name,true,undefined,t));
 reader.readAsDataURL(file);
 }else{
 const reader=new FileReader();
@@ -245,23 +269,29 @@ camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
 const reader=new FileReader();
-reader.onload=()=>shrink(reader.result,u=>setAttachment(u,"Foto",true));
+reader.onload=()=>shrink(reader.result,(u,t)=>setAttachment(u,"Foto",true,undefined,t));
 reader.readAsDataURL(file);
 camInput.value="";
 };
-input.addEventListener("input",()=>{input.style.height="auto";input.style.height=input.scrollHeight+"px"});
+let rz=0;input.addEventListener("input",()=>{if(rz)return;rz=requestAnimationFrame(()=>{rz=0;input.style.height="auto";input.style.height=Math.min(input.scrollHeight,130)+"px"})});
 function typeOut(d,text){
-return new Promise(res=>{let i=0;const steps=Math.min(90,Math.max(30,Math.ceil(text.length/25)));const st=Math.max(2,Math.ceil(text.length/steps));
-const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},20)})}
+return new Promise(res=>{
+if(text.length<260||stop){d.innerHTML=md(text);scroll();return res()}
+let i=0;const st=Math.ceil(text.length/10);
+const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},24)})}
+  const GREET=/^[\s\u00a1!\u00bf]*(hola+|holi+|ola|buenas|buen[oa]s\s+(d[ií]as|tardes|noches)|hey+|hi|hello|qu[eé]\s+tal|saludos)[\s!¡.?¿,]*$/i;
+const GREET_R=["¡Hola! ¿En qué te ayudo hoy?","¡Hola! Cuéntame, ¿qué necesitas?","¡Hey! Aquí estoy. ¿En qué puedo ayudarte?"];
+const toastEl=document.getElementById("toast");let tt=0;
+function toast(m){toastEl.textContent=m;toastEl.style.display="block";clearTimeout(tt);tt=setTimeout(()=>{toastEl.style.display="none"},2800)}
 let ctrl=null;
 async function callAPI(messages){
-ctrl=new AbortController();
+ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},60000);
 try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages}),signal:ctrl.signal});
 if(!r.ok)return null;
 const j=await r.json();
-return typeof j.reply==="string"&&j.reply.trim()?j.reply:null}catch(e){return null}finally{ctrl=null}}
-function apiHistory(c){const a=c.msgs.slice(-24);
-return a.map((m,i)=>Array.isArray(m.content)&&i<a.length-1?{role:m.role,content:((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen omitida]"}:m)}
+return typeof j.reply==="string"&&j.reply.trim()?j.reply:null}catch(e){return null}finally{clearTimeout(tm);ctrl=null}}
+function apiHistory(c){const a=c.msgs.slice(-14);
+return a.map((m,i)=>{if(Array.isArray(m.content))return i<a.length-1?{role:m.role,content:((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen omitida]"}:{role:m.role,content:m.content};const t=m.content;return{role:m.role,content:t.length>3000?t.slice(0,3000)+"…":t}})}
 async function deliver(d,c,reply){
 if(reply===null){d.dataset.err="1";d.textContent=stop?"Respuesta detenida.":"No se pudo obtener respuesta. Revisa tu internet e inténtalo de nuevo.";
 d.insertAdjacentHTML("beforeend",'<div class="act"><button data-a="regen" type="button">Reintentar</button></div>')}
@@ -300,9 +330,9 @@ let c=cur();if(!c){c={id:Date.now(),title:att.name,msgs:[]};chats.push(c);curId=
 if(!chat.querySelector(".msg"))chat.innerHTML="";
 if(att.isImage){
 const question=text||"Analiza esta imagen con detalle: describe qué ves y, si hay algún problema, error o duda visible, explícalo y ayúdame a resolverlo.";
-const userMsg={role:"user",content:[{type:"text",text:question},{type:"image_url",image_url:{url:att.dataUrl}}]};
+const userMsg={role:"user",content:[{type:"text",text:question},{type:"image_url",image_url:{url:att.dataUrl}}],thumb:att.thumb};
 c.msgs.push(userMsg);saveChats();renderList();
-const ub=bubble("user");ub.innerHTML=esc(text||"Imagen enviada")+'<img class="thumb" src="'+att.dataUrl+'">';
+const ub=bubble("user");ub.innerHTML=esc(text||"Imagen enviada")+'<img class="thumb" src="'+(att.thumb||att.dataUrl)+'">';
 }else{
 const question=text||"Analiza este archivo, resume su contenido y ayúdame con cualquier problema que encuentres.";
 const prompt="Archivo adjunto: "+att.name+"\n\n"+att.rawText+"\n\n"+question;
@@ -339,7 +369,88 @@ if(!c.title)c.title=text.slice(0,30);
 if(!chat.querySelector(".msg"))chat.innerHTML="";
 chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
 c.msgs.push({role:"user",content:text});saveChats();renderList();
-bubble("user").textContent=text;ask()});
+bubble("user").textContent=text;
+if(GREET.test(text)){const r=GREET_R[Math.floor(Math.random()*GREET_R.length)];c.msgs.push({role:"assistant",content:r});saveChats();finish(bubble("bot"),r,true);scroll();return}
+ask()});
+
+const GSVG='<svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+// ===== Firebase: rellena estos 4 datos (consola de Firebase > Configuración del proyecto > Tus apps > Web) =====
+const FB_CFG={apiKey:"AIzaSyCSlYpl4y32Lw1EenqCnbXdqcM7WkzC-8g",authDomain:"ego-ai-724b8.firebaseapp.com",projectId:"ego-ai-724b8",appId:"1:649221423570:web:4a1e663d6471072393c80b"};
+const FBU=n=>"https://www.gstatic.com/firebasejs/10.14.1/firebase-"+n+".js";
+Object.assign(Cloud,{
+timer:null,pending:{},fb:null,
+ready(){return !!(FB_CFG.apiKey&&FB_CFG.projectId&&FB_CFG.appId)},
+async load(){
+if(this.fb)return this.fb;
+const [app,auth,fs]=await Promise.all([import(FBU("app")),import(FBU("auth")),import(FBU("firestore"))]);
+const a=app.initializeApp(FB_CFG);
+this.fb={app,auth,fs,au:auth.getAuth(a),db:fs.getFirestore(a)};
+return this.fb},
+async init(){
+if(!this.ready())return;
+try{const f=await this.load();
+f.auth.onAuthStateChanged(f.au,u=>{this.user=u;this.on=!!u;renderAcct();if(u)this.pull()})}catch(e){console.error(e)}},
+async signIn(){
+if(!this.ready()){toast("Falta configurar Firebase en la app");return}
+const FA=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.FirebaseAuthentication;
+if(!FA){toast("El inicio con Google funciona en la app instalada");return}
+try{const f=await this.load();
+const r=await FA.signInWithGoogle({skipNativeAuth:true});
+const idToken=r&&r.credential&&r.credential.idToken;
+if(!idToken)throw new Error("sin token");
+await f.auth.signInWithCredential(f.au,f.auth.GoogleAuthProvider.credential(idToken));
+toast("Cuenta conectada")}catch(e){console.error(e);toast("No se pudo iniciar sesión")}},
+async signOut(){
+try{const FA=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.FirebaseAuthentication;if(FA)await FA.signOut();
+if(this.fb)await this.fb.auth.signOut(this.fb.au);toast("Sesión cerrada")}catch(e){console.error(e)}},
+pack(c){
+let m=c.msgs.map(x=>Array.isArray(x.content)?{role:x.role,content:((x.content.find(p=>p.type==="text")||{}).text||"")+" [imagen]"}:{role:x.role,content:x.content});
+let j=JSON.stringify(m);while(j.length>900000&&m.length>2){m.shift();j=JSON.stringify(m)}
+return{title:c.title||"",updated:c.updated||Date.now(),msgs:j}},
+queue(c){this.pending[c.id]=c;clearTimeout(this.timer);this.timer=setTimeout(()=>this.flush(),1500)},
+async flush(){
+if(!this.fb||!this.user)return;
+const items=Object.values(this.pending);this.pending={};
+for(const c of items){try{await this.fb.fs.setDoc(this.fb.fs.doc(this.fb.db,"users",this.user.uid,"chats",String(c.id)),this.pack(c))}catch(e){console.error(e);this.pending[c.id]=c}}},
+async remove(id){
+if(!this.on||!this.fb)return;
+try{await this.fb.fs.deleteDoc(this.fb.fs.doc(this.fb.db,"users",this.user.uid,"chats",String(id)))}catch(e){console.error(e)}},
+async pull(){
+if(!this.fb||!this.user)return;
+try{const f=this.fb;
+const snap=await f.fs.getDocs(f.fs.collection(f.db,"users",this.user.uid,"chats"));
+const remote={};snap.forEach(d=>{remote[d.id]=d.data()});
+let changed=false;
+Object.keys(remote).forEach(id=>{const x=remote[id];let msgs;try{msgs=JSON.parse(x.msgs)}catch(e){return}
+const l=chats.find(c=>String(c.id)===id);
+if(!l){chats.push({id:Number(id)||id,title:x.title,msgs,updated:x.updated||0,n:msgs.length});changed=true}
+else if((x.updated||0)>(l.updated||0)){l.title=x.title;l.msgs=msgs;l.updated=x.updated;l.n=msgs.length;changed=true}});
+chats.forEach(c=>{const r=remote[String(c.id)];if(!r||(c.updated||0)>(r.updated||0))this.queue(c)});
+if(changed){chats.sort((a,b)=>a.id-b.id);saveChats();renderList();if(!busy)renderChat()}
+}catch(e){console.error(e);toast("No se pudo sincronizar")}}
+});
+function renderAcct(){
+const a=document.getElementById("acct");a.innerHTML="";const u=Cloud.user;
+if(u){
+const row=document.createElement("div");row.className="urow";
+const av=document.createElement("div");av.className="av";
+if(u.photoURL){const im=document.createElement("img");im.src=u.photoURL;im.referrerPolicy="no-referrer";av.appendChild(im)}else av.textContent=((u.displayName||u.email||"?")[0]||"?").toUpperCase();
+const info=document.createElement("div");info.className="uinfo";
+const b=document.createElement("b");b.textContent=u.displayName||"Mi cuenta";
+const sm=document.createElement("small");sm.textContent=u.email||"";
+info.appendChild(b);info.appendChild(sm);row.appendChild(av);row.appendChild(info);a.appendChild(row);
+const so=document.createElement("button");so.className="sbtn";so.type="button";so.textContent="Cerrar sesión";so.onclick=()=>Cloud.signOut();a.appendChild(so);
+}else{
+const g=document.createElement("button");g.className="gbtn";g.type="button";g.innerHTML=GSVG+"<span>Agregar cuenta de Google</span>";g.onclick=()=>Cloud.signIn();a.appendChild(g)}
+const pb=document.createElement("button");pb.className="sbtn";pb.type="button";pb.textContent="Permisos de la app";pb.onclick=askPerms;a.appendChild(pb)}
+async function askPerms(){
+const C=window.Capacitor;
+try{
+if(C&&C.Plugins&&C.Plugins.EgoNative){await C.Plugins.EgoNative.requestAll();toast("Acepta los permisos que pida Android")}
+else if(C&&C.nativePromise){await C.nativePromise("EgoNative","requestAll",{});toast("Acepta los permisos que pida Android")}
+else toast("Los permisos se piden en la app instalada")
+}catch(e){console.error(e);toast("No se pudieron pedir los permisos")}}
+renderAcct();setTimeout(()=>Cloud.init(),800);
 if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
 requestAnimationFrame(function(){requestAnimationFrame(function(){document.documentElement.setAttribute("data-ready","1")})});
