@@ -3,8 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#faf7f2">
-<meta name="color-scheme" content="light dark">
 <title>EGO AI</title>
 <style>
 :root{--bg:#faf7f2;--panel:#ffffff;--line:#e8e2d8;--v:#c2693f;--v2:#da8a5f;--text:#2b2621;--muted:#8a8178;--userbg:#f0e8dd}
@@ -109,7 +107,7 @@ textarea{flex:1;resize:none;max-height:130px;background:linear-gradient(160deg,v
 </div>
 </div>
 <script>
-function init(){
+window.addEventListener('DOMContentLoaded', function(){
 try{
 
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
@@ -129,10 +127,10 @@ const personaBtn=document.getElementById("personaBtn"),personaMenu=document.getE
 const PLABEL={normal:"Normal",dev:"Programador",teacher:"Profesor",creative:"Creativo",direct:"Directo",security:"Seguridad"};
 let busy=false,stop=false;
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
-const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
 let chats=ld("ego_chats",null);
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
-let curId=ld("ego_cur",null);
+let curId=null;
 let currentPersona=ld("ego_p","normal");
 personaBtn.textContent=PLABEL[currentPersona]+" ▾";
 Object.keys(PLABEL).forEach(key=>{
@@ -147,16 +145,21 @@ document.addEventListener("click",e=>{if(!document.getElementById("personaWrap")
 document.documentElement.setAttribute("data-theme",ld("ego_theme","light"));
 document.getElementById("theme").textContent=ld("ego_theme","light")==="dark"?"☀️":"🌙";
 function cur(){return chats.find(c=>c.id===curId)}
-function saveChats(){sv("ego_chats",chats);sv("ego_cur",curId)}
-function renderList(){list.innerHTML="";chats.slice().reverse().forEach(c=>{
+function saveChats(){
+if(!sv("ego_chats",chats)){
+const c=cur(),last=c&&c.msgs[c.msgs.length-1];
+chats.forEach(ch=>ch.msgs.forEach(m=>{if(m!==last&&Array.isArray(m.content))m.content=((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen]"}));
+sv("ego_chats",chats)}
+sv("ego_cur",curId)}
+  function renderList(){list.innerHTML="";chats.slice().reverse().forEach(c=>{
 const d=document.createElement("div");d.className="chatitem"+(c.id===curId?" active":"");
 d.innerHTML='<span></span><button data-del="'+c.id+'">✕</button>';
 d.querySelector("span").textContent=c.title||"Nuevo chat";
-d.onclick=e=>{if(e.target.dataset.del)return;curId=c.id;saveChats();renderList();renderChat()};
+d.onclick=e=>{if(e.target.dataset.del)return;curId=c.id;saveChats();renderList();renderChat();if(window.innerWidth<=640)toggleSide(true)};
 d.querySelector("button").onclick=e=>{e.stopPropagation();chats=chats.filter(x=>x.id!==c.id);if(curId===c.id)curId=chats[0]?chats[0].id:null;saveChats();renderList();renderChat()};
 list.appendChild(d)})}
-const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-const inl=t=>t.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<i>$2</i>").replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const inl=t=>t.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<i>$2</i>").replace(/!\[([^\]]*)\]\((https?:[^)\s]+)\)/g,'<img src="$2" alt="$1" loading="lazy">').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
 function md(src){
 if((src.match(/```/g)||[]).length%2)src+="\n```";
 const bl=[];
@@ -173,7 +176,7 @@ else{close();out.push("<p>"+inl(line)+"</p>")}}
 close();return out.join("");}
 const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
-function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(last?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
+function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(last&&!/^Imagen generada/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 function renderChat(){chat.innerHTML="";const c=cur();
 if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b>'+
 '<button class="chip"><span class="ic">✦</span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span></button>'+
@@ -188,7 +191,7 @@ d.innerHTML=(txt?esc(txt.text):"Foto enviada")+(img?'<img class="thumb" src="'+i
 }else{d.textContent=m.content}
 }else{finish(d,m.content,i===c.msgs.length-1)}});scroll()}
 document.getElementById("newchat").onclick=()=>{curId=null;renderList();renderChat();if(window.innerWidth<=640)toggleSide(true)};
-function toggleSide(hide){if(hide===undefined)hide=!side.classList.contains("hidden");side.classList.toggle("hidden",hide);overlay.style.display=hide?"none":"block"}
+function toggleSide(hide){if(hide===undefined)hide=!side.classList.contains("hidden");side.classList.toggle("hidden",hide);overlay.style.display=(!hide&&window.innerWidth<=640)?"block":"none"}
 document.getElementById("toggleSide").onclick=()=>toggleSide();
 overlay.onclick=()=>toggleSide(true);
 document.getElementById("theme").onclick=()=>{const t=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);sv("ego_theme",t);document.getElementById("theme").textContent=t==="dark"?"☀️":"🌙"};
@@ -198,7 +201,7 @@ if(t.classList.contains("cc")){navigator.clipboard.writeText(t.closest(".code").
 const a=t.dataset.a;if(!a||busy)return;
 const msg=t.closest(".msg");
 if(a==="copy"){navigator.clipboard.writeText(msg.dataset.raw);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200)}
-if(a==="regen"){const c=cur();if(c&&c.msgs.length){c.msgs.pop();saveChats();msg.remove();ask()}}});
+if(a==="regen"){const c=cur();if(!msg.dataset.err)c.msgs.pop();saveChats();msg.remove();ask()}});
 
 const micBtn=document.getElementById("micBtn"),camBtn=document.getElementById("camBtn"),camInput=document.getElementById("camInput");
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -214,8 +217,7 @@ micBtn.onclick=()=>alert("Tu Android no soporta reconocimiento de voz en esta vi
 const fileBtn=document.getElementById("fileBtn"),fileInput=document.getElementById("fileInput");
 const attachPreview=document.getElementById("attachPreview"),attachPreviewImg=document.getElementById("attachPreviewImg"),attachPreviewName=document.getElementById("attachPreviewName"),attachPreviewRemove=document.getElementById("attachPreviewRemove");
 let pendingAttachment=null;
-// Reduce imágenes antes de guardar/enviar: más rápido y no satura localStorage
-function downscale(dataUrl){return new Promise(res=>{const img=new Image();img.onload=()=>{const max=1024;const sc=Math.min(1,max/Math.max(img.width,img.height));const w=Math.max(1,Math.round(img.width*sc)),h=Math.max(1,Math.round(img.height*sc));const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);res(cv.toDataURL("image/jpeg",0.82));};img.onerror=()=>res(dataUrl);img.src=dataUrl;});}
+function shrink(dataUrl,cb){const im=new Image();im.onload=()=>{const k=Math.min(1,1024/Math.max(im.width,im.height));const w=Math.round(im.width*k),h=Math.round(im.height*k);const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(im,0,0,w,h);cb(cv.toDataURL("image/jpeg",0.8))};im.onerror=()=>cb(dataUrl);im.src=dataUrl}
 function setAttachment(dataUrl,name,isImage,rawText){
 pendingAttachment={dataUrl,name,isImage,rawText};
 attachPreview.style.display="flex";
@@ -229,7 +231,7 @@ fileInput.onchange=()=>{
 const file=fileInput.files[0];if(!file)return;
 if(file.type.startsWith("image/")){
 const reader=new FileReader();
-reader.onload=async()=>setAttachment(await downscale(reader.result),file.name,true);
+reader.onload=()=>shrink(reader.result,u=>setAttachment(u,file.name,true));
 reader.readAsDataURL(file);
 }else{
 const reader=new FileReader();
@@ -242,7 +244,7 @@ camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
 const reader=new FileReader();
-reader.onload=async()=>setAttachment(await downscale(reader.result),"Foto",true);
+reader.onload=()=>shrink(reader.result,u=>setAttachment(u,"Foto",true));
 reader.readAsDataURL(file);
 camInput.value="";
 };
@@ -250,38 +252,45 @@ input.addEventListener("input",()=>{input.style.height="auto";input.style.height
 function typeOut(d,text){
 return new Promise(res=>{let i=0;const steps=Math.min(90,Math.max(30,Math.ceil(text.length/25)));const st=Math.max(2,Math.ceil(text.length/steps));
 const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},20)})}
+let ctrl=null;
+async function callAPI(messages){
+ctrl=new AbortController();
+try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages}),signal:ctrl.signal});
+if(!r.ok)return null;
+const j=await r.json();
+return typeof j.reply==="string"&&j.reply.trim()?j.reply:null}catch(e){return null}finally{ctrl=null}}
+function apiHistory(c){const a=c.msgs.slice(-24);
+return a.map((m,i)=>Array.isArray(m.content)&&i<a.length-1?{role:m.role,content:((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen omitida]"}:m)}
+async function deliver(d,c,reply){
+if(reply===null){d.dataset.err="1";d.textContent=stop?"Respuesta detenida.":"No se pudo obtener respuesta. Revisa tu internet e inténtalo de nuevo.";
+d.insertAdjacentHTML("beforeend",'<div class="act"><button data-a="regen" type="button">Reintentar</button></div>')}
+else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
+busy=false;stop=false;send.textContent="➤";scroll()}
 async function searchAndAsk(query,c,d){
+busy=true;stop=false;send.textContent="■";
 let context="";
 try{
-const r=await fetch("https://api.duckduckgo.com/?q="+encodeURIComponent(query)+"&format=json&no_html=1&skip_disambig=1");
+ctrl=new AbortController();
+const r=await fetch("https://api.duckduckgo.com/?q="+encodeURIComponent(query)+"&format=json&no_html=1&skip_disambig=1",{signal:ctrl.signal});
 const j=await r.json();
 const parts=[];
 if(j.AbstractText)parts.push(j.AbstractText);
 if(j.RelatedTopics)j.RelatedTopics.slice(0,5).forEach(t=>{if(t.Text)parts.push(t.Text)});
 context=parts.join("\n").slice(0,1500);
 }catch(e){}
+ctrl=null;
+if(stop){await deliver(d,c,null);return}
 const prompt=context
 ?"Resultados de una búsqueda en internet sobre \""+query+"\":\n"+context+"\n\nCon base en esto, responde de forma clara y completa a: "+query
 :"No obtuve resultados útiles de internet para \""+query+"\". Responde con tu mejor conocimiento, y dilo si la información puede no estar actualizada.";
-busy=true;stop=false;send.textContent="■";
-let reply=null;
-try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},{role:"user",content:prompt}]})});
-if(!r.ok)throw new Error("HTTP "+r.status);
-const data=await r.json();reply=data.reply;}catch(e){reply=null;}
-if(typeof reply!=="string"||!reply.trim()){reply="No se pudo obtener respuesta del servidor. Revisa tu conexión a internet e inténtalo de nuevo.";}
-await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true);
-busy=false;send.textContent="➤";scroll()}
-async function ask(){const c=cur();if(!c){busy=false;send.textContent="➤";return;}busy=true;stop=false;send.textContent="■";
+const reply=await callAPI([{role:"system",content:BASE+P[currentPersona]},{role:"user",content:prompt}]);
+await deliver(d,c,reply)}
+async function ask(){const c=cur();busy=true;stop=false;send.textContent="■";
 const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
-let reply=null;
-try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:BASE+P[currentPersona]},...c.msgs.slice(-24)]})});
-if(!r.ok)throw new Error("HTTP "+r.status);
-const data=await r.json();reply=data.reply;}catch(e){reply=null;}
-if(typeof reply!=="string"||!reply.trim()){reply="No se pudo obtener respuesta del servidor. Revisa tu conexión a internet e inténtalo de nuevo.";}
-await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true);
-busy=false;send.textContent="➤";scroll()}
+const reply=await callAPI([{role:"system",content:BASE+P[currentPersona]},...apiHistory(c)]);
+await deliver(d,c,reply)}
 document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();
-if(busy){stop=true;return}
+if(busy){stop=true;if(ctrl)ctrl.abort();return}
 let text=input.value.trim();
 if(pendingAttachment){
 const att=pendingAttachment;pendingAttachment=null;attachPreview.style.display="none";
@@ -334,8 +343,7 @@ if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
 
 }catch(e){console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
-}
-if(document.readyState==='loading'){window.addEventListener('DOMContentLoaded',init);}else{init();}
+});
 </script>
 </body>
 </html>
