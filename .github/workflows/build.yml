@@ -35,7 +35,7 @@ jobs:
           if [ ! -f ~/.android/debug.keystore ]; then
             keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
-          echo "### Huella de firma (SHA-1 / SHA-256) de este APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Huella de firma (SHA-1) para Firebase" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep -E "SHA1|SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -215,7 +215,9 @@ jobs:
               save(center(fit(cap, 500), (600, 240)), folder, 'splash_brand.png')
           print('splash images written')
           PYEOF
-                - name: Instant splash + dark/light colors (no flicker)
+      # ===== FIN PARTE 1 =====
+            # ===== INICIO PARTE 2 =====
+      - name: Instant splash + dark/light colors (no flicker)
         run: |
           node <<'EOF'
           const fs = require('fs');
@@ -408,13 +410,120 @@ jobs:
           `);
           console.log('Native bridge + MainActivity written');
           EOF
+      # ===== FIN PARTE 2 =====
+            # ===== INICIO PARTE 3 =====
+      - name: Google sign-in nativo (no necesita google-services.json)
+        run: |
+          set -e
+          mkdir -p /tmp/ego-bak
+          J=android/app/src/main/java/com/egoai/app
+          cp "$J/MainActivity.java" /tmp/ego-bak/MainActivity.java
+          cp android/app/build.gradle /tmp/ego-bak/build.gradle
+
+          cat > "$J/EgoGooglePlugin.java" <<'JAVAEOF'
+          package com.egoai.app;
+
+          import androidx.activity.result.ActivityResult;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.ActivityCallback;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          import com.google.android.gms.auth.api.signin.GoogleSignIn;
+          import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+          import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+          import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+          import com.google.android.gms.common.api.ApiException;
+          import com.google.android.gms.tasks.Task;
+
+          @CapacitorPlugin(name = "EgoGoogle")
+          public class EgoGooglePlugin extends Plugin {
+
+              @PluginMethod
+              public void signIn(final PluginCall call) {
+                  String clientId = call.getString("clientId");
+                  if (clientId == null || clientId.isEmpty()) {
+                      call.reject("Falta el ID de cliente web de Google");
+                      return;
+                  }
+                  GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                          .requestIdToken(clientId)
+                          .requestEmail()
+                          .build();
+                  final GoogleSignInClient client = GoogleSignIn.getClient(getActivity(), gso);
+                  // Cierra la sesion anterior para que siempre deje elegir cuenta
+                  client.signOut().addOnCompleteListener(getActivity(), t ->
+                          startActivityForResult(call, client.getSignInIntent(), "onSignIn"));
+              }
+
+              @ActivityCallback
+              private void onSignIn(PluginCall call, ActivityResult result) {
+                  if (call == null) return;
+                  try {
+                      Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
+                      GoogleSignInAccount acct = task.getResult(ApiException.class);
+                      JSObject r = new JSObject();
+                      r.put("idToken", acct.getIdToken());
+                      r.put("email", acct.getEmail());
+                      r.put("name", acct.getDisplayName());
+                      call.resolve(r);
+                  } catch (ApiException e) {
+                      int code = e.getStatusCode();
+                      String msg;
+                      if (code == 12501) msg = "Inicio de sesion cancelado";
+                      else if (code == 10) msg = "Google rechazo la app (error 10): falta registrar la huella SHA-1 en Firebase o el ID de cliente es incorrecto";
+                      else if (code == 12500) msg = "Google no pudo iniciar (error 12500): revisa la pantalla de consentimiento en Google Cloud";
+                      else if (code == 7) msg = "Sin conexion a internet";
+                      else msg = "Error de Google (codigo " + code + ")";
+                      call.reject(msg, String.valueOf(code));
+                  } catch (Exception e) {
+                      call.reject("Error al iniciar sesion: " + e.getMessage());
+                  }
+              }
+
+              @PluginMethod
+              public void signOut(final PluginCall call) {
+                  GoogleSignIn.getClient(getActivity(), GoogleSignInOptions.DEFAULT_SIGN_IN)
+                          .signOut()
+                          .addOnCompleteListener(getActivity(), t -> call.resolve());
+              }
+          }
+          JAVAEOF
+
+          # Registrar el plugin en MainActivity
+          sed -i 's/registerPlugin(EgoNativePlugin.class);/registerPlugin(EgoNativePlugin.class);\n        registerPlugin(EgoGooglePlugin.class);/' "$J/MainActivity.java"
+          grep -q "EgoGooglePlugin" "$J/MainActivity.java"
+
+          # Dependencia de Google Play Services (inicio de sesion)
+          node <<'EOF'
+          const fs = require('fs');
+          const p = 'android/app/build.gradle';
+          let g = fs.readFileSync(p, 'utf8');
+          if (!/dependencies\s*\{/.test(g)) throw new Error('No se encontro dependencies en app/build.gradle');
+          g = g.replace(/dependencies\s*\{/, m => m + "\n    implementation 'com.google.android.gms:play-services-auth:21.2.0'");
+          fs.writeFileSync(p, g);
+          console.log('play-services-auth agregado');
+          EOF
 
       - name: Build debug APK
         run: |
           npx cap sync android
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          if ./gradlew assembleDebug; then
+            echo "APK compilado CON inicio de sesion de Google." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Fallo la compilacion con Google. Reconstruyendo sin el inicio de sesion nativo."
+            cd "$GITHUB_WORKSPACE"
+            J=android/app/src/main/java/com/egoai/app
+            cp /tmp/ego-bak/MainActivity.java "$J/MainActivity.java"
+            cp /tmp/ego-bak/build.gradle android/app/build.gradle
+            rm -f "$J/EgoGooglePlugin.java"
+            cd android
+            ./gradlew assembleDebug
+            echo "ATENCION: este APK se compilo SIN inicio de sesion de Google (fallo el modulo de Google). Revisa el paso anterior." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
