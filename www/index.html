@@ -133,7 +133,7 @@ try{
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Eres EGO AI, creado el "+CREATED+" por "+CREATOR+". Menciona esto SOLO si te preguntan por tu origen o creador. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta.";
+const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -390,18 +390,25 @@ async init(){
 if(!this.ready())return;
 try{const f=await this.load();
 f.auth.onAuthStateChanged(f.au,u=>{this.user=u;this.on=!!u;renderAcct();if(u)this.pull()})}catch(e){console.error(e)}},
+plugin(){
+const C=window.Capacitor;if(!C)return null;
+if(C.Plugins&&C.Plugins.FirebaseAuthentication)return C.Plugins.FirebaseAuthentication;
+try{if(C.isPluginAvailable&&C.isPluginAvailable("FirebaseAuthentication")&&C.registerPlugin)return C.registerPlugin("FirebaseAuthentication")}catch(e){}
+return null},
 async signIn(){
 if(!this.ready()){toast("Falta configurar Firebase en la app");return}
-const FA=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.FirebaseAuthentication;
-if(!FA){toast("El inicio con Google funciona en la app instalada");return}
+const C=window.Capacitor;
+if(!C||!C.isNativePlatform||!C.isNativePlatform()){toast("El inicio con Google solo funciona en la app instalada");return}
+const FA=this.plugin();
+if(!FA){toast("Este APK no trae el inicio con Google: falta google-services.json en GitHub");return}
 try{const f=await this.load();
 const r=await FA.signInWithGoogle({skipNativeAuth:true});
 const idToken=r&&r.credential&&r.credential.idToken;
-if(!idToken)throw new Error("sin token");
+if(!idToken)throw new Error("Google no devolvió el token");
 await f.auth.signInWithCredential(f.au,f.auth.GoogleAuthProvider.credential(idToken));
-toast("Cuenta conectada")}catch(e){console.error(e);toast("No se pudo iniciar sesión")}},
+toast("Cuenta conectada")}catch(e){console.error(e);toast("No se pudo iniciar sesión: "+String((e&&(e.message||e.code))||e).slice(0,90))}},
 async signOut(){
-try{const FA=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.FirebaseAuthentication;if(FA)await FA.signOut();
+try{const FA=this.plugin();if(FA)await FA.signOut();
 if(this.fb)await this.fb.auth.signOut(this.fb.au);toast("Sesión cerrada")}catch(e){console.error(e)}},
 pack(c){
 let m=c.msgs.map(x=>Array.isArray(x.content)?{role:x.role,content:((x.content.find(p=>p.type==="text")||{}).text||"")+" [imagen]"}:{role:x.role,content:x.content});
