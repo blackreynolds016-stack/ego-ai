@@ -22,6 +22,31 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Restore stable debug key
+        id: kc
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: ego-debug-keystore-v1
+
+      - name: Debug key (create if missing) and show SHA-1
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          echo "### Huella de firma (SHA-1) para Firebase" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep -E "SHA1|SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save stable debug key
+        if: steps.kc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: ego-debug-keystore-v1
+
       - name: Prepare web assets
         run: |
           mkdir -p www
@@ -34,6 +59,28 @@ jobs:
           npm install --no-audit --no-fund @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 jimp@0.22
           npx cap init "EGO AI" com.egoai.app --web-dir=www
           npx cap add android
+
+      - name: Firebase login (only if google-services.json is in the repo)
+        run: |
+          HAS=0
+          if [ -f google-services.json ]; then HAS=1; fi
+          if [ "$HAS" = "1" ]; then
+            npm install --no-audit --no-fund @capacitor-firebase/authentication@6 firebase@10
+            cp google-services.json android/app/google-services.json
+            sed -i -E 's/minSdkVersion *= *2[0-2]/minSdkVersion = 23/' android/variables.gradle
+          else
+            echo "Sin google-services.json: login con Google desactivado por ahora"
+          fi
+          if [ "$HAS" = "1" ]; then node <<'EOF'
+          const fs = require('fs');
+          const p = 'capacitor.config.json';
+          const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+          c.plugins = c.plugins || {};
+          c.plugins.FirebaseAuthentication = { skipNativeAuth: true, providers: ['google.com'] };
+          fs.writeFileSync(p, JSON.stringify(c, null, 2));
+          console.log('Firebase habilitado');
+          EOF
+          fi
 
       - name: App icon (adaptive + legacy)
         continue-on-error: true
@@ -77,12 +124,38 @@ jobs:
 
       - name: Add Android permissions
         run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          grep -q "RECORD_AUDIO" "$MANIFEST" || sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />#' "$MANIFEST"
-          grep -q "RECORD_AUDIO" "$MANIFEST" || { echo "ERROR: permisos no agregados"; exit 1; }
+          node <<'EOF'
+          const fs = require('fs');
+          const p = 'android/app/src/main/AndroidManifest.xml';
+          let m = fs.readFileSync(p, 'utf8');
+          const names = [
+            'ACCESS_NETWORK_STATE', 'ACCESS_WIFI_STATE', 'VIBRATE',
+            'RECORD_AUDIO', 'CAMERA', 'MODIFY_AUDIO_SETTINGS', 'READ_MEDIA_IMAGES',
+            'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION',
+            'READ_CONTACTS', 'WRITE_CONTACTS',
+            'READ_CALENDAR', 'WRITE_CALENDAR',
+            'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS',
+            'READ_PHONE_STATE', 'CALL_PHONE',
+            'POST_NOTIFICATIONS',
+            'BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'NEARBY_WIFI_DEVICES'
+          ];
+          const has = n => m.includes('"android.permission.' + n + '"');
+          let add = '';
+          for (const n of names) if (!has(n)) add += '    <uses-permission android:name="android.permission.' + n + '" />\n';
+          if (!has('READ_EXTERNAL_STORAGE')) add += '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n';
+          if (!has('BLUETOOTH')) add += '    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />\n';
+          if (!has('BLUETOOTH_ADMIN')) add += '    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />\n';
+          for (const f of ['camera', 'microphone', 'bluetooth', 'telephony', 'location']) {
+            if (!m.includes('"android.hardware.' + f + '"')) add += '    <uses-feature android:name="android.hardware.' + f + '" android:required="false" />\n';
+          }
+          const re = /(<uses-permission[^>]*android\.permission\.INTERNET"[^>]*\/>)/;
+          if (!re.test(m)) throw new Error('No se encontro el permiso INTERNET en el manifest');
+          m = m.replace(re, (all) => all + '\n' + add.replace(/\n$/, ''));
+          fs.writeFileSync(p, m);
+          console.log(m);
+          EOF
 
-      - name: Splash logo (EGO AI, claro y oscuro)
-        continue-on-error: true
+      - name: Splash logo (EGO AI, claro y oscuro)      continue-on-error: true
         run: |
           pip install --quiet --break-system-packages pillow
           python3 - <<'PYEOF'
@@ -234,13 +307,83 @@ jobs:
           console.log(styles);
           EOF
 
-      - name: Hold splash until the app is ready (then remove it instantly)
+      - name: Native bridge + hold splash until the app is ready
         run: |
           node <<'EOF'
           const fs = require('fs');
-          const p = 'android/app/src/main/java/com/egoai/app/MainActivity.java';
-          if (!fs.existsSync(p)) throw new Error('MainActivity.java no encontrado');
-          fs.writeFileSync(p, `package com.egoai.app;
+          const dir = 'android/app/src/main/java/com/egoai/app/';
+          if (!fs.existsSync(dir + 'MainActivity.java')) throw new Error('MainActivity.java no encontrado');
+
+          // Puente nativo: permite a la pagina pedir los permisos de Android
+          fs.writeFileSync(dir + 'EgoNativePlugin.java', `package com.egoai.app;
+
+          import android.Manifest;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          import java.util.ArrayList;
+          import java.util.List;
+
+          @CapacitorPlugin(name = "EgoNative")
+          public class EgoNativePlugin extends Plugin {
+
+              private List<String> wanted() {
+                  List<String> l = new ArrayList<>();
+                  l.add(Manifest.permission.ACCESS_FINE_LOCATION);
+                  l.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+                  l.add(Manifest.permission.READ_CONTACTS);
+                  l.add(Manifest.permission.WRITE_CONTACTS);
+                  l.add(Manifest.permission.READ_CALENDAR);
+                  l.add(Manifest.permission.WRITE_CALENDAR);
+                  l.add(Manifest.permission.READ_SMS);
+                  l.add(Manifest.permission.SEND_SMS);
+                  l.add(Manifest.permission.RECEIVE_SMS);
+                  l.add(Manifest.permission.READ_PHONE_STATE);
+                  l.add(Manifest.permission.CALL_PHONE);
+                  l.add(Manifest.permission.RECORD_AUDIO);
+                  l.add(Manifest.permission.CAMERA);
+                  if (Build.VERSION.SDK_INT >= 31) {
+                      l.add(Manifest.permission.BLUETOOTH_SCAN);
+                      l.add(Manifest.permission.BLUETOOTH_CONNECT);
+                  }
+                  if (Build.VERSION.SDK_INT >= 33) {
+                      l.add(Manifest.permission.POST_NOTIFICATIONS);
+                      l.add(Manifest.permission.NEARBY_WIFI_DEVICES);
+                  }
+                  return l;
+              }
+
+              @PluginMethod
+              public void requestAll(final PluginCall call) {
+                  final List<String> missing = new ArrayList<>();
+                  for (String p : wanted()) {
+                      if (ContextCompat.checkSelfPermission(getContext(), p) != PackageManager.PERMISSION_GRANTED) {
+                          missing.add(p);
+                      }
+                  }
+                  if (!missing.isEmpty()) {
+                      getActivity().runOnUiThread(new Runnable() {
+                          @Override
+                          public void run() {
+                              ActivityCompat.requestPermissions(getActivity(), missing.toArray(new String[0]), 7001);
+                          }
+                      });
+                  }
+                  JSObject r = new JSObject();
+                  r.put("requested", missing.size());
+                  call.resolve(r);
+              }
+          }
+          `);
+
+          // MainActivity: registra el puente y mantiene el splash hasta que la app esta lista
+          fs.writeFileSync(dir + 'MainActivity.java', `package com.egoai.app;
 
           import android.os.Bundle;
           import android.os.Handler;
@@ -261,6 +404,7 @@ jobs:
                   SplashScreen splash = SplashScreen.installSplashScreen(this);
                   splash.setKeepOnScreenCondition(() -> !ready);
                   splash.setOnExitAnimationListener(provider -> provider.remove());
+                  registerPlugin(EgoNativePlugin.class);
                   super.onCreate(savedInstanceState);
                   t0 = SystemClock.uptimeMillis();
                   if (getBridge() != null && getBridge().getWebView() != null) {
@@ -284,7 +428,7 @@ jobs:
               }
           }
           `);
-          console.log('MainActivity patched');
+          console.log('Native bridge + MainActivity written');
           EOF
 
       - name: Build debug APK
