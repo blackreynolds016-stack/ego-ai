@@ -152,7 +152,7 @@ const c=cur(),last=c&&c.msgs[c.msgs.length-1];
 chats.forEach(ch=>ch.msgs.forEach(m=>{if(m!==last&&Array.isArray(m.content))m.content=((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen]"}));
 sv("ego_chats",chats)}
 sv("ego_cur",curId)}
-  function renderList(){list.innerHTML="";chats.slice().reverse().forEach(c=>{
+function renderList(){list.innerHTML="";chats.slice().reverse().forEach(c=>{
 const d=document.createElement("div");d.className="chatitem"+(c.id===curId?" active":"");
 d.innerHTML='<span></span><button data-del="'+c.id+'">✕</button>';
 d.querySelector("span").textContent=c.title||"Nuevo chat";
@@ -342,8 +342,9 @@ c.msgs.push({role:"user",content:text});saveChats();renderList();
 bubble("user").textContent=text;ask()});
 if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
+requestAnimationFrame(function(){requestAnimationFrame(function(){document.documentElement.setAttribute("data-ready","1")})});
 
-}catch(e){console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
+}catch(e){document.documentElement.setAttribute('data-ready','1');console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
 });
 </script>
 </body>
