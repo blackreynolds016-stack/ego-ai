@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "649221423570",
+    "project_id": "ego-ai-724b8",
+    "storage_bucket": "ego-ai-724b8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:649221423570:android:1cd78909e757b09c93c80b",
+        "android_client_info": {
+          "package_name": "com.egoai.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "649221423570-ef7rah0gmsi3lp3iml9ke32skec85iha.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.egoai.app",
+            "certificate_hash": "5988b56fbfc586804b6ae513e2b0e81d73646843"
+          }
+        },
+        {
+          "client_id": "649221423570-vk2dcrni2ruc3u0pvneca14s0gj00j7b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBFNw5Yn-SO301FpDhs6l4UofWd9ha7GN4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "649221423570-vk2dcrni2ruc3u0pvneca14s0gj00j7b.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
