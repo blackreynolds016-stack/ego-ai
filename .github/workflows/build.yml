@@ -68,35 +68,28 @@ jobs:
             npm install --no-audit --no-fund @capacitor-firebase/authentication@6 firebase@10
             cp google-services.json android/app/google-services.json
             sed -i -E 's/minSdkVersion *= *2[0-2]/minSdkVersion = 23/' android/variables.gradle
-            
             BUILD_GRADLE="android/build.gradle"
             if ! grep -q "com.google.gms:google-services" "$BUILD_GRADLE"; then
               sed -i 's/ext.kotlin_version = ".*"/ext.kotlin_version = "1.9.0"/' "$BUILD_GRADLE"
               sed -i '/dependencies {/a \        classpath "com.google.gms:google-services:4.4.2"' "$BUILD_GRADLE"
             fi
-            
             APP_BUILD="android/app/build.gradle"
-            if ! grep -q "apply plugin: \"com.google.gms.google-services\"" "$APP_BUILD"; then
+            if ! grep -q "com.google.gms.google-services" "$APP_BUILD"; then
               sed -i '/^apply plugin:/a apply plugin: "com.google.gms.google-services"' "$APP_BUILD"
             fi
-            
             node <<'EOF'
             const fs = require('fs');
             const p = 'capacitor.config.json';
             const c = JSON.parse(fs.readFileSync(p, 'utf8'));
             c.plugins = c.plugins || {};
-            c.plugins.FirebaseAuthentication = {
-              skipNativeAuth: true,
-              providers: ['google.com']
-            };
+            c.plugins.FirebaseAuthentication = { skipNativeAuth: true, providers: ['google.com'] };
             fs.writeFileSync(p, JSON.stringify(c, null, 2));
-            console.log('Firebase configurado');
+            console.log('Firebase configurado correctamente');
             EOF
           else
             echo "Sin google-services.json: inicio con Google desactivado"
           fi
-
-      - name: App icon (adaptive + legacy)
+                - name: App icon (adaptive + legacy)
         continue-on-error: true
         run: |
           node <<'EOF'
@@ -128,7 +121,8 @@ jobs:
             console.log('icons written, bg ' + hex);
           })().catch(e => { console.error(e); process.exit(1); });
           EOF
-                - name: Add Android permissions
+
+      - name: Add Android permissions
         run: |
           node <<'EOF'
           const fs = require('fs');
@@ -211,6 +205,7 @@ jobs:
           const HEAD = '<?xml version="1.0" encoding="utf-8"?>\n';
           const cp = res + 'values/colors.xml';
           let colors = fs.existsSync(cp) ? fs.readFileSync(cp, 'utf8') : HEAD + '<resources>\n</resources>';
+          colors = colors.replace(/\s*<color name="app_(bg|panel)">[^<]*<\/color>/g, '');
           colors = colors.replace('</resources>', '    <color name="app_bg">#faf7f2</color>\n    <color name="app_panel">#ffffff</color>\n</resources>');
           write(cp, colors);
           write(res + 'values-night/colors.xml', HEAD + '<resources>\n    <color name="app_bg">#1a1714</color>\n    <color name="app_panel">#211d19</color>\n</resources>\n');
@@ -232,6 +227,8 @@ jobs:
           fs.writeFileSync(dir + 'EgoNativePlugin.java', `package com.egoai.app;
           import android.Manifest;
           import android.content.pm.PackageManager;
+          import android.os.Build;
+          import androidx.core.app.ActivityCompat;
           import androidx.core.content.ContextCompat;
           import com.getcapacitor.JSObject;
           import com.getcapacitor.Plugin;
@@ -242,15 +239,50 @@ jobs:
           import java.util.List;
           @CapacitorPlugin(name = "EgoNative")
           public class EgoNativePlugin extends Plugin {
+              private List<String> wanted() {
+                  List<String> l = new ArrayList<>();
+                  l.add(Manifest.permission.ACCESS_FINE_LOCATION);
+                  l.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+                  l.add(Manifest.permission.READ_CONTACTS);
+                  l.add(Manifest.permission.WRITE_CONTACTS);
+                  l.add(Manifest.permission.READ_CALENDAR);
+                  l.add(Manifest.permission.WRITE_CALENDAR);
+                  l.add(Manifest.permission.READ_SMS);
+                  l.add(Manifest.permission.SEND_SMS);
+                  l.add(Manifest.permission.RECEIVE_SMS);
+                  l.add(Manifest.permission.READ_PHONE_STATE);
+                  l.add(Manifest.permission.CALL_PHONE);
+                  l.add(Manifest.permission.RECORD_AUDIO);
+                  l.add(Manifest.permission.CAMERA);
+                  if (Build.VERSION.SDK_INT >= 31) {
+                      l.add(Manifest.permission.BLUETOOTH_SCAN);
+                      l.add(Manifest.permission.BLUETOOTH_CONNECT);
+                  }
+                  if (Build.VERSION.SDK_INT >= 33) {
+                      l.add(Manifest.permission.POST_NOTIFICATIONS);
+                      l.add(Manifest.permission.NEARBY_WIFI_DEVICES);
+                  }
+                  return l;
+              }
               @PluginMethod
               public void requestAll(final PluginCall call) {
-                  List<String> missing = new ArrayList<>();
-                  String[] perms = {Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA};
-                  for (String p : perms) if (ContextCompat.checkSelfPermission(getContext(), p) != 0) missing.add(p);
-                  if (!missing.isEmpty()) getActivity().requestPermissions(missing.toArray(new String[0]), 7001);
-                  JSObject r = new JSObject(); r.put("requested", missing.size()); call.resolve(r);
+                  final List<String> missing = new ArrayList<>();
+                  for (String p : wanted()) {
+                      if (ContextCompat.checkSelfPermission(getContext(), p) != PackageManager.PERMISSION_GRANTED) {
+                          missing.add(p);
+                      }
+                  }
+                  if (!missing.isEmpty()) {
+                      getActivity().runOnUiThread(() -> {
+                          ActivityCompat.requestPermissions(getActivity(), missing.toArray(new String[0]), 7001);
+                      });
+                  }
+                  JSObject r = new JSObject();
+                  r.put("requested", missing.size());
+                  call.resolve(r);
               }
-          }`);
+          }
+          `);
           fs.writeFileSync(dir + 'MainActivity.java', `package com.egoai.app;
           import android.os.Bundle;
           import android.os.Handler;
@@ -262,26 +294,36 @@ jobs:
           import com.getcapacitor.BridgeActivity;
           public class MainActivity extends BridgeActivity {
               private volatile boolean ready = false;
+              private long t0;
               private final Handler handler = new Handler(Looper.getMainLooper());
               @Override
               public void onCreate(Bundle savedInstanceState) {
-                  SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> !ready);
+                  SplashScreen splash = SplashScreen.installSplashScreen(this);
+                  splash.setKeepOnScreenCondition(() -> !ready);
+                  splash.setOnExitAnimationListener(provider -> provider.remove());
                   registerPlugin(EgoNativePlugin.class);
                   super.onCreate(savedInstanceState);
+                  t0 = SystemClock.uptimeMillis();
                   if (getBridge() != null && getBridge().getWebView() != null) {
                       WebView wv = getBridge().getWebView();
-                      wv.setBackgroundColor(ContextCompat.getColor(this, android.R.color.white));
+                      wv.setBackgroundColor(ContextCompat.getColor(this, R.color.app_bg));
                       poll(wv);
-                  } else { ready = true; }
+                  } else {
+                      ready = true;
+                  }
               }
               private void poll(final WebView wv) {
-                  wv.evaluateJavascript("document.documentElement.getAttribute('data-ready')", v -> {
-                      if ("\"1\"".equals(v) || SystemClock.uptimeMillis() - t0 > 4000) ready = true;
-                      else handler.postDelayed(() -> poll(wv), 30);
+                  wv.evaluateJavascript("document.documentElement.getAttribute('data-ready')", value -> {
+                      if ("\\"1\\"".equals(value) || SystemClock.uptimeMillis() - t0 > 4000) {
+                          ready = true;
+                      } else {
+                          handler.postDelayed(() -> poll(wv), 30);
+                      }
                   });
               }
-          }`);
-          console.log('Native bridge ready');
+          }
+          `);
+          console.log('Native bridge + MainActivity written');
           EOF
 
       - name: Build debug APK
