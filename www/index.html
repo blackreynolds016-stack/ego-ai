@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EGO AI</title>
+<script>(function(){try{var t=JSON.parse(localStorage.getItem("ego_theme"));if(t!=="dark"&&t!=="light")t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}})()</script>
 <style>
 :root{--bg:#faf7f2;--panel:#ffffff;--line:#e8e2d8;--v:#c2693f;--v2:#da8a5f;--text:#2b2621;--muted:#8a8178;--userbg:#f0e8dd}
 :root[data-theme="dark"]{--bg:#1a1714;--panel:#211d19;--line:#3a332c;--v:#da8a5f;--v2:#e8a579;--text:#ece6dd;--muted:#9c9186;--userbg:#2a241e}
@@ -142,8 +143,8 @@ personaMenu.querySelectorAll(".pmitem").forEach(x=>x.classList.remove("active"))
 personaMenu.appendChild(it)});
 personaBtn.onclick=()=>{personaMenu.style.display=personaMenu.style.display==="none"?"block":"none"};
 document.addEventListener("click",e=>{if(!document.getElementById("personaWrap").contains(e.target))personaMenu.style.display="none"});
-document.documentElement.setAttribute("data-theme",ld("ego_theme","light"));
-document.getElementById("theme").textContent=ld("ego_theme","light")==="dark"?"☀️":"🌙";
+const SYS=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";const TH0=ld("ego_theme",SYS);document.documentElement.setAttribute("data-theme",TH0);
+document.getElementById("theme").textContent=TH0==="dark"?"☀️":"🌙";
 function cur(){return chats.find(c=>c.id===curId)}
 function saveChats(){
 if(!sv("ego_chats",chats)){
