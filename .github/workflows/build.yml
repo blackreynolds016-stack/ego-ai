@@ -214,7 +214,8 @@ jobs:
               cap = spaced('TU MENTE, SIN LÍMITES', hexc(c['muted']), 60, 7)
               save(center(fit(cap, 500), (600, 240)), folder, 'splash_brand.png')
           print('splash images written')
-          PYEOF      - name: Instant splash + dark/light colors (no flicker)
+          PYEOF
+                - name: Instant splash + dark/light colors (no flicker)
         run: |
           node <<'EOF'
           const fs = require('fs');
@@ -419,5 +420,4 @@ jobs:
         with:
           name: EGO-AI-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-
+          
