@@ -155,7 +155,8 @@ jobs:
           console.log(m);
           EOF
 
-      - name: Splash logo (EGO AI, claro y oscuro)      continue-on-error: true
+      - name: Splash logo (EGO AI, claro y oscuro)
+        continue-on-error: true
         run: |
           pip install --quiet --break-system-packages pillow
           python3 - <<'PYEOF'
