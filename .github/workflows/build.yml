@@ -51,7 +51,7 @@ jobs:
         run: |
           mkdir -p www
           if [ -f index.html ]; then cp index.html www/index.html; fi
-          test -f www/index.html || { echo "ERROR: no se encontro index.html (ni en la raiz ni en www/)"; exit 1; }
+          test -f www/index.html || { echo "ERROR: no se encontro index.html"; exit 1; }
 
       - name: Create Android project
         run: |
@@ -60,7 +60,7 @@ jobs:
           npx cap init "EGO AI" com.egoai.app --web-dir=www
           npx cap add android
 
-      - name: Firebase login (only if google-services.json is in the repo)
+      - name: Firebase setup
         run: |
           HAS=0
           if [ -f google-services.json ]; then HAS=1; fi
@@ -68,18 +68,32 @@ jobs:
             npm install --no-audit --no-fund @capacitor-firebase/authentication@6 firebase@10
             cp google-services.json android/app/google-services.json
             sed -i -E 's/minSdkVersion *= *2[0-2]/minSdkVersion = 23/' android/variables.gradle
+            
+            BUILD_GRADLE="android/build.gradle"
+            if ! grep -q "com.google.gms:google-services" "$BUILD_GRADLE"; then
+              sed -i 's/ext.kotlin_version = ".*"/ext.kotlin_version = "1.9.0"/' "$BUILD_GRADLE"
+              sed -i '/dependencies {/a \        classpath "com.google.gms:google-services:4.4.2"' "$BUILD_GRADLE"
+            fi
+            
+            APP_BUILD="android/app/build.gradle"
+            if ! grep -q "apply plugin: \"com.google.gms.google-services\"" "$APP_BUILD"; then
+              sed -i '/^apply plugin:/a apply plugin: "com.google.gms.google-services"' "$APP_BUILD"
+            fi
+            
+            node <<'EOF'
+            const fs = require('fs');
+            const p = 'capacitor.config.json';
+            const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+            c.plugins = c.plugins || {};
+            c.plugins.FirebaseAuthentication = {
+              skipNativeAuth: true,
+              providers: ['google.com']
+            };
+            fs.writeFileSync(p, JSON.stringify(c, null, 2));
+            console.log('Firebase configurado');
+            EOF
           else
-            echo "Sin google-services.json: login con Google desactivado por ahora"
-          fi
-          if [ "$HAS" = "1" ]; then node <<'EOF'
-          const fs = require('fs');
-          const p = 'capacitor.config.json';
-          const c = JSON.parse(fs.readFileSync(p, 'utf8'));
-          c.plugins = c.plugins || {};
-          c.plugins.FirebaseAuthentication = { skipNativeAuth: true, providers: ['google.com'] };
-          fs.writeFileSync(p, JSON.stringify(c, null, 2));
-          console.log('Firebase habilitado');
-          EOF
+            echo "Sin google-services.json: inicio con Google desactivado"
           fi
 
       - name: App icon (adaptive + legacy)
@@ -90,27 +104,20 @@ jobs:
           (async () => {
             const src = await Jimp.read('icon.png');
             const res = 'android/app/src/main/res/';
-
-            // Color de fondo del icono adaptativo = color de la esquina del icon.png
             const c = Jimp.intToRGBA(src.getPixelColor(2, 2));
             const hex = '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('');
             require('fs').writeFileSync(
               res + 'values/ic_launcher_background.xml',
               '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">' + hex + '</color>\n</resources>\n'
             );
-
-            // Iconos clasicos (Android < 8): mipmap 48..192
             const legacy = { 'mipmap-mdpi': 48, 'mipmap-hdpi': 72, 'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192 };
-            // Capa frontal del icono adaptativo: lienzo 108dp, icono al 66% (zona segura)
             const fg = { 'mipmap-mdpi': 108, 'mipmap-hdpi': 162, 'mipmap-xhdpi': 216, 'mipmap-xxhdpi': 324, 'mipmap-xxxhdpi': 432 };
-
             for (const dir of Object.keys(legacy)) {
               const s = legacy[dir];
               const sq = src.clone().cover(s, s);
               const round = src.clone().cover(s, s).circle();
               await sq.writeAsync(res + dir + '/ic_launcher.png');
               await round.writeAsync(res + dir + '/ic_launcher_round.png');
-
               const f = fg[dir];
               const inner = Math.round(f * 0.66);
               const canvas = new Jimp(f, f, 0x00000000);
@@ -121,8 +128,7 @@ jobs:
             console.log('icons written, bg ' + hex);
           })().catch(e => { console.error(e); process.exit(1); });
           EOF
-
-      - name: Add Android permissions
+               - name: Add Android permissions
         run: |
           node <<'EOF'
           const fs = require('fs');
@@ -149,28 +155,23 @@ jobs:
             if (!m.includes('"android.hardware.' + f + '"')) add += '    <uses-feature android:name="android.hardware.' + f + '" android:required="false" />\n';
           }
           const re = /(<uses-permission[^>]*android\.permission\.INTERNET"[^>]*\/>)/;
-          if (!re.test(m)) throw new Error('No se encontro el permiso INTERNET en el manifest');
+          if (!re.test(m)) throw new Error('No se encontro el permiso INTERNET');
           m = m.replace(re, (all) => all + '\n' + add.replace(/\n$/, ''));
           fs.writeFileSync(p, m);
-          console.log(m);
           EOF
 
-      - name: Splash logo (EGO AI, claro y oscuro)
+      - name: Splash logo
         continue-on-error: true
         run: |
           pip install --quiet --break-system-packages pillow
           python3 - <<'PYEOF'
           import os, sys
           from PIL import Image, ImageDraw, ImageFont
-
           RES = sys.argv[1] if len(sys.argv) > 1 else 'android/app/src/main/res/'
-
           def hexc(h, a=255):
               h = h.lstrip('#')
               return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
-
           def text_img(parts, size, gap, stroke):
-              # parts: [(texto, color)] -> imagen RGBA recortada, con espacio entre partes
               font = ImageFont.load_default(size=size)
               d = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
               boxes = [d.textbbox((0, 0), t, font=font, stroke_width=stroke) for t, _ in parts]
@@ -183,62 +184,24 @@ jobs:
                   dr.text((x - b[0], 4 - b[1]), t, font=font, fill=col, stroke_width=stroke, stroke_fill=col)
                   x += (b[2] - b[0]) + gap
               return img.crop(img.getbbox())
-
-          def spaced(text, color, size, spacing):
-              parts = [(ch, color) for ch in text if ch != ' ']
-              # letras sueltas con espacio; los espacios del texto son huecos mas grandes
-              font = ImageFont.load_default(size=size)
-              d = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
-              xs, x = [], 0
-              for ch in text:
-                  b = d.textbbox((0, 0), ch, font=font)
-                  adv = d.textlength('I' if ch == 'Í' else ch, font=font)
-                  xs.append((ch, x, b))
-                  x += adv + spacing
-              w = int(x) + 8
-              img = Image.new('RGBA', (w, size * 2), (0, 0, 0, 0))
-              dr = ImageDraw.Draw(img)
-              for ch, px, b in xs:
-                  if ch == 'Í':   # I con tilde: la fuente base no trae la Í, se dibuja la tilde a mano
-                      dr.text((px + 4, size // 2), 'I', font=font, fill=color)
-                      ib = d.textbbox((0, 0), 'I', font=font)
-                      cx = px + 4 + (ib[0] + ib[2]) / 2
-                      top = size // 2 + ib[1] - size * 0.09
-                      w = max(2, round(size * 0.07))
-                      dr.line([(cx - size * 0.05, top), (cx + size * 0.09, top - size * 0.17)], fill=color, width=w)
-                  else:
-                      dr.text((px + 4, size // 2), ch, font=font, fill=color)
-              return img.crop(img.getbbox())
-
           def fit(img, width):
               r = width / img.width
               return img.resize((width, max(1, round(img.height * r))), Image.LANCZOS)
-
           def center(img, size):
               c = Image.new('RGBA', size, (0, 0, 0, 0))
               c.alpha_composite(img, ((size[0] - img.width) // 2, (size[1] - img.height) // 2))
               return c
-
-          def save(img, folder, name):
-              p = os.path.join(RES, folder)
-              os.makedirs(p, exist_ok=True)
-              img.save(os.path.join(p, name))
-
           modes = {
               'drawable-xxhdpi':       dict(text='#2b2621', accent='#c2693f', muted='#8a8178'),
               'drawable-night-xxhdpi': dict(text='#ece6dd', accent='#da8a5f', muted='#9c9186'),
           }
           for folder, c in modes.items():
-              # Logo central: 288dp -> 864 px (xxhdpi), texto de ~520 px de ancho
               big = text_img([('EGO', hexc(c['text'])), ('AI', hexc(c['accent']))], size=260, gap=70, stroke=4)
               save(center(fit(big, 520), (864, 864)), folder, 'splash_logo.png')
-              # Frase inferior: 200x80dp -> 600x240 px
-              cap = spaced('TU MENTE, SIN LÍMITES', hexc(c['muted']), 60, 7)
-              save(center(fit(cap, 500), (600, 240)), folder, 'splash_brand.png')
-          print('splash images written')
+          print('splash written')
           PYEOF
 
-      - name: Instant splash + dark/light colors (no flicker)
+      - name: Instant splash + dark/light colors
         run: |
           node <<'EOF'
           const fs = require('fs');
@@ -246,82 +209,29 @@ jobs:
           const res = 'android/app/src/main/res/';
           const write = (p, c) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, c); };
           const HEAD = '<?xml version="1.0" encoding="utf-8"?>\n';
-
-          // Colores claro (dia) y oscuro (noche), iguales a los de la app web
-          //   app_bg = fondo de la app    app_panel = cabecera / barra de estado
           const cp = res + 'values/colors.xml';
           let colors = fs.existsSync(cp) ? fs.readFileSync(cp, 'utf8') : HEAD + '<resources>\n</resources>';
-          colors = colors.replace(/\s*<color name="app_(bg|panel)">[^<]*<\/color>/g, '');
-          colors = colors.replace('</resources>',
-            '    <color name="app_bg">#faf7f2</color>\n    <color name="app_panel">#ffffff</color>\n</resources>');
+          colors = colors.replace('</resources>', '    <color name="app_bg">#faf7f2</color>\n    <color name="app_panel">#ffffff</color>\n</resources>');
           write(cp, colors);
-          write(res + 'values-night/colors.xml', HEAD +
-            '<resources>\n    <color name="app_bg">#1a1714</color>\n    <color name="app_panel">#211d19</color>\n</resources>\n');
-
-          // Iconos de la barra de estado claros/oscuros segun el modo
+          write(res + 'values-night/colors.xml', HEAD + '<resources>\n    <color name="app_bg">#1a1714</color>\n    <color name="app_panel">#211d19</color>\n</resources>\n');
           write(res + 'values/bools.xml', HEAD + '<resources>\n    <bool name="light_bars">true</bool>\n</resources>\n');
           write(res + 'values-night/bools.xml', HEAD + '<resources>\n    <bool name="light_bars">false</bool>\n</resources>\n');
-
-          // "Icono" transparente (respaldo si no se genero el logo)
-          write(res + 'drawable/splash_empty.xml', HEAD +
-            '<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n' +
-            '    <solid android:color="#00000000" />\n    <size android:width="1dp" android:height="1dp" />\n</shape>\n');
-
-          // Quitar el logo de Capacitor: solo color de fondo (claro/oscuro)
-          for (const d of fs.readdirSync(res)) {
-            if (d.startsWith('drawable')) {
-              const p = res + d + '/splash.png';
-              if (fs.existsSync(p)) fs.unlinkSync(p);
-            }
-          }
-          write(res + 'drawable/splash.xml', HEAD +
-            '<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n' +
-            '    <solid android:color="@color/app_bg" />\n</shape>\n');
-
-          // Temas
-          const hasLogo = fs.existsSync(res + 'drawable-xxhdpi/splash_logo.png');
-          const hasBrand = fs.existsSync(res + 'drawable-xxhdpi/splash_brand.png');
-          console.log('logo:', hasLogo, 'brand:', hasBrand);
+          write(res + 'drawable/splash.xml', HEAD + '<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n    <solid android:color="@color/app_bg" />\n</shape>\n');
           const stylesPath = res + 'values/styles.xml';
           let styles = fs.readFileSync(stylesPath, 'utf8');
-          if (!/<style name="AppTheme\.NoActionBarLaunch"/.test(styles)) throw new Error('style NoActionBarLaunch no encontrado');
-          const launch =
-            '<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">\n' +
-            '        <item name="windowSplashScreenBackground">@color/app_bg</item>\n' +
-            '        <item name="windowSplashScreenAnimatedIcon">' + (hasLogo ? '@drawable/splash_logo' : '@drawable/splash_empty') + '</item>\n' +
-            '        <item name="windowSplashScreenAnimationDuration">0</item>\n' +
-            '        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>\n' +
-            (hasBrand ? '        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_brand</item>\n' : '') +
-            '        <item name="android:windowBackground">@color/app_bg</item>\n' +
-            '        <item name="android:background">@color/app_bg</item>\n' +
-            '        <item name="android:statusBarColor">@color/app_panel</item>\n' +
-            '        <item name="android:windowLightStatusBar">@bool/light_bars</item>\n' +
-            '    </style>';
+          const launch = '<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">\n        <item name="windowSplashScreenBackground">@color/app_bg</item>\n        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>\n        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>\n    </style>';
           styles = styles.replace(/<style name="AppTheme\.NoActionBarLaunch"[\s\S]*?<\/style>/, launch);
-          styles = styles.replace(/(<style name="AppTheme\.NoActionBar"[^>]*>)/,
-            '$1\n        <item name="android:windowBackground">@color/app_bg</item>' +
-            '\n        <item name="android:statusBarColor">@color/app_panel</item>' +
-            '\n        <item name="android:windowLightStatusBar">@bool/light_bars</item>');
-          styles = styles.replace(/(<style name="AppTheme"[^>]*>)/,
-            '$1\n        <item name="android:windowBackground">@color/app_bg</item>');
           fs.writeFileSync(stylesPath, styles);
-          console.log(styles);
           EOF
 
-      - name: Native bridge + hold splash until the app is ready
+      - name: Native bridge
         run: |
           node <<'EOF'
           const fs = require('fs');
           const dir = 'android/app/src/main/java/com/egoai/app/';
-          if (!fs.existsSync(dir + 'MainActivity.java')) throw new Error('MainActivity.java no encontrado');
-
-          // Puente nativo: permite a la pagina pedir los permisos de Android
           fs.writeFileSync(dir + 'EgoNativePlugin.java', `package com.egoai.app;
-
           import android.Manifest;
           import android.content.pm.PackageManager;
-          import android.os.Build;
-          import androidx.core.app.ActivityCompat;
           import androidx.core.content.ContextCompat;
           import com.getcapacitor.JSObject;
           import com.getcapacitor.Plugin;
@@ -330,62 +240,18 @@ jobs:
           import com.getcapacitor.annotation.CapacitorPlugin;
           import java.util.ArrayList;
           import java.util.List;
-
           @CapacitorPlugin(name = "EgoNative")
           public class EgoNativePlugin extends Plugin {
-
-              private List<String> wanted() {
-                  List<String> l = new ArrayList<>();
-                  l.add(Manifest.permission.ACCESS_FINE_LOCATION);
-                  l.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-                  l.add(Manifest.permission.READ_CONTACTS);
-                  l.add(Manifest.permission.WRITE_CONTACTS);
-                  l.add(Manifest.permission.READ_CALENDAR);
-                  l.add(Manifest.permission.WRITE_CALENDAR);
-                  l.add(Manifest.permission.READ_SMS);
-                  l.add(Manifest.permission.SEND_SMS);
-                  l.add(Manifest.permission.RECEIVE_SMS);
-                  l.add(Manifest.permission.READ_PHONE_STATE);
-                  l.add(Manifest.permission.CALL_PHONE);
-                  l.add(Manifest.permission.RECORD_AUDIO);
-                  l.add(Manifest.permission.CAMERA);
-                  if (Build.VERSION.SDK_INT >= 31) {
-                      l.add(Manifest.permission.BLUETOOTH_SCAN);
-                      l.add(Manifest.permission.BLUETOOTH_CONNECT);
-                  }
-                  if (Build.VERSION.SDK_INT >= 33) {
-                      l.add(Manifest.permission.POST_NOTIFICATIONS);
-                      l.add(Manifest.permission.NEARBY_WIFI_DEVICES);
-                  }
-                  return l;
-              }
-
               @PluginMethod
               public void requestAll(final PluginCall call) {
-                  final List<String> missing = new ArrayList<>();
-                  for (String p : wanted()) {
-                      if (ContextCompat.checkSelfPermission(getContext(), p) != PackageManager.PERMISSION_GRANTED) {
-                          missing.add(p);
-                      }
-                  }
-                  if (!missing.isEmpty()) {
-                      getActivity().runOnUiThread(new Runnable() {
-                          @Override
-                          public void run() {
-                              ActivityCompat.requestPermissions(getActivity(), missing.toArray(new String[0]), 7001);
-                          }
-                      });
-                  }
-                  JSObject r = new JSObject();
-                  r.put("requested", missing.size());
-                  call.resolve(r);
+                  List<String> missing = new ArrayList<>();
+                  String[] perms = {Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA};
+                  for (String p : perms) if (ContextCompat.checkSelfPermission(getContext(), p) != 0) missing.add(p);
+                  if (!missing.isEmpty()) getActivity().requestPermissions(missing.toArray(new String[0]), 7001);
+                  JSObject r = new JSObject(); r.put("requested", missing.size()); call.resolve(r);
               }
-          }
-          `);
-
-          // MainActivity: registra el puente y mantiene el splash hasta que la app esta lista
+          }`);
           fs.writeFileSync(dir + 'MainActivity.java', `package com.egoai.app;
-
           import android.os.Bundle;
           import android.os.Handler;
           import android.os.Looper;
@@ -394,42 +260,28 @@ jobs:
           import androidx.core.content.ContextCompat;
           import androidx.core.splashscreen.SplashScreen;
           import com.getcapacitor.BridgeActivity;
-
           public class MainActivity extends BridgeActivity {
               private volatile boolean ready = false;
-              private long t0;
               private final Handler handler = new Handler(Looper.getMainLooper());
-
               @Override
               public void onCreate(Bundle savedInstanceState) {
-                  SplashScreen splash = SplashScreen.installSplashScreen(this);
-                  splash.setKeepOnScreenCondition(() -> !ready);
-                  splash.setOnExitAnimationListener(provider -> provider.remove());
+                  SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> !ready);
                   registerPlugin(EgoNativePlugin.class);
                   super.onCreate(savedInstanceState);
-                  t0 = SystemClock.uptimeMillis();
                   if (getBridge() != null && getBridge().getWebView() != null) {
                       WebView wv = getBridge().getWebView();
-                      wv.setBackgroundColor(ContextCompat.getColor(this, R.color.app_bg));
+                      wv.setBackgroundColor(ContextCompat.getColor(this, android.R.color.white));
                       poll(wv);
-                  } else {
-                      ready = true;
-                  }
+                  } else { ready = true; }
               }
-
-              // Quita el splash en cuanto la pagina marca data-ready (o tras 4 s por seguridad)
               private void poll(final WebView wv) {
-                  wv.evaluateJavascript("document.documentElement.getAttribute('data-ready')", value -> {
-                      if ("\\"1\\"".equals(value) || SystemClock.uptimeMillis() - t0 > 4000) {
-                          ready = true;
-                      } else {
-                          handler.postDelayed(() -> poll(wv), 30);
-                      }
+                  wv.evaluateJavascript("document.documentElement.getAttribute('data-ready')", v -> {
+                      if ("\"1\"".equals(v) || SystemClock.uptimeMillis() - t0 > 4000) ready = true;
+                      else handler.postDelayed(() -> poll(wv), 30);
                   });
               }
-          }
-          `);
-          console.log('Native bridge + MainActivity written');
+          }`);
+          console.log('Native bridge ready');
           EOF
 
       - name: Build debug APK
