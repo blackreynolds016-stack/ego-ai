@@ -81,6 +81,89 @@ jobs:
           grep -q "RECORD_AUDIO" "$MANIFEST" || sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />#' "$MANIFEST"
           grep -q "RECORD_AUDIO" "$MANIFEST" || { echo "ERROR: permisos no agregados"; exit 1; }
 
+      - name: Splash logo (EGO AI, claro y oscuro)
+        continue-on-error: true
+        run: |
+          pip install --quiet --break-system-packages pillow
+          python3 - <<'PYEOF'
+          import os, sys
+          from PIL import Image, ImageDraw, ImageFont
+
+          RES = sys.argv[1] if len(sys.argv) > 1 else 'android/app/src/main/res/'
+
+          def hexc(h, a=255):
+              h = h.lstrip('#')
+              return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
+
+          def text_img(parts, size, gap, stroke):
+              # parts: [(texto, color)] -> imagen RGBA recortada, con espacio entre partes
+              font = ImageFont.load_default(size=size)
+              d = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+              boxes = [d.textbbox((0, 0), t, font=font, stroke_width=stroke) for t, _ in parts]
+              w = sum(b[2] - b[0] for b in boxes) + gap * (len(parts) - 1)
+              h = max(b[3] - b[1] for b in boxes)
+              img = Image.new('RGBA', (w + 8, h + 8), (0, 0, 0, 0))
+              dr = ImageDraw.Draw(img)
+              x = 4
+              for (t, col), b in zip(parts, boxes):
+                  dr.text((x - b[0], 4 - b[1]), t, font=font, fill=col, stroke_width=stroke, stroke_fill=col)
+                  x += (b[2] - b[0]) + gap
+              return img.crop(img.getbbox())
+
+          def spaced(text, color, size, spacing):
+              parts = [(ch, color) for ch in text if ch != ' ']
+              # letras sueltas con espacio; los espacios del texto son huecos mas grandes
+              font = ImageFont.load_default(size=size)
+              d = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+              xs, x = [], 0
+              for ch in text:
+                  b = d.textbbox((0, 0), ch, font=font)
+                  adv = d.textlength('I' if ch == 'Í' else ch, font=font)
+                  xs.append((ch, x, b))
+                  x += adv + spacing
+              w = int(x) + 8
+              img = Image.new('RGBA', (w, size * 2), (0, 0, 0, 0))
+              dr = ImageDraw.Draw(img)
+              for ch, px, b in xs:
+                  if ch == 'Í':   # I con tilde: la fuente base no trae la Í, se dibuja la tilde a mano
+                      dr.text((px + 4, size // 2), 'I', font=font, fill=color)
+                      ib = d.textbbox((0, 0), 'I', font=font)
+                      cx = px + 4 + (ib[0] + ib[2]) / 2
+                      top = size // 2 + ib[1] - size * 0.09
+                      w = max(2, round(size * 0.07))
+                      dr.line([(cx - size * 0.05, top), (cx + size * 0.09, top - size * 0.17)], fill=color, width=w)
+                  else:
+                      dr.text((px + 4, size // 2), ch, font=font, fill=color)
+              return img.crop(img.getbbox())
+
+          def fit(img, width):
+              r = width / img.width
+              return img.resize((width, max(1, round(img.height * r))), Image.LANCZOS)
+
+          def center(img, size):
+              c = Image.new('RGBA', size, (0, 0, 0, 0))
+              c.alpha_composite(img, ((size[0] - img.width) // 2, (size[1] - img.height) // 2))
+              return c
+
+          def save(img, folder, name):
+              p = os.path.join(RES, folder)
+              os.makedirs(p, exist_ok=True)
+              img.save(os.path.join(p, name))
+
+          modes = {
+              'drawable-xxhdpi':       dict(text='#2b2621', accent='#c2693f', muted='#8a8178'),
+              'drawable-night-xxhdpi': dict(text='#ece6dd', accent='#da8a5f', muted='#9c9186'),
+          }
+          for folder, c in modes.items():
+              # Logo central: 288dp -> 864 px (xxhdpi), texto de ~520 px de ancho
+              big = text_img([('EGO', hexc(c['text'])), ('AI', hexc(c['accent']))], size=260, gap=70, stroke=4)
+              save(center(fit(big, 520), (864, 864)), folder, 'splash_logo.png')
+              # Frase inferior: 200x80dp -> 600x240 px
+              cap = spaced('TU MENTE, SIN LÍMITES', hexc(c['muted']), 60, 7)
+              save(center(fit(cap, 500), (600, 240)), folder, 'splash_brand.png')
+          print('splash images written')
+          PYEOF
+
       - name: Instant splash + dark/light colors (no flicker)
         run: |
           node <<'EOF'
@@ -90,27 +173,27 @@ jobs:
           const write = (p, c) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, c); };
           const HEAD = '<?xml version="1.0" encoding="utf-8"?>\n';
 
-          // Colores: claro (dia) y oscuro (noche), iguales a los de la app web
-          //   app_bg    = fondo de la app      app_panel = cabecera / barra de estado
+          // Colores claro (dia) y oscuro (noche), iguales a los de la app web
+          //   app_bg = fondo de la app    app_panel = cabecera / barra de estado
           const cp = res + 'values/colors.xml';
           let colors = fs.existsSync(cp) ? fs.readFileSync(cp, 'utf8') : HEAD + '<resources>\n</resources>';
           colors = colors.replace(/\s*<color name="app_(bg|panel)">[^<]*<\/color>/g, '');
           colors = colors.replace('</resources>',
             '    <color name="app_bg">#faf7f2</color>\n    <color name="app_panel">#ffffff</color>\n</resources>');
-          write(res + 'values/colors.xml', colors);
+          write(cp, colors);
           write(res + 'values-night/colors.xml', HEAD +
             '<resources>\n    <color name="app_bg">#1a1714</color>\n    <color name="app_panel">#211d19</color>\n</resources>\n');
 
-          // Iconos de barra de estado claros/oscuros segun el modo
+          // Iconos de la barra de estado claros/oscuros segun el modo
           write(res + 'values/bools.xml', HEAD + '<resources>\n    <bool name="light_bars">true</bool>\n</resources>\n');
           write(res + 'values-night/bools.xml', HEAD + '<resources>\n    <bool name="light_bars">false</bool>\n</resources>\n');
 
-          // "Icono" de splash transparente
+          // "Icono" transparente (respaldo si no se genero el logo)
           write(res + 'drawable/splash_empty.xml', HEAD +
             '<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n' +
             '    <solid android:color="#00000000" />\n    <size android:width="1dp" android:height="1dp" />\n</shape>\n');
 
-          // Quitar el logo de Capacitor y dejar solo color (sigue claro/oscuro)
+          // Quitar el logo de Capacitor: solo color de fondo (claro/oscuro)
           for (const d of fs.readdirSync(res)) {
             if (d.startsWith('drawable')) {
               const p = res + d + '/splash.png';
@@ -122,15 +205,19 @@ jobs:
             '    <solid android:color="@color/app_bg" />\n</shape>\n');
 
           // Temas
+          const hasLogo = fs.existsSync(res + 'drawable-xxhdpi/splash_logo.png');
+          const hasBrand = fs.existsSync(res + 'drawable-xxhdpi/splash_brand.png');
+          console.log('logo:', hasLogo, 'brand:', hasBrand);
           const stylesPath = res + 'values/styles.xml';
           let styles = fs.readFileSync(stylesPath, 'utf8');
           if (!/<style name="AppTheme\.NoActionBarLaunch"/.test(styles)) throw new Error('style NoActionBarLaunch no encontrado');
           const launch =
             '<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">\n' +
             '        <item name="windowSplashScreenBackground">@color/app_bg</item>\n' +
-            '        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_empty</item>\n' +
+            '        <item name="windowSplashScreenAnimatedIcon">' + (hasLogo ? '@drawable/splash_logo' : '@drawable/splash_empty') + '</item>\n' +
             '        <item name="windowSplashScreenAnimationDuration">0</item>\n' +
             '        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>\n' +
+            (hasBrand ? '        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_brand</item>\n' : '') +
             '        <item name="android:windowBackground">@color/app_bg</item>\n' +
             '        <item name="android:background">@color/app_bg</item>\n' +
             '        <item name="android:statusBarColor">@color/app_panel</item>\n' +
@@ -147,7 +234,7 @@ jobs:
           console.log(styles);
           EOF
 
-      - name: WebView background = app color (no white flash)
+      - name: Hold splash until the app is ready (then remove it instantly)
         run: |
           node <<'EOF'
           const fs = require('fs');
@@ -156,16 +243,44 @@ jobs:
           fs.writeFileSync(p, `package com.egoai.app;
 
           import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.os.SystemClock;
+          import android.webkit.WebView;
           import androidx.core.content.ContextCompat;
+          import androidx.core.splashscreen.SplashScreen;
           import com.getcapacitor.BridgeActivity;
 
           public class MainActivity extends BridgeActivity {
+              private volatile boolean ready = false;
+              private long t0;
+              private final Handler handler = new Handler(Looper.getMainLooper());
+
               @Override
               public void onCreate(Bundle savedInstanceState) {
+                  SplashScreen splash = SplashScreen.installSplashScreen(this);
+                  splash.setKeepOnScreenCondition(() -> !ready);
+                  splash.setOnExitAnimationListener(provider -> provider.remove());
                   super.onCreate(savedInstanceState);
+                  t0 = SystemClock.uptimeMillis();
                   if (getBridge() != null && getBridge().getWebView() != null) {
-                      getBridge().getWebView().setBackgroundColor(ContextCompat.getColor(this, R.color.app_bg));
+                      WebView wv = getBridge().getWebView();
+                      wv.setBackgroundColor(ContextCompat.getColor(this, R.color.app_bg));
+                      poll(wv);
+                  } else {
+                      ready = true;
                   }
+              }
+
+              // Quita el splash en cuanto la pagina marca data-ready (o tras 4 s por seguridad)
+              private void poll(final WebView wv) {
+                  wv.evaluateJavascript("document.documentElement.getAttribute('data-ready')", value -> {
+                      if ("\\"1\\"".equals(value) || SystemClock.uptimeMillis() - t0 > 4000) {
+                          ready = true;
+                      } else {
+                          handler.postDelayed(() -> poll(wv), 30);
+                      }
+                  });
               }
           }
           `);
