@@ -117,7 +117,7 @@ jobs:
 
             // Iconos clasicos (Android < 8): mipmap 48..192
             const legacy = { 'mipmap-mdpi': 48, 'mipmap-hdpi': 72, 'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192 };
-            // Capa frontal del icono adaptativo: lienzo 108dp, icono al 66% (zona segura)
+            // Capa frontal del icono adaptativo: lienzo 108dp, icono al 60% (cabe completo en mascara circular)
             const fg = { 'mipmap-mdpi': 108, 'mipmap-hdpi': 162, 'mipmap-xhdpi': 216, 'mipmap-xxhdpi': 324, 'mipmap-xxxhdpi': 432 };
 
             for (const dir of Object.keys(legacy)) {
@@ -128,7 +128,7 @@ jobs:
               await round.writeAsync(res + dir + '/ic_launcher_round.png');
 
               const f = fg[dir];
-              const inner = Math.round(f * 0.66);
+              const inner = Math.round(f * 0.60);
               const canvas = new Jimp(f, f, 0x00000000);
               const icon = src.clone().cover(inner, inner);
               canvas.composite(icon, Math.round((f - inner) / 2), Math.round((f - inner) / 2));
