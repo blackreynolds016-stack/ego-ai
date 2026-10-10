@@ -286,7 +286,7 @@ const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.in
 const GREET=/^[\s\u00a1!\u00bf]*(hola+|holi+|ola|buenas|buen[oa]s\s+(d[ií]as|tardes|noches)|hey+|hi|hello|qu[eé]\s+tal|saludos)[\s!¡.?¿,]*$/i;
 const GREET_R=["¡Hola! ¿En qué te ayudo hoy?","¡Hola! Cuéntame, ¿qué necesitas?","¡Hey! Aquí estoy. ¿En qué puedo ayudarte?"];
 const toastEl=document.getElementById("toast");let tt=0;
-function toast(m){toastEl.textContent=m;toastEl.style.display="block";clearTimeout(tt);tt=setTimeout(()=>{toastEl.style.display="none"},2800)}
+function toast(m,ms){toastEl.textContent=m;toastEl.style.display="block";clearTimeout(tt);tt=setTimeout(()=>{toastEl.style.display="none"},ms||2800)}
 let ctrl=null;
 async function callAPI(messages){
 ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},60000);
@@ -408,6 +408,8 @@ let r;
 try{r=await nat("EgoGoogle","signIn",{clientId:GOOGLE_WEB_CLIENT_ID})}
 catch(e){console.error(e);const m=String((e&&(e.message||e.code))||e);
 if(/not implemented|not available|UNIMPLEMENTED/i.test(m))toast("Este APK no trae el inicio con Google. Vuelve a compilar la app");
+else if(String(e&&e.code)==="10"){let inf=null;try{inf=await nat("EgoGoogle","info",{})}catch(x){}
+toast("Error 10. Paquete: "+(inf&&inf.pkg||"?")+"\nSHA-1 de este APK:\n"+(inf&&inf.sha1||"?")+"\nWeb client: "+GOOGLE_WEB_CLIENT_ID.slice(0,22)+"...",20000)}
 else if(/cancel/i.test(m))toast("Inicio de sesión cancelado");
 else toast(m.slice(0,110));return}
 try{const idToken=r&&r.idToken;if(!idToken)throw new Error("Google no devolvió el token");
