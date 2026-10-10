@@ -22,30 +22,68 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Restore stable debug key
-        id: kc
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: ego-debug-keystore-v1
-
-      - name: Debug key (create if missing) and show SHA-1
+      - name: Firma fija del APK (llave propia, no cambia nunca)
         run: |
+          set -e
           mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          base64 -d > ~/.android/debug.keystore <<'KSEOF'
+          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
+          KSEOF
+          OUT=$(keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android)
           echo "### Huella de firma (SHA-1) para Firebase" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep -E "SHA1|SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "$OUT" | grep -E "SHA1|SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Save stable debug key
-        if: steps.kc.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: ego-debug-keystore-v1
+          if ! echo "$OUT" | grep -q "A3:A8:67:B6:7D:68:81:30:3A:33:88:E2:59:7E:CD:A8:4C:08:E3:A0"; then
+            echo "::error::La llave fija no coincide: el texto del keystore se pego incompleto o con errores."
+            exit 1
+          fi
 
       - name: Prepare web assets
         run: |
@@ -132,7 +170,8 @@ jobs:
           fs.writeFileSync(p, m);
           console.log(m);
           EOF
-
+      # ===== FIN PARTE 1 =====
+            # ===== INICIO PARTE 2 =====
       - name: Splash logo (EGO AI, claro y oscuro)
         continue-on-error: true
         run: |
@@ -215,8 +254,7 @@ jobs:
               save(center(fit(cap, 500), (600, 240)), folder, 'splash_brand.png')
           print('splash images written')
           PYEOF
-      # ===== FIN PARTE 1 =====
-            # ===== INICIO PARTE 2 =====
+
       - name: Instant splash + dark/light colors (no flicker)
         run: |
           node <<'EOF'
@@ -286,7 +324,8 @@ jobs:
           fs.writeFileSync(stylesPath, styles);
           console.log(styles);
           EOF
-
+      # ===== FIN PARTE 2 =====
+            # ===== INICIO PARTE 3 =====
       - name: Native bridge + hold splash until the app is ready
         run: |
           node <<'EOF'
@@ -410,8 +449,31 @@ jobs:
           `);
           console.log('Native bridge + MainActivity written');
           EOF
-      # ===== FIN PARTE 2 =====
-            # ===== INICIO PARTE 3 =====
+
+      - name: Usar la firma fija en Gradle
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const p = 'android/app/build.gradle';
+          let g = fs.readFileSync(p, 'utf8');
+          if (/signingConfigs\s*\{/.test(g)) throw new Error('app/build.gradle ya trae signingConfigs');
+          if (!/^android\s*\{/m.test(g)) throw new Error('No se encontro el bloque android en app/build.gradle');
+          const block = [
+            '    signingConfigs {',
+            '        debug {',
+            '            storeFile file(System.getProperty("user.home") + "/.android/debug.keystore")',
+            '            storePassword "android"',
+            '            keyAlias "androiddebugkey"',
+            '            keyPassword "android"',
+            '        }',
+            '    }'
+          ].join('\n');
+          g = g.replace(/^android\s*\{/m, m => m + '\n' + block);
+          fs.writeFileSync(p, g);
+          console.log('Firma fija configurada en Gradle');
+          EOF
+      # ===== FIN PARTE 3 =====
+            # ===== INICIO PARTE 4 =====
       - name: Google sign-in nativo (no necesita google-services.json)
         run: |
           set -e
@@ -558,6 +620,15 @@ jobs:
             ./gradlew assembleDebug
             echo "ATENCION: este APK se compilo SIN inicio de sesion de Google (fallo el modulo de Google). Revisa el paso anterior." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Verificar firma del APK final
+        continue-on-error: true
+        run: |
+          AP=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          echo "### Firma real del APK" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          "$AP" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | grep -E "SHA-1|SHA-256" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
