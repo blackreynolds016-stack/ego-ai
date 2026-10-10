@@ -387,6 +387,8 @@ if(C&&C.Plugins&&C.Plugins[plugin]&&typeof C.Plugins[plugin][method]==="function
 if(C&&C.nativePromise)return C.nativePromise(plugin,method,args||{});
 return Promise.reject(new Error("not available"))}
 const FBU=n=>"https://www.gstatic.com/firebasejs/10.14.1/firebase-"+n+".js";
+// ===== FIN PARTE 3 =====
+  // ===== INICIO PARTE 4 =====
 Object.assign(Cloud,{
 timer:null,pending:{},fb:null,
 ready(){return !!(FB_CFG.apiKey&&FB_CFG.projectId&&FB_CFG.appId)},
@@ -399,7 +401,9 @@ return this.fb},
 async init(){
 if(!this.ready())return;
 try{const f=await this.load();
-f.auth.onAuthStateChanged(f.au,u=>{this.user=u;this.on=!!u;renderAcct();if(u)this.pull()})}catch(e){console.error(e)}},
+f.auth.onAuthStateChanged(f.au,u=>{this.user=u;this.on=!!u;
+sv("ego_user",u?{uid:u.uid,displayName:u.displayName||"",email:u.email||"",photoURL:u.photoURL||""}:null);
+renderAcct();if(u)this.pull()})}catch(e){console.error(e)}},
 async signIn(){
 if(!this.ready()){toast("Falta configurar Firebase en la app");return}
 const C=window.Capacitor;
@@ -417,8 +421,18 @@ const f=await this.load();
 await f.auth.signInWithCredential(f.au,f.auth.GoogleAuthProvider.credential(idToken));
 toast("Cuenta conectada")}catch(e){console.error(e);toast("Firebase rechazó el inicio: "+String((e&&(e.code||e.message))||e).slice(0,90))}},
 async signOut(){
-try{try{await nat("EgoGoogle","signOut",{})}catch(e){}
-if(this.fb)await this.fb.auth.signOut(this.fb.au);toast("Sesión cerrada")}catch(e){console.error(e)}},
+try{
+if(!this.on||!this.fb){toast("Espera a que se conecte tu cuenta (necesita internet) e inténtalo de nuevo",4500);return}
+clearTimeout(this.timer);await this.flush();
+if(Object.keys(this.pending).length){toast("No se pudieron guardar tus chats en la nube. Revisa tu internet e inténtalo de nuevo",5000);return}
+try{await nat("EgoGoogle","signOut",{})}catch(e){}
+if(this.fb)await this.fb.auth.signOut(this.fb.au);
+this.pending={};this.user=null;this.on=false;
+sv("ego_user",null);
+chats=[];curId=null;sv("ego_chats",[]);sv("ego_cur",null);
+renderAcct();renderList();renderChat();
+toast("Sesión cerrada. Tus chats quedan guardados en tu cuenta")
+}catch(e){console.error(e);toast("No se pudo cerrar la sesión")}},
 pack(c){
 let m=c.msgs.map(x=>Array.isArray(x.content)?{role:x.role,content:((x.content.find(p=>p.type==="text")||{}).text||"")+" [imagen]"}:{role:x.role,content:x.content});
 let j=JSON.stringify(m);while(j.length>900000&&m.length>2){m.shift();j=JSON.stringify(m)}
@@ -455,7 +469,7 @@ const info=document.createElement("div");info.className="uinfo";
 const b=document.createElement("b");b.textContent=u.displayName||"Mi cuenta";
 const sm=document.createElement("small");sm.textContent=u.email||"";
 info.appendChild(b);info.appendChild(sm);row.appendChild(av);row.appendChild(info);a.appendChild(row);
-const so=document.createElement("button");so.className="sbtn";so.type="button";so.textContent="Cerrar sesión";so.onclick=()=>Cloud.signOut();a.appendChild(so);
+const so=document.createElement("button");so.className="sbtn";so.type="button";so.textContent="Cerrar sesión";so.onclick=()=>{if(confirm("¿Cerrar sesión? Tus chats se quedan guardados en tu cuenta y vuelven a aparecer cuando entres de nuevo."))Cloud.signOut()};a.appendChild(so);
 }else{
 const g=document.createElement("button");g.className="gbtn";g.type="button";g.innerHTML=GSVG+"<span>Agregar cuenta de Google</span>";g.onclick=()=>Cloud.signIn();a.appendChild(g)}
 const pb=document.createElement("button");pb.className="sbtn";pb.type="button";pb.textContent="Permisos de la app";pb.onclick=askPerms;a.appendChild(pb)}
@@ -466,7 +480,7 @@ if(C&&C.Plugins&&C.Plugins.EgoNative){await C.Plugins.EgoNative.requestAll();toa
 else if(C&&C.nativePromise){await C.nativePromise("EgoNative","requestAll",{});toast("Acepta los permisos que pida Android")}
 else toast("Los permisos se piden en la app instalada")
 }catch(e){console.error(e);toast("No se pudieron pedir los permisos")}}
-renderAcct();setTimeout(()=>Cloud.init(),800);
+Cloud.user=ld("ego_user",null);renderAcct();setTimeout(()=>Cloud.init(),400);
 if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
 requestAnimationFrame(function(){requestAnimationFrame(function(){document.documentElement.setAttribute("data-ready","1")})});
