@@ -96,10 +96,10 @@ form{display:block;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0));b
 .ib svg{width:24px;height:24px}
 .ib:active{background:var(--userbg)}
 .ib.rec{color:#d8432f;animation:pulse 1s infinite}
-/* ===== FIN PARTE 1 ===== */
-  /* ===== INICIO PARTE 2 ===== */
 #bar #input{flex:1;min-width:0;background:none;border:0;box-shadow:none;border-radius:0;padding:10px 6px;font-size:15.5px;line-height:20px;max-height:130px;outline:none;color:var(--text)}
 #bar #input::placeholder{color:var(--muted)}
+/* ===== FIN PARTE 1 ===== */
+  /* ===== INICIO PARTE 2 ===== */
 #bar #send{display:none;flex-shrink:0;width:38px;height:38px;margin:1px;font-size:16px}
 #bar #send::before{display:none}
 #plusPanel{display:none;max-width:720px;width:100%;margin:0 auto;padding:2px 12px calc(14px + env(safe-area-inset-bottom,0));background:var(--bg);gap:10px;flex-shrink:0}
@@ -130,6 +130,12 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 #modalBox .madd button{padding:10px 14px;border-radius:10px;border:1px solid var(--v);background:var(--v);color:#fff;font-size:14px}
 #memBtn{width:100%;text-align:left;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px}
 .ch .cb{display:flex;gap:4px}
+.tbl{overflow-x:auto;margin:0 0 12px}
+.msg table{border-collapse:collapse;font-size:14px;min-width:100%}
+.msg th,.msg td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+.msg th{background:var(--userbg);font-weight:600}
+.msg hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+.msg blockquote{margin:0 0 10px;padding:4px 12px;border-left:3px solid var(--v);color:var(--muted)}
 </style>
 </head>
 <body>
@@ -236,7 +242,9 @@ d.onclick=e=>{if(e.target.dataset.del)return;curId=c.id;saveChats();renderList()
 d.querySelector("button").onclick=e=>{e.stopPropagation();chats=chats.filter(x=>x.id!==c.id);Cloud.remove(c.id);if(curId===c.id)curId=chats[0]?chats[0].id:null;saveChats();renderList();renderChat()};
 list.appendChild(d)})}
 const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-const inl=t=>t.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<i>$2</i>").replace(/!\[([^\]]*)\]\((https?:[^)\s]+|data:image\/[a-z+]+;base64,[A-Za-z0-9+\/=]+)\)/g,'<img src="$2" alt="$1" loading="lazy">').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+const inl=t=>{const cs=[];t=t.replace(/`([^`]+)`/g,(m,c)=>{cs.push(c);return"\u0001"+(cs.length-1)+"\u0001"});
+t=t.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<i>$2</i>").replace(/!\[([^\]]*)\]\((https?:[^)\s]+|data:image\/[a-z+]+;base64,[A-Za-z0-9+\/=]+)\)/g,'<img src="$2" alt="$1" loading="lazy">').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+return t.replace(/\u0001(\d+)\u0001/g,(m,i)=>"<code>"+cs[+i]+"</code>")};
 function md(src){
 if((src.match(/```/g)||[]).length%2)src+="\n```";
 const bl=[];
@@ -244,8 +252,16 @@ const s=esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{bl.push('<div cla
 const out=[];let listT=null;
 const close=()=>{if(listT){out.push("</"+listT+">");listT=null}};
 const open=t=>{if(listT!==t){close();out.push("<"+t+">");listT=t}};
-for(const line of s.split("\n")){let m;
+const lines=s.split("\n");
+const cells=l=>l.trim().replace(/^\|/,"").replace(/\|$/,"").split("|").map(x=>x.trim());
+for(let i=0;i<lines.length;i++){const line=lines[i];let m;
 if(m=line.match(/^\u0000(\d+)\u0000$/)){close();out.push(bl[m[1]])}
+else if(/^\s*\|.*\|\s*$/.test(line)&&i+1<lines.length&&/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i+1])){close();
+const head=cells(line);let h="<div class=\"tbl\"><table><thead><tr>"+head.map(c=>"<th>"+inl(c)+"</th>").join("")+"</tr></thead><tbody>";i+=2;
+while(i<lines.length&&/^\s*\|.*\|\s*$/.test(lines[i])){h+="<tr>"+cells(lines[i]).map(c=>"<td>"+inl(c)+"</td>").join("")+"</tr>";i++}
+i--;out.push(h+"</tbody></table></div>")}
+else if(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)){close();out.push("<hr>")}
+else if(m=line.match(/^&gt;\s?(.*)/)){close();out.push("<blockquote>"+inl(m[1])+"</blockquote>")}
 else if(m=line.match(/^(#{1,4})\s+(.*)/)){close();const n=m[1].length+1;out.push("<h"+n+">"+inl(m[2])+"</h"+n+">")}
 else if(m=line.match(/^\s*[-*]\s+(.*)/)){open("ul");out.push("<li>"+inl(m[1])+"</li>")}else if(m=line.match(/^\s*\d+[.)]\s+(.*)/)){open("ol");out.push("<li>"+inl(m[1])+"</li>")}
 else if(!line.trim())close();
@@ -319,6 +335,8 @@ return}
 const readers={pdf:readPdf,docx:readDocx,xlsx:readXlsx,xls:readXlsx};
 if(readers[ext]){
 toast("Leyendo "+file.name+"…",8000);
+// ===== FIN PARTE 3 =====
+  // ===== INICIO PARTE 4 =====
 readers[ext](file).then(t=>{toast("Archivo listo",1500);setAttachment(null,file.name,false,t)}).catch(e=>toast(e&&e.message==="scan"?"Ese PDF es una imagen escaneada (sin texto). Envíame fotos de sus páginas.":"No pude leer ese archivo. Revisa tu internet e inténtalo de nuevo.",5000));
 return}
 const reader=new FileReader();
@@ -330,8 +348,6 @@ photoInput.onchange=()=>{handleFile(photoInput.files[0]);photoInput.value=""};
 camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
-// ===== FIN PARTE 3 =====
-  // ===== INICIO PARTE 4 =====
 const reader=new FileReader();
 reader.onload=()=>shrink(reader.result,(u,t)=>setAttachment(u,"Foto",true,undefined,t));
 reader.readAsDataURL(file);
@@ -441,14 +457,14 @@ const GREET=/^[\s\u00a1!\u00bf]*(hola+|holi+|ola|buenas|buen[oa]s\s+(d[ií]as|ta
 const GREET_R=["¡Hola! ¿En qué te ayudo hoy?","¡Hola! Cuéntame, ¿qué necesitas?","¡Hey! Aquí estoy. ¿En qué puedo ayudarte?"];
 const toastEl=document.getElementById("toast");let tt=0;
 function toast(m,ms){toastEl.textContent=m;toastEl.style.display="block";clearTimeout(tt);tt=setTimeout(()=>{toastEl.style.display="none"},ms||2800)}
+// ===== FIN PARTE 4 =====
+  // ===== INICIO PARTE 5 =====
 let ctrl=null;
 async function callAPI(messages,o){o=o||{};
 ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},170000);
 let tz="";try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){}
 try{const body={messages,tz,memory:memText()};if(o.web)body.web=true;if(o.summary)body.summary=o.summary;
 const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
-// ===== FIN PARTE 4 =====
-  // ===== INICIO PARTE 5 =====
 if(!r.ok)return null;
 const j=await r.json();
 if(typeof j.reply!=="string"||!j.reply.trim())return null;
@@ -550,10 +566,10 @@ input.value="";input.style.height="auto";
 if(mr){let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
 if(!chat.querySelector(".msg"))chat.innerHTML="";
 chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
-c.msgs.push({role:"user",content:text});c.msgs.push({role:"assistant",content:mr});saveChats();renderList();
-bubble("user").textContent=text;finish(bubble("bot"),mr,false);scroll();return}}
 // ===== FIN PARTE 5 =====
   // ===== INICIO PARTE 6 =====
+c.msgs.push({role:"user",content:text});c.msgs.push({role:"assistant",content:mr});saveChats();renderList();
+bubble("user").textContent=text;finish(bubble("bot"),mr,false);scroll();return}}
 const searchMatch=text.match(/^\/buscar\s+(.+)/i);
 if(searchMatch){
 let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
