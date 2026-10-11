@@ -96,11 +96,11 @@ form{display:block;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0));b
 .ib svg{width:24px;height:24px}
 .ib:active{background:var(--userbg)}
 .ib.rec{color:#d8432f;animation:pulse 1s infinite}
+/* ===== FIN PARTE 1 ===== */
+  /* ===== INICIO PARTE 2 ===== */
 #bar #input{flex:1;min-width:0;background:none;border:0;box-shadow:none;border-radius:0;padding:10px 6px;font-size:15.5px;line-height:20px;max-height:130px;outline:none;color:var(--text)}
 #bar #input::placeholder{color:var(--muted)}
 #bar #send{display:none;flex-shrink:0;width:38px;height:38px;margin:1px;font-size:16px}
-/* ===== FIN PARTE 1 ===== */
-  /* ===== INICIO PARTE 2 ===== */
 #bar #send::before{display:none}
 #plusPanel{display:none;max-width:720px;width:100%;margin:0 auto;padding:2px 12px calc(14px + env(safe-area-inset-bottom,0));background:var(--bg);gap:10px;flex-shrink:0}
 #plusPanel.open{display:flex}
@@ -110,14 +110,6 @@ form{display:block;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0));b
 .tile:active{transform:scale(.97)}
 #chat{contain:content;overscroll-behavior:contain}
 button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-#plusPanel{flex-wrap:wrap}
-.tile{flex:1 1 26%}
-#modeRow{flex:1 1 100%;display:flex;gap:8px;flex-wrap:wrap}
-.mchip{flex:1 1 44%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:13px;font-weight:600;text-align:left}
-.mchip small{color:var(--muted);font-size:11px;font-weight:400}
-.mchip.on{border-color:var(--v);box-shadow:0 0 0 1.5px var(--v) inset;background:var(--userbg)}
-#modeBar{display:none;gap:6px;flex-wrap:wrap;max-width:720px;width:100%;margin:0 auto;padding:0 14px 6px}
-.mpill{font-size:11.5px;padding:3px 10px;border-radius:99px;background:var(--userbg);border:1px solid var(--v);color:var(--text)}
 .bot img,.thumb{cursor:zoom-in}
 #viewer{position:fixed;inset:0;background:#000f;z-index:60;display:none;flex-direction:column}
 #viewer.open{display:flex}
@@ -160,7 +152,6 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 </div>
 <div id="main">
 <main id="chat"></main>
-<div id="modeBar"></div>
 <div id="attachPreview"><img id="attachPreviewImg" src=""><span id="attachPreviewName"></span><button id="attachPreviewRemove" type="button">✕</button></div>
 <form id="form">
 <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
@@ -178,12 +169,6 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 <button class="tile" id="tileCam" type="button"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z" fill="currentColor"/><circle cx="12" cy="13" r="3.2" fill="var(--panel)"/></svg><span>Cámara</span></button>
 <button class="tile" id="tilePhoto" type="button"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="currentColor"/><circle cx="9" cy="10" r="1.7" fill="var(--panel)"/><path d="M5 17.5l4.2-4.4 3 3 2.6-2.8 4.2 4.2" stroke="var(--panel)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fotos</span></button>
 <button class="tile" id="tileFile" type="button"><svg viewBox="0 0 24 24" fill="none"><path d="M16.5 6.5 8.4 14.6a3 3 0 0 0 4.24 4.24l8.1-8.1a5 5 0 0 0-7.07-7.07l-8.1 8.1a7 7 0 0 0 9.9 9.9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Archivos</span></button>
-<div id="modeRow">
-<button class="mchip" data-k="web" type="button">🌐 Internet<small>Datos en tiempo real</small></button>
-<button class="mchip" data-k="deep" type="button">🧠 Pensar a fondo<small>Razonamiento avanzado</small></button>
-<button class="mchip" data-k="team" type="button">👥 Equipo de modelos<small>Varios expertos y un juez</small></button>
-<button class="mchip" data-k="agent" type="button">🤖 Agente<small>Usa herramientas solo</small></button>
-</div>
 </div>
 </div>
 </div>
@@ -197,7 +182,7 @@ try{
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Dentro de la app EGO AI tienes estas capacidades: crear y editar imágenes en alta calidad (el usuario escribe por ejemplo \"créame una imagen de…\" o adjunta una foto y dice qué cambiar), buscar en internet en tiempo real, razonamiento profundo, equipo de modelos y agente (botones del menú +), memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto y fotos). Si el usuario pide algo de esto y te llega como mensaje normal, explícale cómo usarlo en vez de decir que no puedes.";
+const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Dentro de la app EGO AI tienes estas capacidades: crear y editar imágenes en alta calidad (el usuario escribe por ejemplo \"créame una imagen de…\" o adjunta una foto y dice qué cambiar), buscar en internet en tiempo real, razonamiento profundo, equipo de modelos y agente (se activan solos según lo que pidas, sin botones), memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto y fotos). Si el usuario pide algo de esto y te llega como mensaje normal, explícale cómo usarlo en vez de decir que no puedes.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -213,8 +198,6 @@ let busy=false,stop=false;
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
 let chats=ld("ego_chats",null);
-// ===== FIN PARTE 2 =====
-  // ===== INICIO PARTE 3 =====
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
 let curId=null;
 const Cloud={on:false,user:null,queue(){},remove(){}};
@@ -227,6 +210,8 @@ it.textContent=PLABEL[key];
 it.onclick=()=>{currentPersona=key;sv("ego_p",key);personaBtn.textContent=PLABEL[key]+" ▾";personaMenu.style.display="none";
 personaMenu.querySelectorAll(".pmitem").forEach(x=>x.classList.remove("active"));it.classList.add("active")};
 personaMenu.appendChild(it)});
+// ===== FIN PARTE 2 =====
+  // ===== INICIO PARTE 3 =====
 personaBtn.onclick=()=>{personaMenu.style.display=personaMenu.style.display==="none"?"block":"none"};
 document.addEventListener("click",e=>{if(!document.getElementById("personaWrap").contains(e.target))personaMenu.style.display="none"});
 const SYS=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";const TH0=ld("ego_theme",SYS);document.documentElement.setAttribute("data-theme",TH0);
@@ -336,8 +321,6 @@ if(readers[ext]){
 toast("Leyendo "+file.name+"…",8000);
 readers[ext](file).then(t=>{toast("Archivo listo",1500);setAttachment(null,file.name,false,t)}).catch(e=>toast(e&&e.message==="scan"?"Ese PDF es una imagen escaneada (sin texto). Envíame fotos de sus páginas.":"No pude leer ese archivo. Revisa tu internet e inténtalo de nuevo.",5000));
 return}
-// ===== FIN PARTE 3 =====
-  // ===== INICIO PARTE 4 =====
 const reader=new FileReader();
 reader.onload=()=>setAttachment(null,file.name,false,String(reader.result).slice(0,60000));
 reader.readAsText(file);
@@ -347,6 +330,8 @@ photoInput.onchange=()=>{handleFile(photoInput.files[0]);photoInput.value=""};
 camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
+// ===== FIN PARTE 3 =====
+  // ===== INICIO PARTE 4 =====
 const reader=new FileReader();
 reader.onload=()=>shrink(reader.result,(u,t)=>setAttachment(u,"Foto",true,undefined,t));
 reader.readAsDataURL(file);
@@ -365,17 +350,12 @@ input.addEventListener("focus",()=>plus(false));
 document.getElementById("tileCam").onclick=()=>{plus(false);camInput.click()};
 document.getElementById("tilePhoto").onclick=()=>{plus(false);photoInput.click()};
 document.getElementById("tileFile").onclick=()=>{plus(false);fileInput.click()};
+if(window.visualViewport){const vv=window.visualViewport;
+const fit=()=>{if(vv.height<window.innerHeight-80){document.body.style.height=vv.height+"px";window.scrollTo(0,0)}else document.body.style.height="";setTimeout(scroll,30)};
+vv.addEventListener("resize",fit);vv.addEventListener("scroll",()=>{if(document.body.style.height)window.scrollTo(0,0)})}
+input.addEventListener("focus",()=>setTimeout(()=>{try{input.scrollIntoView({block:"nearest"})}catch(e){}scroll()},320));
 let rz=0;input.addEventListener("input",()=>{if(rz)return;rz=requestAnimationFrame(()=>{rz=0;input.style.height="auto";input.style.height=Math.min(input.scrollHeight,130)+"px"})});
 
-let Modes=ld("ego_modes",{web:false,mode:"normal"});
-const MODE_LBL={deep:"🧠 Pensar a fondo",team:"👥 Equipo de modelos",agent:"🤖 Agente"};
-function renderModes(){
-document.querySelectorAll(".mchip").forEach(b=>{const k=b.dataset.k;b.classList.toggle("on",k==="web"?!!Modes.web:Modes.mode===k)});
-const bar=document.getElementById("modeBar"),p=[];
-if(Modes.web)p.push("🌐 Internet");if(MODE_LBL[Modes.mode])p.push(MODE_LBL[Modes.mode]);
-bar.innerHTML=p.map(x=>'<span class="mpill">'+x+'</span>').join("");bar.style.display=p.length?"flex":"none"}
-document.querySelectorAll(".mchip").forEach(b=>b.onclick=()=>{const k=b.dataset.k;if(k==="web")Modes.web=!Modes.web;else Modes.mode=Modes.mode===k?"normal":k;sv("ego_modes",Modes);renderModes()});
-renderModes();
 const modal=document.getElementById("modal"),modalBox=document.getElementById("modalBox");
 function showModal(h){modalBox.innerHTML=h;modal.classList.add("open")}
 function closeModal(){modal.classList.remove("open");modalBox.innerHTML=""}
@@ -451,7 +431,7 @@ try{const part=c.msgs.slice(upto,c.msgs.length-keep).map(m=>(m.role==="user"?"Us
 const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({summarize:true,text:part,prev:c.summary||""})});
 const j=await r.json();if(j&&typeof j.summary==="string"&&j.summary){c.summary=j.summary;c.sumUpTo=c.msgs.length-keep;saveChats()}}catch(e){}
 summing.delete(c.id)}
-function pendingText(){const m=Modes.mode;return m==="deep"?"Razonando a fondo…":m==="team"?"Consultando al equipo de modelos…":m==="agent"?"El agente está trabajando…":Modes.web?"Buscando en internet…":"Pensando…"}
+function pendingText(){return"Pensando…"}
 function typeOut(d,text){
 return new Promise(res=>{
 if(text.length<260||stop||text.indexOf("data:image")>=0){d.innerHTML=md(text);scroll();return res()}
@@ -459,17 +439,16 @@ let i=0;const st=Math.ceil(text.length/10);
 const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},24)})}
 const GREET=/^[\s\u00a1!\u00bf]*(hola+|holi+|ola|buenas|buen[oa]s\s+(d[ií]as|tardes|noches)|hey+|hi|hello|qu[eé]\s+tal|saludos)[\s!¡.?¿,]*$/i;
 const GREET_R=["¡Hola! ¿En qué te ayudo hoy?","¡Hola! Cuéntame, ¿qué necesitas?","¡Hey! Aquí estoy. ¿En qué puedo ayudarte?"];
-// ===== FIN PARTE 4 =====
-  // ===== INICIO PARTE 5 =====
 const toastEl=document.getElementById("toast");let tt=0;
 function toast(m,ms){toastEl.textContent=m;toastEl.style.display="block";clearTimeout(tt);tt=setTimeout(()=>{toastEl.style.display="none"},ms||2800)}
 let ctrl=null;
 async function callAPI(messages,o){o=o||{};
-const mode=Modes.mode,web=o.web!==undefined?o.web:!!Modes.web;
-ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},mode==="normal"?(web?90000:60000):170000);
+ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},170000);
 let tz="";try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){}
-try{const body={messages,mode,tz,memory:memText()};if(web)body.web=true;if(o.summary)body.summary=o.summary;
+try{const body={messages,tz,memory:memText()};if(o.web)body.web=true;if(o.summary)body.summary=o.summary;
 const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
+// ===== FIN PARTE 4 =====
+  // ===== INICIO PARTE 5 =====
 if(!r.ok)return null;
 const j=await r.json();
 if(typeof j.reply!=="string"||!j.reply.trim())return null;
@@ -477,6 +456,8 @@ let out=j.reply;
 if(Array.isArray(j.steps)&&j.steps.length)out="*🛠️ "+j.steps.join(" · ")+"*\n\n"+out;
 if(Array.isArray(j.images))for(const u of j.images)out+="\n\n![imagen]("+await packImg(u,1280,0.88)+")";
 if(Array.isArray(j.sources)&&j.sources.length)out+="\n\n**Fuentes:**\n"+j.sources.slice(0,6).map(x=>"- ["+String(x.title||x.url).replace(/[\[\]]/g," ")+"]("+x.url+")").join("\n");
+if(Array.isArray(j.used)&&j.used.length)out+="\n\n*⚙️ Usé: "+j.used.join(" · ")+"*";
+if(Array.isArray(j.warnings))for(const w of j.warnings)out+="\n\n⚠️ "+w;
 return out}catch(e){return null}finally{clearTimeout(tm);ctrl=null}}
 function apiHistory(c){const a=c.summary?c.msgs.slice(c.sumUpTo||0):c.msgs.slice(-30);
 return a.map((m,i)=>{if(Array.isArray(m.content))return i<a.length-1?{role:m.role,content:((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen omitida]"}:{role:m.role,content:m.content};const t=String(m.content).replace(/!\[[^\]]*\]\(data:image[^)]*\)/g,"[imagen generada]");const lim=(m.fileMsg&&i>=a.length-6)?40000:3000;return{role:m.role,content:t.length>lim?t.slice(0,lim)+"…":t}})}
@@ -516,7 +497,7 @@ try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/
 if(r.ok){const j=await r.json();
 if(j&&typeof j.image==="string"&&j.image)url=j.image;
 else if(j&&typeof j.reply==="string")why="old";
-else if(j&&j.error)why=String(j.error)+(Array.isArray(j.detail)&&j.detail.length?" — "+j.detail.slice(0,3).join(" | "):"");
+else if(j&&j.error)why=String(j.error)+(!j.credit&&Array.isArray(j.detail)&&j.detail.length?" — "+j.detail.slice(0,3).join(" | "):"");
 else why="respuesta vacía"}else why="el worker respondió con error "+r.status}finally{clearTimeout(tm)}}catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":"sin conexión con el worker"}
 ctrl=null;
 if(stop){d.dataset.err="1";d.textContent="Creación de imagen detenida.";busy=false;stop=false;send.textContent="➤";return}
@@ -568,11 +549,11 @@ input.value="";input.style.height="auto";
 {const mr=memCmd(text);
 if(mr){let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
 if(!chat.querySelector(".msg"))chat.innerHTML="";
-// ===== FIN PARTE 5 =====
-  // ===== INICIO PARTE 6 =====
 chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
 c.msgs.push({role:"user",content:text});c.msgs.push({role:"assistant",content:mr});saveChats();renderList();
 bubble("user").textContent=text;finish(bubble("bot"),mr,false);scroll();return}}
+// ===== FIN PARTE 5 =====
+  // ===== INICIO PARTE 6 =====
 const searchMatch=text.match(/^\/buscar\s+(.+)/i);
 if(searchMatch){
 let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
