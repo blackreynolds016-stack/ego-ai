@@ -99,17 +99,45 @@ form{display:block;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0));b
 #bar #input{flex:1;min-width:0;background:none;border:0;box-shadow:none;border-radius:0;padding:10px 6px;font-size:15.5px;line-height:20px;max-height:130px;outline:none;color:var(--text)}
 #bar #input::placeholder{color:var(--muted)}
 #bar #send{display:none;flex-shrink:0;width:38px;height:38px;margin:1px;font-size:16px}
+/* ===== FIN PARTE 1 ===== */
+  /* ===== INICIO PARTE 2 ===== */
 #bar #send::before{display:none}
 #plusPanel{display:none;max-width:720px;width:100%;margin:0 auto;padding:2px 12px calc(14px + env(safe-area-inset-bottom,0));background:var(--bg);gap:10px;flex-shrink:0}
 #plusPanel.open{display:flex}
 #main.pp #form{padding-bottom:10px}
 .tile{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px 6px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel),var(--userbg));color:var(--text);font-size:12.5px;box-shadow:0 2px 6px #0000000f,inset 0 1px 1px #ffffffaa}
-/* ===== FIN PARTE 1 ===== */
-  /* ===== INICIO PARTE 2 ===== */
 .tile svg{width:26px;height:26px}
 .tile:active{transform:scale(.97)}
 #chat{contain:content;overscroll-behavior:contain}
 button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#plusPanel{flex-wrap:wrap}
+.tile{flex:1 1 26%}
+#modeRow{flex:1 1 100%;display:flex;gap:8px;flex-wrap:wrap}
+.mchip{flex:1 1 44%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:13px;font-weight:600;text-align:left}
+.mchip small{color:var(--muted);font-size:11px;font-weight:400}
+.mchip.on{border-color:var(--v);box-shadow:0 0 0 1.5px var(--v) inset;background:var(--userbg)}
+#modeBar{display:none;gap:6px;flex-wrap:wrap;max-width:720px;width:100%;margin:0 auto;padding:0 14px 6px}
+.mpill{font-size:11.5px;padding:3px 10px;border-radius:99px;background:var(--userbg);border:1px solid var(--v);color:var(--text)}
+.bot img,.thumb{cursor:zoom-in}
+#viewer{position:fixed;inset:0;background:#000f;z-index:60;display:none;flex-direction:column}
+#viewer.open{display:flex}
+#viewer img{flex:1;min-height:0;width:100%;object-fit:contain}
+#viewer .vb{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:12px 12px calc(14px + env(safe-area-inset-bottom,0))}
+#viewer .vb button{background:#ffffff1f;border:1px solid #ffffff44;color:#fff;border-radius:99px;padding:10px 16px;font-size:14px}
+#modal{position:fixed;inset:0;background:#0009;z-index:55;display:none;align-items:flex-end;justify-content:center}
+#modal.open{display:flex}
+#modalBox{background:var(--bg);color:var(--text);width:100%;max-width:720px;max-height:88vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding:14px 14px calc(14px + env(safe-area-inset-bottom,0));gap:10px;overflow:hidden}
+#modalBox .mh{display:flex;justify-content:space-between;align-items:center}
+#modalBox .mh button{background:none;border:0;color:var(--muted);font-size:18px}
+#modalBox .ml{overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+#modalBox .mi{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:14px}
+#modalBox .mi button{background:none;border:0;color:var(--muted)}
+#modalBox .mu{color:var(--muted);font-size:13px;margin:6px 0}
+#modalBox .madd{display:flex;gap:8px}
+#modalBox .madd input{flex:1;min-width:0;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:14px}
+#modalBox .madd button{padding:10px 14px;border-radius:10px;border:1px solid var(--v);background:var(--v);color:#fff;font-size:14px}
+#memBtn{width:100%;text-align:left;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px}
+.ch .cb{display:flex;gap:4px}
 </style>
 </head>
 <body>
@@ -127,15 +155,17 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 <div id="side" class="hidden">
 <button id="newchat" type="button">+ Nuevo chat</button>
 <div id="list"></div>
+<button id="memBtn" type="button">🧠 Memoria (<span id="memN">0</span>)</button>
 <div class="acct" id="acct"></div>
 </div>
 <div id="main">
 <main id="chat"></main>
+<div id="modeBar"></div>
 <div id="attachPreview"><img id="attachPreviewImg" src=""><span id="attachPreviewName"></span><button id="attachPreviewRemove" type="button">✕</button></div>
 <form id="form">
 <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="photoInput" accept="image/*" style="display:none">
-<input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.log,.js,.py,.html,.css,.xml,.yml,.yaml,.java,.kt,.ts,.sql,text/*" style="display:none">
+<input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.log,.js,.py,.html,.css,.xml,.yml,.yaml,.java,.kt,.ts,.sql,text/*,application/pdf" style="display:none">
 <div id="bar">
 <button class="ib" id="camBtn" type="button" title="Tomar foto"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="2"/></svg></button>
 <textarea id="input" rows="1" placeholder="Mensaje…"></textarea>
@@ -148,9 +178,17 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 <button class="tile" id="tileCam" type="button"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z" fill="currentColor"/><circle cx="12" cy="13" r="3.2" fill="var(--panel)"/></svg><span>Cámara</span></button>
 <button class="tile" id="tilePhoto" type="button"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="currentColor"/><circle cx="9" cy="10" r="1.7" fill="var(--panel)"/><path d="M5 17.5l4.2-4.4 3 3 2.6-2.8 4.2 4.2" stroke="var(--panel)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fotos</span></button>
 <button class="tile" id="tileFile" type="button"><svg viewBox="0 0 24 24" fill="none"><path d="M16.5 6.5 8.4 14.6a3 3 0 0 0 4.24 4.24l8.1-8.1a5 5 0 0 0-7.07-7.07l-8.1 8.1a7 7 0 0 0 9.9 9.9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Archivos</span></button>
+<div id="modeRow">
+<button class="mchip" data-k="web" type="button">🌐 Internet<small>Datos en tiempo real</small></button>
+<button class="mchip" data-k="deep" type="button">🧠 Pensar a fondo<small>Razonamiento avanzado</small></button>
+<button class="mchip" data-k="team" type="button">👥 Equipo de modelos<small>Varios expertos y un juez</small></button>
+<button class="mchip" data-k="agent" type="button">🤖 Agente<small>Usa herramientas solo</small></button>
 </div>
 </div>
 </div>
+</div>
+<div id="viewer"><img id="vimg" alt=""><div class="vb"><button id="vSave" type="button">⬇ Guardar</button><button id="vShare" type="button">⤴ Compartir</button><button id="vEdit" type="button">✎ Editar</button><button id="vClose" type="button">✕ Cerrar</button></div></div>
+<div id="modal"><div id="modalBox"></div></div>
 <div id="toast"></div>
 <script>
 window.addEventListener('DOMContentLoaded', function(){
@@ -159,7 +197,7 @@ try{
 const API="https://proud-glade-48c1.blackreynolds016.workers.dev";
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta.";
+const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Dentro de la app EGO AI tienes estas capacidades: crear y editar imágenes en alta calidad (el usuario escribe por ejemplo \"créame una imagen de…\" o adjunta una foto y dice qué cambiar), buscar en internet en tiempo real, razonamiento profundo, equipo de modelos y agente (botones del menú +), memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto y fotos). Si el usuario pide algo de esto y te llega como mensaje normal, explícale cómo usarlo en vez de decir que no puedes.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -175,6 +213,8 @@ let busy=false,stop=false;
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
 let chats=ld("ego_chats",null);
+// ===== FIN PARTE 2 =====
+  // ===== INICIO PARTE 3 =====
 if(!chats){const old=ld("ego_h",[]);chats=old.length?[{id:Date.now(),title:old[0].content.slice(0,30),msgs:old}]:[]}
 let curId=null;
 const Cloud={on:false,user:null,queue(){},remove(){}};
@@ -215,7 +255,7 @@ const inl=t=>t.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/
 function md(src){
 if((src.match(/```/g)||[]).length%2)src+="\n```";
 const bl=[];
-const s=esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{bl.push('<div class="code"><div class="ch"><span>'+(l||"código")+'</span><button class="cc" type="button">Copiar</button></div><pre>'+c+"</pre></div>");return"\u0000"+(bl.length-1)+"\u0000"});
+const s=esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{bl.push('<div class="code"><div class="ch"><span>'+(l||"código")+'</span><span class="cb">'+((/^(html|svg|xml)$/i.test(l)||/^\s*(&lt;!doctype html|&lt;html)/i.test(c))?'<button class="cr" type="button">▶ Ejecutar</button>':"")+'<button class="cc" type="button">Copiar</button></span></div><pre>'+c+"</pre></div>");return"\u0000"+(bl.length-1)+"\u0000"});
 const out=[];let listT=null;
 const close=()=>{if(listT){out.push("</"+listT+">");listT=null}};
 const open=t=>{if(listT!==t){close();out.push("<"+t+">");listT=t}};
@@ -228,7 +268,7 @@ else{close();out.push("<p>"+inl(line)+"</p>")}}
 close();return out.join("");}
 const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
-function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(last&&!/^Imagen generada/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
+function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(/!\[imagen\]\(/.test(text)?'<button data-a="saveimg" type="button">Guardar</button><button data-a="shareimg" type="button">Compartir</button><button data-a="editimg" type="button">Editar</button>':"")+(last&&!/^(Imagen (generada|editada)|No pude)/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 function renderChat(){chat.innerHTML="";const c=cur();
 if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b>'+
 '<button class="chip"><span class="ic">✦</span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span></button>'+
@@ -238,8 +278,6 @@ c.msgs.forEach((m,i)=>{const d=bubble(m.role==="user"?"user":"bot");
 if(m.role==="user"){
 if(Array.isArray(m.content)){
 const txt=m.content.find(p=>p.type==="text");
-// ===== FIN PARTE 2 =====
-  // ===== INICIO PARTE 3 =====
 const img=m.content.find(p=>p.type==="image_url");
 d.innerHTML=(txt?esc(txt.text):"Foto enviada")+(img?'<img class="thumb" src="'+img.image_url.url+'">':"");
 }else{d.textContent=m.content}
@@ -249,11 +287,13 @@ function toggleSide(hide){if(hide===undefined)hide=!side.classList.contains("hid
 document.getElementById("toggleSide").onclick=()=>toggleSide();
 overlay.onclick=()=>toggleSide(true);
 document.getElementById("theme").onclick=()=>{const t=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);sv("ego_theme",t);document.getElementById("theme").textContent=t==="dark"?"☀️":"🌙"};
-chat.addEventListener("click",e=>{const t=e.target.closest("[data-a],.chip,.cc");if(!t)return;
+chat.addEventListener("click",e=>{const t=e.target.closest("[data-a],.chip,.cc,.cr");if(!t)return;
+if(t.classList.contains("cr")){openPreview(t.closest(".code").querySelector("pre").textContent);return}
 if(t.classList.contains("chip")){const txt=t.querySelector("b").textContent;input.value=txt;updateSend();input.focus();return}
 if(t.classList.contains("cc")){navigator.clipboard.writeText(t.closest(".code").querySelector("pre").textContent);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200);return}
 const a=t.dataset.a;if(!a||busy)return;
 const msg=t.closest(".msg");
+if(a==="saveimg"||a==="shareimg"||a==="editimg"){const im=msg.querySelector("img");if(im){if(a==="editimg")startEdit(im.src);else saveImg(im.src,a==="shareimg")}return}
 if(a==="copy"){navigator.clipboard.writeText(msg.dataset.raw);t.textContent="Copiado";setTimeout(()=>t.textContent="Copiar",1200)}
 if(a==="regen"){const c=cur();if(!msg.dataset.err)c.msgs.pop();saveChats();msg.remove();ask()}});
 
@@ -285,15 +325,23 @@ new MutationObserver(updateSend).observe(send,{childList:true,characterData:true
 attachPreviewRemove.onclick=()=>{pendingAttachment=null;attachPreview.style.display="none";updateSend()};
 function handleFile(file){
 if(!file)return;
+const ext=(file.name.split(".").pop()||"").toLowerCase();
 if(file.type.startsWith("image/")){
 const reader=new FileReader();
 reader.onload=()=>shrink(reader.result,(u,t)=>setAttachment(u,file.name,true,undefined,t));
 reader.readAsDataURL(file);
-}else{
+return}
+const readers={pdf:readPdf,docx:readDocx,xlsx:readXlsx,xls:readXlsx};
+if(readers[ext]){
+toast("Leyendo "+file.name+"…",8000);
+readers[ext](file).then(t=>{toast("Archivo listo",1500);setAttachment(null,file.name,false,t)}).catch(e=>toast(e&&e.message==="scan"?"Ese PDF es una imagen escaneada (sin texto). Envíame fotos de sus páginas.":"No pude leer ese archivo. Revisa tu internet e inténtalo de nuevo.",5000));
+return}
+// ===== FIN PARTE 3 =====
+  // ===== INICIO PARTE 4 =====
 const reader=new FileReader();
-reader.onload=()=>setAttachment(null,file.name,false,String(reader.result).slice(0,12000));
+reader.onload=()=>setAttachment(null,file.name,false,String(reader.result).slice(0,60000));
 reader.readAsText(file);
-}}
+}
 fileInput.onchange=()=>{handleFile(fileInput.files[0]);fileInput.value=""};
 photoInput.onchange=()=>{handleFile(photoInput.files[0]);photoInput.value=""};
 camBtn.onclick=()=>camInput.click();
@@ -318,31 +366,125 @@ document.getElementById("tileCam").onclick=()=>{plus(false);camInput.click()};
 document.getElementById("tilePhoto").onclick=()=>{plus(false);photoInput.click()};
 document.getElementById("tileFile").onclick=()=>{plus(false);fileInput.click()};
 let rz=0;input.addEventListener("input",()=>{if(rz)return;rz=requestAnimationFrame(()=>{rz=0;input.style.height="auto";input.style.height=Math.min(input.scrollHeight,130)+"px"})});
+
+let Modes=ld("ego_modes",{web:false,mode:"normal"});
+const MODE_LBL={deep:"🧠 Pensar a fondo",team:"👥 Equipo de modelos",agent:"🤖 Agente"};
+function renderModes(){
+document.querySelectorAll(".mchip").forEach(b=>{const k=b.dataset.k;b.classList.toggle("on",k==="web"?!!Modes.web:Modes.mode===k)});
+const bar=document.getElementById("modeBar"),p=[];
+if(Modes.web)p.push("🌐 Internet");if(MODE_LBL[Modes.mode])p.push(MODE_LBL[Modes.mode]);
+bar.innerHTML=p.map(x=>'<span class="mpill">'+x+'</span>').join("");bar.style.display=p.length?"flex":"none"}
+document.querySelectorAll(".mchip").forEach(b=>b.onclick=()=>{const k=b.dataset.k;if(k==="web")Modes.web=!Modes.web;else Modes.mode=Modes.mode===k?"normal":k;sv("ego_modes",Modes);renderModes()});
+renderModes();
+const modal=document.getElementById("modal"),modalBox=document.getElementById("modalBox");
+function showModal(h){modalBox.innerHTML=h;modal.classList.add("open")}
+function closeModal(){modal.classList.remove("open");modalBox.innerHTML=""}
+modal.addEventListener("click",e=>{if(e.target===modal)closeModal()});
+function openPreview(code){
+showModal('<div class="mh"><b>Vista previa</b><button data-m="close" type="button">✕</button></div><iframe id="pv" sandbox="allow-scripts" style="height:68vh;width:100%;border:0;background:#fff;border-radius:10px"></iframe>');
+let h=code;if(!/<html|<!doctype/i.test(h))h='<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0">'+h;
+document.getElementById("pv").srcdoc=h}
+let Mem=ld("ego_mem",[]);
+const memText=()=>Mem.join("; ");
+function updMem(){const n=document.getElementById("memN");if(n)n.textContent=Mem.length}
+function memAdd(f){f=String(f).trim().replace(/[.!\s]+$/,"");if(f.length<3||Mem.includes(f))return false;Mem.push(f.slice(0,200));if(Mem.length>60)Mem.shift();sv("ego_mem",Mem);updMem();return true}
+function memDel(i){Mem.splice(i,1);sv("ego_mem",Mem);updMem()}
+function memCmd(text){let m;
+if(m=text.match(/^[\s¡!]*(?:por favor,?\s+)?(?:recuerda|acu[eé]rdate|ten en cuenta|guarda en (?:tu )?memoria|an[oó]ta)(?:\s+que)?[:\s]+(.{3,})$/i))return memAdd(m[1])?"Listo, lo recordaré: "+m[1].trim():"Eso ya lo tenía guardado.";
+if(/^[\s¡!]*(?:olvida|borra de tu memoria)\s+(?:todo|toda la memoria)[.!\s]*$/i.test(text)){Mem=[];sv("ego_mem",Mem);updMem();return"Listo, borré toda mi memoria sobre ti."}
+if(m=text.match(/^[\s¡!]*(?:olvida|borra de tu memoria)(?:\s+que)?\s+(.{3,})$/i)){const q=m[1].toLowerCase().replace(/[.!\s]+$/,""),n=Mem.length;Mem=Mem.filter(x=>!x.toLowerCase().includes(q));sv("ego_mem",Mem);updMem();return n!==Mem.length?"Listo, lo olvidé.":"No encontré eso en mi memoria."}
+if(/^[\s¡!]*(?:qu[eé] recuerdas de m[ií]|qu[eé] sabes de m[ií]|ver memoria|mi memoria)[?.!\s]*$/i.test(text))return Mem.length?"Esto es lo que recuerdo de ti:\n"+Mem.map(x=>"- "+x).join("\n"):"Todavía no tengo nada guardado. Dime «recuerda que…» y lo guardo.";
+if(m=text.match(/\b(?:mi nombre es|me llamo)\s+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ]{1,20})/))memAdd("El usuario se llama "+m[1]);
+return null}
+function openMem(){
+showModal('<div class="mh"><b>🧠 Memoria de EGO AI</b><button data-m="close" type="button">✕</button></div><div class="ml">'+(Mem.length?Mem.map((x,i)=>'<div class="mi"><span>'+esc(x)+'</span><button data-m="del" data-i="'+i+'" type="button">✕</button></div>').join(""):'<p class="mu">Aún no recuerdo nada. Escribe «recuerda que…» en el chat o añade algo aquí.</p>')+'</div><div class="madd"><input id="mIn" placeholder="Algo que debo recordar de ti" maxlength="200"><button data-m="add" type="button">Añadir</button></div>')}
+modalBox.addEventListener("click",e=>{const b=e.target.closest("[data-m]");if(!b)return;const k=b.dataset.m;
+if(k==="close")closeModal();
+else if(k==="del"){memDel(+b.dataset.i);openMem()}
+else if(k==="add"){const v=document.getElementById("mIn").value;if(memAdd(v))openMem();else toast("Escribe algo nuevo para recordar")}});
+document.getElementById("memBtn").onclick=()=>{if(window.innerWidth<=640)toggleSide(true);openMem()};
+updMem();
+const viewer=document.getElementById("viewer"),vimg=document.getElementById("vimg");
+let vSrc="",forcedRef=null;const IMGFULL=new Map();
+const fullKey=u=>u.length+":"+u.slice(-80);
+function openViewer(src){vSrc=src;vimg.src=src;viewer.classList.add("open")}
+function closeViewer(){viewer.classList.remove("open");vimg.removeAttribute("src")}
+chat.addEventListener("click",e=>{const im=e.target.closest(".msg img");if(im)openViewer(im.src)});
+function startEdit(src){forcedRef=src;closeViewer();input.value="Edita esta imagen: ";input.dispatchEvent(new Event("input"));input.focus();toast("Escribe qué quieres cambiar y envía",3500)}
+async function saveImg(src,share){
+let data=IMGFULL.get(fullKey(src))||src;
+try{
+if(!/^data:/.test(data)){const r=await fetch(data);const b=await r.blob();data=await new Promise(res=>{const f=new FileReader();f.onload=()=>res(f.result);f.readAsDataURL(b)})}
+await nat("EgoNative",share?"shareImage":"saveImage",{data:data,name:"EGO-AI-"+Date.now()});
+toast(share?"Elige dónde compartirla":"Guardada en tu galería (carpeta EGO AI)",3000)
+}catch(e){
+if(/No se pudo/.test(String(e&&e.message))){toast(e.message,4000);return}
+try{const a=document.createElement("a");a.href=data;a.download="EGO-AI-"+Date.now()+".jpg";document.body.appendChild(a);a.click();a.remove();toast("Descargando…")}catch(x){toast("No se pudo guardar la imagen")}}}
+document.getElementById("vClose").onclick=closeViewer;
+document.getElementById("vSave").onclick=()=>saveImg(vSrc,false);
+document.getElementById("vShare").onclick=()=>saveImg(vSrc,true);
+document.getElementById("vEdit").onclick=()=>startEdit(vSrc);
+const loadScript=u=>new Promise((res,rej)=>{const e=document.createElement("script");e.src=u;e.onload=res;e.onerror=()=>rej(new Error("carga"));document.head.appendChild(e)});
+async function readPdf(file){
+const base="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/";
+const lib=await import(base+"pdf.min.mjs");
+const wt=await(await fetch(base+"pdf.worker.min.mjs")).text();
+lib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([wt],{type:"text/javascript"}));
+const pdf=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+let out="";
+for(let i=1;i<=pdf.numPages&&out.length<60000;i++){const pg=await pdf.getPage(i);const tc=await pg.getTextContent();out+="\n--- Página "+i+" ---\n"+tc.items.map(x=>x.str).join(" ")}
+if(out.replace(/--- Página \d+ ---|\s/g,"").length<20)throw new Error("scan");
+return out.slice(0,60000)}
+async function readDocx(file){
+if(!window.mammoth)await loadScript("https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js");
+const r=await window.mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});return String(r.value).slice(0,60000)}
+async function readXlsx(file){
+if(!window.XLSX)await loadScript("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js");
+const wb=window.XLSX.read(await file.arrayBuffer(),{type:"array"});
+return wb.SheetNames.map(n=>"## Hoja: "+n+"\n"+window.XLSX.utils.sheet_to_csv(wb.Sheets[n])).join("\n\n").slice(0,60000)}
+const summing=new Set();
+async function maybeSummarize(c){
+const keep=24,upto=c.sumUpTo||0;
+if(summing.has(c.id)||c.msgs.length<keep+10||c.msgs.length-keep-upto<10)return;
+summing.add(c.id);
+try{const part=c.msgs.slice(upto,c.msgs.length-keep).map(m=>(m.role==="user"?"Usuario: ":"EGO: ")+noImg(Array.isArray(m.content)?((m.content.find(x=>x.type==="text")||{}).text||""):m.content).slice(0,1500)).join("\n");
+const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({summarize:true,text:part,prev:c.summary||""})});
+const j=await r.json();if(j&&typeof j.summary==="string"&&j.summary){c.summary=j.summary;c.sumUpTo=c.msgs.length-keep;saveChats()}}catch(e){}
+summing.delete(c.id)}
+function pendingText(){const m=Modes.mode;return m==="deep"?"Razonando a fondo…":m==="team"?"Consultando al equipo de modelos…":m==="agent"?"El agente está trabajando…":Modes.web?"Buscando en internet…":"Pensando…"}
 function typeOut(d,text){
 return new Promise(res=>{
-if(text.length<260||stop){d.innerHTML=md(text);scroll();return res()}
+if(text.length<260||stop||text.indexOf("data:image")>=0){d.innerHTML=md(text);scroll();return res()}
 let i=0;const st=Math.ceil(text.length/10);
 const t=setInterval(()=>{if(stop)i=text.length;i=Math.min(text.length,i+st);d.innerHTML=md(text.slice(0,i));scroll();if(i>=text.length){clearInterval(t);res()}},24)})}
 const GREET=/^[\s\u00a1!\u00bf]*(hola+|holi+|ola|buenas|buen[oa]s\s+(d[ií]as|tardes|noches)|hey+|hi|hello|qu[eé]\s+tal|saludos)[\s!¡.?¿,]*$/i;
 const GREET_R=["¡Hola! ¿En qué te ayudo hoy?","¡Hola! Cuéntame, ¿qué necesitas?","¡Hey! Aquí estoy. ¿En qué puedo ayudarte?"];
+// ===== FIN PARTE 4 =====
+  // ===== INICIO PARTE 5 =====
 const toastEl=document.getElementById("toast");let tt=0;
 function toast(m,ms){toastEl.textContent=m;toastEl.style.display="block";clearTimeout(tt);tt=setTimeout(()=>{toastEl.style.display="none"},ms||2800)}
 let ctrl=null;
-async function callAPI(messages){
-ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},60000);
-try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages}),signal:ctrl.signal});
+async function callAPI(messages,o){o=o||{};
+const mode=Modes.mode,web=o.web!==undefined?o.web:!!Modes.web;
+ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},mode==="normal"?(web?90000:60000):170000);
+let tz="";try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){}
+try{const body={messages,mode,tz,memory:memText()};if(web)body.web=true;if(o.summary)body.summary=o.summary;
+const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
 if(!r.ok)return null;
 const j=await r.json();
-return typeof j.reply==="string"&&j.reply.trim()?j.reply:null}catch(e){return null}finally{clearTimeout(tm);ctrl=null}}
-function apiHistory(c){const a=c.msgs.slice(-14);
-return a.map((m,i)=>{if(Array.isArray(m.content))return i<a.length-1?{role:m.role,content:((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen omitida]"}:{role:m.role,content:m.content};const t=String(m.content).replace(/!\[[^\]]*\]\(data:image[^)]*\)/g,"[imagen generada]");return{role:m.role,content:t.length>3000?t.slice(0,3000)+"…":t}})}
+if(typeof j.reply!=="string"||!j.reply.trim())return null;
+let out=j.reply;
+if(Array.isArray(j.steps)&&j.steps.length)out="*🛠️ "+j.steps.join(" · ")+"*\n\n"+out;
+if(Array.isArray(j.images))for(const u of j.images)out+="\n\n![imagen]("+await packImg(u,1280,0.88)+")";
+if(Array.isArray(j.sources)&&j.sources.length)out+="\n\n**Fuentes:**\n"+j.sources.slice(0,6).map(x=>"- ["+String(x.title||x.url).replace(/[\[\]]/g," ")+"]("+x.url+")").join("\n");
+return out}catch(e){return null}finally{clearTimeout(tm);ctrl=null}}
+function apiHistory(c){const a=c.summary?c.msgs.slice(c.sumUpTo||0):c.msgs.slice(-30);
+return a.map((m,i)=>{if(Array.isArray(m.content))return i<a.length-1?{role:m.role,content:((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen omitida]"}:{role:m.role,content:m.content};const t=String(m.content).replace(/!\[[^\]]*\]\(data:image[^)]*\)/g,"[imagen generada]");const lim=(m.fileMsg&&i>=a.length-6)?40000:3000;return{role:m.role,content:t.length>lim?t.slice(0,lim)+"…":t}})}
 async function deliver(d,c,reply){
 if(reply===null){d.dataset.err="1";d.textContent=stop?"Respuesta detenida.":"No se pudo obtener respuesta. Revisa tu internet e inténtalo de nuevo.";
 d.insertAdjacentHTML("beforeend",'<div class="act"><button data-a="regen" type="button">Reintentar</button></div>')}
 else{await typeOut(d,reply);c.msgs.push({role:"assistant",content:reply});saveChats();finish(d,reply,true)}
 busy=false;stop=false;send.textContent="➤";scroll()}
-// ===== FIN PARTE 3 =====
-  // ===== INICIO PARTE 4 =====
 const IM_N="(?:imagen|im[aá]genes|imagenes|foto|fotos|fotograf[ií]a|dibujo|ilustraci[oó]n|logo|logotipo|p[oó]ster|poster|wallpaper|fondo de pantalla|retrato|avatar|caricatura|meme|[ií]cono|icono|banner|portada|sticker|pintura|render|arte)";
 const IM_P="^[\\s\\u00a1!\\u00bf]*(?:(?:por favor|porfa|oye|hola|ey)[,\\s]+)*(?:(?:puedes|podr[ií]as|me\\s+puedes|me\\s+podr[ií]as|quiero que|necesito que|quisiera que|me\\s+gustar[ií]a que)\\s+(?:me\\s+)?)?";
 const IM_CV="(?:crea|cr[eé]ame|cr[eé]a|crear|genera|gen[eé]rame|generar|haz|hazme|hacer|dibuja|dib[uú]jame|dibujar|dise[nñ]a|dise[nñ][aá]me|dise[nñ]ar|pinta|p[ií]ntame|pintar|ilustra|ilustr[aá]me|fabrica|prepara|renderiza|crees|hagas|generes|dibujes)";
@@ -354,56 +496,45 @@ const IM_CREATE=new RegExp(IM_P+"(?:"+IM_CV+"[^.\\n?!]{0,45}?\\b"+IM_N+"\\b|"+IM
 const IM_START=new RegExp("^[\\s\\u00a1!\\u00bf]*"+IM_N+"\\s+(?:de\\s+|del\\s+|con\\s+|:)?\\S+","i");
 const IM_EDITN=new RegExp(IM_P+IM_EV+"\\b[^.\\n?!]{0,50}?\\b(?:esta|esa|la|mi|ese|este|dicha|aquella)?\\s*"+IM_N+"\\b","i");
 const IM_EDITS=new RegExp(IM_P+IM_EV+"\\b","i");
+const IM_ANYE=/\b(?:pon(?:er|erlo|erla|erle|le|lo|la)?|pasa(?:r|lo|la)?|deja(?:r|lo|la)?|haz(?:lo|la)|hacer(?:lo|la)|volv(?:er|erlo|erla)|cambi(?:ar|a|alo|ala)|quit(?:ar|a|ale|alo|ala)|agreg(?:ar|a|ale)|a[nñ]ad(?:ir|e|ele)|borr(?:ar|a|alo|ala)|elimin(?:ar|a|alo|ala)|colore(?:ar|a|alo|ala)|convert(?:ir|irlo|irla)|transform(?:ar|a|alo|ala)|mejor(?:ar|a|alo|ala)|retoc(?:ar|a)|recort(?:ar|a)|aclar(?:ar|a|alo|ala)|oscurec(?:er|e|elo|ela)|agrand(?:ar|a)|achic(?:ar|a)|reemplaz(?:ar|a)|sustitu(?:ir|ye)|combin(?:ar|a)|fusion(?:ar|a))\b/i;
+const IM_ASKQ=/^[\s¡!¿]*(?:qu[eé]|cu[aá]l(?:es)?|c[oó]mo|por qu[eé]|d[oó]nde|qui[eé]n|cu[aá]nt[oa]s?|explica|expl[ií]came|describe|descr[ií]beme|analiza|anal[ií]zame|resuelve|res[uú]elve|lee|l[eé]eme|traduce|trad[uú]ceme|dime|d[ií]me|resume|res[uú]meme|identifica|dec[ií]me|ayuda|ay[uú]dame|revisa|rev[ií]same|corrige)\b/i;
 function lastImgRef(c){for(let i=c.msgs.length-1;i>=0;i--){const m=c.msgs[i];if(Array.isArray(m.content)){const p=m.content.find(x=>x.type==="image_url");if(p&&p.image_url&&p.image_url.url)return p.image_url.url}else if(m.role==="assistant"&&typeof m.content==="string"){const g=m.content.match(/!\[imagen\]\(((?:data:image\/|https:\/\/)[^)\s]+)\)/);if(g)return g[1]}}return null}
 function imgIntent(text,hasAtt,c){
-if(hasAtt)return(IM_EDITS.test(text)||IM_CREATE.test(text)||IM_EDITN.test(text))?"edit":null;
+if(hasAtt){if(IM_ASKQ.test(text))return null;return(IM_EDITS.test(text)||IM_CREATE.test(text)||IM_DRAW.test(text)||IM_EDITN.test(text)||IM_ANYE.test(text))?"edit":null}
 if(IM_CREATE.test(text)||IM_DRAW.test(text))return"gen";
 if(IM_EDITN.test(text))return lastImgRef(c)?"edit":"noref";
 if(IM_EDITS.test(text)&&c&&c.msgs.length&&/^Imagen (?:generada|editada)/.test(String((c.msgs[c.msgs.length-1]||{}).content||""))&&lastImgRef(c))return"edit";
 if(IM_START.test(text))return"gen";
 return null}
-function packImg(u,mx){return new Promise(res=>{if(!/^data:/.test(u))return res(u);const im=new Image();im.onload=()=>{const k=Math.min(1,(mx||768)/Math.max(im.width,im.height));const cv=document.createElement("canvas");cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);res(cv.toDataURL("image/jpeg",0.78))};im.onerror=()=>res(u);im.src=u})}
+function packImg(u,mx,q){return new Promise(res=>{if(!/^data:/.test(u))return res(u);const im=new Image();im.onload=()=>{const k=Math.min(1,(mx||768)/Math.max(im.width,im.height));const cv=document.createElement("canvas");cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);res(cv.toDataURL("image/jpeg",q||0.78))};im.onerror=()=>res(u);im.src=u})}
 async function genImage(c,d,prompt,ref){
 busy=true;stop=false;send.textContent="■";
-let url=null;
-if(ref)ref=await packImg(ref,1024);
-try{ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},90000);
+let url=null,why="";
+if(ref)ref=await packImg(ref,1280,0.9);
+try{ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},140000);
 try{const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ref?{image:true,prompt:prompt,ref:ref}:{image:true,prompt:prompt}),signal:ctrl.signal});
-if(r.ok){const j=await r.json();if(j&&typeof j.image==="string"&&j.image)url=j.image}}finally{clearTimeout(tm)}}catch(e){}
+if(r.ok){const j=await r.json();
+if(j&&typeof j.image==="string"&&j.image)url=j.image;
+else if(j&&typeof j.reply==="string")why="old";
+else if(j&&j.error)why=String(j.error)+(Array.isArray(j.detail)&&j.detail.length?" — "+j.detail.slice(0,3).join(" | "):"");
+else why="respuesta vacía"}else why="el worker respondió con error "+r.status}finally{clearTimeout(tm)}}catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":"sin conexión con el worker"}
 ctrl=null;
 if(stop){d.dataset.err="1";d.textContent="Creación de imagen detenida.";busy=false;stop=false;send.textContent="➤";return}
 let reply;
-if(url){url=await packImg(url);reply=(ref?"Imagen editada: ":"Imagen generada para: ")+prompt+"\n\n![imagen]("+url+")"}
-else if(ref){reply="No pude editar la imagen en este momento. Inténtalo de nuevo en unos segundos."}
-else{url="https://image.pollinations.ai/prompt/"+encodeURIComponent(prompt)+"?width=768&height=768&nologo=true";reply="Imagen generada para: "+prompt+"\n\n![imagen]("+url+")"}
+if(url){const full=url;url=await packImg(url,1280,0.9);if(/^data:/.test(full))IMGFULL.set(fullKey(url),full);
+reply=(ref?"Imagen editada: ":"Imagen generada para: ")+prompt+"\n\n![imagen]("+url+")"}
+else{reply="No pude "+(ref?"editar":"crear")+" la imagen."+(why==="old"?"\n\nTu worker de Cloudflare todavía es la versión vieja: pega el worker.js nuevo (Edit code) y pulsa Deploy.":(why?"\n\nMotivo: "+why:""))}
 c.msgs.push({role:"assistant",content:reply});saveChats();renderList();
 finish(d,reply,true);
 busy=false;stop=false;send.textContent="➤";scroll()}
 async function searchAndAsk(query,c,d){
 busy=true;stop=false;send.textContent="■";
-let context="";
-try{
-ctrl=new AbortController();
-const r=await fetch("https://api.duckduckgo.com/?q="+encodeURIComponent(query)+"&format=json&no_html=1&skip_disambig=1",{signal:ctrl.signal});
-const j=await r.json();
-const parts=[];
-if(j.AbstractText)parts.push(j.AbstractText);
-if(j.RelatedTopics)j.RelatedTopics.slice(0,5).forEach(t=>{if(t.Text)parts.push(t.Text)});
-context=parts.join("\n").slice(0,1500);
-}catch(e){}
-ctrl=null;
-if(stop){await deliver(d,c,null);return}
-const prompt=context
-?"Resultados de una búsqueda en internet sobre \""+query+"\":\n"+context+"\n\nCon base en esto, responde de forma clara y completa a: "+query
-:"No obtuve resultados útiles de internet para \""+query+"\". Responde con tu mejor conocimiento, y dilo si la información puede no estar actualizada.";
-const reply=await callAPI([{role:"system",content:BASE+P[currentPersona]},{role:"user",content:prompt}]);
+const reply=await callAPI([{role:"system",content:BASE+P[currentPersona]},{role:"user",content:query}],{web:true});
 await deliver(d,c,reply)}
 async function ask(){const c=cur();busy=true;stop=false;send.textContent="■";
-const d=bubble("bot");d.innerHTML='<span class="dots">Pensando…</span>';scroll();
-const reply=await callAPI([{role:"system",content:BASE+P[currentPersona]},...apiHistory(c)]);
-await deliver(d,c,reply)}
-// ===== FIN PARTE 4 =====
-  // ===== INICIO PARTE 5 =====
+const d=bubble("bot");d.innerHTML='<span class="dots">'+pendingText()+'</span>';scroll();
+const reply=await callAPI([{role:"system",content:BASE+P[currentPersona]},...apiHistory(c)],{summary:c.summary});
+await deliver(d,c,reply);maybeSummarize(c)}
 document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();plus(false);setTimeout(updateSend,0);
 if(busy){stop=true;if(ctrl)ctrl.abort();return}
 let text=input.value.trim();
@@ -427,13 +558,21 @@ const ub=bubble("user");ub.innerHTML=esc(text||"Imagen enviada")+'<img class="th
 }else{
 const question=text||"Analiza este archivo, resume su contenido y ayúdame con cualquier problema que encuentres.";
 const prompt="Archivo adjunto: "+att.name+"\n\n"+att.rawText+"\n\n"+question;
-c.msgs.push({role:"user",content:prompt});saveChats();renderList();
+c.msgs.push({role:"user",content:prompt,fileMsg:true});saveChats();renderList();
 bubble("user").textContent="📎 "+att.name+(text?" — "+text:"");
 }
 ask();
 return}
 if(!text)return;
 input.value="";input.style.height="auto";
+{const mr=memCmd(text);
+if(mr){let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
+if(!chat.querySelector(".msg"))chat.innerHTML="";
+// ===== FIN PARTE 5 =====
+  // ===== INICIO PARTE 6 =====
+chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
+c.msgs.push({role:"user",content:text});c.msgs.push({role:"assistant",content:mr});saveChats();renderList();
+bubble("user").textContent=text;finish(bubble("bot"),mr,false);scroll();return}}
 const searchMatch=text.match(/^\/buscar\s+(.+)/i);
 if(searchMatch){
 let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
@@ -453,9 +592,9 @@ chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
 c.msgs.push({role:"user",content:text});saveChats();renderList();
 bubble("user").textContent=text;
 if(intent==="noref"){const r="Para editar una imagen, adjúntala con el botón + (Fotos o Cámara) y dime qué quieres cambiar.";c.msgs.push({role:"assistant",content:r});saveChats();finish(bubble("bot"),r,true);scroll();return}
-const ref=intent==="edit"?lastImgRef(c):null;
+const ref=intent==="edit"?(forcedRef||lastImgRef(c)):null;forcedRef=null;
 const d=bubble("bot");d.innerHTML='<span class="dots">'+(ref?"Editando imagen…":"Creando imagen…")+'</span>';scroll();
-genImage(c,d,imgCmd?imgCmd[1]:text,ref);
+genImage(c,d,imgCmd?imgCmd[1]:(ref?(text.replace(/^[\s\u00a1!\u00bf]*edita(?:me)?\s+esta\s+imagen[:,]?\s*/i,"").trim()||text):text),ref);
 return}
 let c=cur();
 if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
@@ -517,7 +656,7 @@ try{await nat("EgoGoogle","signOut",{})}catch(e){}
 if(this.fb)await this.fb.auth.signOut(this.fb.au);
 this.pending={};this.user=null;this.on=false;
 sv("ego_user",null);
-chats=[];curId=null;sv("ego_chats",[]);sv("ego_cur",null);
+chats=[];curId=null;sv("ego_chats",[]);sv("ego_cur",null);Mem=[];sv("ego_mem",[]);updMem();
 renderAcct();renderList();renderChat();
 toast("Sesión cerrada. Tus chats quedan guardados en tu cuenta")
 }catch(e){console.error(e);toast("No se pudo cerrar la sesión")}},
