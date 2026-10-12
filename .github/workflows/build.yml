@@ -344,9 +344,12 @@ jobs:
           fs.writeFileSync(dir + 'EgoNativePlugin.java', `package com.egoai.app;
 
           import android.Manifest;
+          import android.app.Activity;
           import android.content.ContentResolver;
           import android.content.ContentValues;
+          import android.content.Context;
           import android.content.Intent;
+          import android.content.SharedPreferences;
           import android.content.pm.PackageManager;
           import android.graphics.Color;
           import android.net.Uri;
@@ -354,6 +357,7 @@ jobs:
           import android.provider.MediaStore;
           import android.util.Base64;
           import android.view.Window;
+          import android.view.WindowManager;
           import android.webkit.WebView;
           import androidx.core.app.ActivityCompat;
           import androidx.core.content.ContextCompat;
@@ -464,21 +468,15 @@ jobs:
                   }
               }
 
-              // Pinta las barras del sistema (arriba y abajo) con el color de la interfaz y claro/oscuro
-              @PluginMethod
-              public void setBars(final PluginCall call) {
-                  final boolean dark = Boolean.TRUE.equals(call.getBoolean("dark", false));
-                  int t = Color.parseColor(dark ? "#0e0e10" : "#fcfcfd");
-                  int b = Color.parseColor(dark ? "#0a0a0c" : "#f4f4f7");
-                  try { t = Color.parseColor(call.getString("top", dark ? "#0e0e10" : "#fcfcfd")); } catch (Exception e) {}
-                  try { b = Color.parseColor(call.getString("bottom", dark ? "#0a0a0c" : "#f4f4f7")); } catch (Exception e) {}
-                  final int top = t;
-                  final int bottom = b;
-                  getActivity().runOnUiThread(new Runnable() {
+              // Pinta las barras del sistema (arriba y abajo). Se puede llamar desde cualquier hilo.
+              static void paint(final Activity act, final boolean dark, final int top, final int bottom) {
+                  if (act == null) return;
+                  act.runOnUiThread(new Runnable() {
                       @Override
                       public void run() {
                           try {
-                              Window w = getActivity().getWindow();
+                              Window w = act.getWindow();
+                              w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
                               w.setStatusBarColor(top);
                               w.setNavigationBarColor(bottom);
                               WindowInsetsControllerCompat c = WindowCompat.getInsetsController(w, w.getDecorView());
@@ -486,8 +484,40 @@ jobs:
                                   c.setAppearanceLightStatusBars(!dark);
                                   c.setAppearanceLightNavigationBars(!dark);
                               }
+                          } catch (Exception e) {}
+                      }
+                  });
+              }
+
+              // Vuelve a pintar con el ultimo color guardado (al abrir la app y al volver a ella)
+              static void paintSaved(Activity act) {
+                  try {
+                      SharedPreferences sp = act.getSharedPreferences("ego_bars", Context.MODE_PRIVATE);
+                      if (!sp.contains("top")) return;
+                      paint(act, sp.getBoolean("dark", false), sp.getInt("top", 0), sp.getInt("bottom", 0));
+                  } catch (Exception e) {}
+              }
+
+              // La pagina pide pintar las barras con el color de la interfaz (claro u oscuro)
+              @PluginMethod
+              public void setBars(final PluginCall call) {
+                  final boolean dark = Boolean.TRUE.equals(call.getBoolean("dark", false));
+                  int t = Color.parseColor(dark ? "#0e0e10" : "#fcfcfd");
+                  int b = Color.parseColor(dark ? "#0a0a0c" : "#f4f4f7");
+                  try { t = Color.parseColor(call.getString("top", dark ? "#0e0e10" : "#fcfcfd")); } catch (Exception e) {}
+                  try { b = Color.parseColor(call.getString("bottom", dark ? "#0a0a0c" : "#f4f4f7")); } catch (Exception e) {}
+                  try {
+                      getContext().getSharedPreferences("ego_bars", Context.MODE_PRIVATE).edit()
+                          .putBoolean("dark", dark).putInt("top", t).putInt("bottom", b).apply();
+                  } catch (Exception e) {}
+                  paint(getActivity(), dark, t, b);
+                  final int bg = b;
+                  getActivity().runOnUiThread(new Runnable() {
+                      @Override
+                      public void run() {
+                          try {
                               WebView wv = getBridge().getWebView();
-                              if (wv != null) wv.setBackgroundColor(bottom);
+                              if (wv != null) wv.setBackgroundColor(bg);
                           } catch (Exception e) {}
                       }
                   });
@@ -517,6 +547,8 @@ jobs:
           }
           `);
 
+          // ===== FIN PARTE 3 =====
+                    // ===== INICIO PARTE 4 =====
           // MainActivity: registra el puente y mantiene el splash hasta que la app esta lista
           fs.writeFileSync(dir + 'MainActivity.java', `package com.egoai.app;
 
@@ -541,6 +573,7 @@ jobs:
                   splash.setOnExitAnimationListener(provider -> provider.remove());
                   registerPlugin(EgoNativePlugin.class);
                   super.onCreate(savedInstanceState);
+                  EgoNativePlugin.paintSaved(this);
                   t0 = SystemClock.uptimeMillis();
                   if (getBridge() != null && getBridge().getWebView() != null) {
                       WebView wv = getBridge().getWebView();
@@ -551,11 +584,19 @@ jobs:
                   }
               }
 
+              @Override
+              public void onResume() {
+                  super.onResume();
+                  EgoNativePlugin.paintSaved(this);
+              }
+
               // Quita el splash en cuanto la pagina marca data-ready (o tras 4 s por seguridad)
               private void poll(final WebView wv) {
                   wv.evaluateJavascript("document.documentElement.getAttribute('data-ready')", value -> {
                       if ("\\"1\\"".equals(value) || SystemClock.uptimeMillis() - t0 > 4000) {
                           ready = true;
+                          EgoNativePlugin.paintSaved(MainActivity.this);
+                          handler.postDelayed(() -> EgoNativePlugin.paintSaved(MainActivity.this), 350);
                       } else {
                           handler.postDelayed(() -> poll(wv), 30);
                       }
@@ -566,8 +607,8 @@ jobs:
           console.log('Native bridge + MainActivity written');
           EOF
 
-      # ===== FIN PARTE 3 =====
-            # ===== INICIO PARTE 4 =====
+      # ===== FIN PARTE 4 =====
+            # ===== INICIO PARTE 5 =====
       - name: Usar la firma fija en Gradle
         run: |
           node <<'EOF'
