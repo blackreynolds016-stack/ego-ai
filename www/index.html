@@ -84,7 +84,7 @@ form{display:block;flex-shrink:0;max-width:760px;width:100%;margin:0 auto;paddin
 #bar #input{flex:1;min-width:0;resize:none;background:none;border:0;box-shadow:none;border-radius:0;padding:calc((clamp(42px,11.2vw,46px) - 22px)/2 - 1px) 4px calc((clamp(42px,11.2vw,46px) - 22px)/2 - 1px) clamp(14px,4.4vw,19px);font:inherit;font-size:16px;line-height:22px;max-height:130px;outline:none;color:var(--text)}
 #bar #input::placeholder{color:var(--muted);opacity:1}
 /* ===== FIN PARTE 1 ===== */
-/* ===== INICIO PARTE 2 ===== */
+  /* ===== INICIO PARTE 2 ===== */
 #bar #send{display:none;flex-shrink:0;width:clamp(38px,10.2vw,42px);height:clamp(38px,10.2vw,42px);margin:1px;border:0;border-radius:50%;background:var(--v);color:var(--on-v);font-size:16px;align-items:center;justify-content:center;box-shadow:0 5px 10px -3px #0005}
 #plusBtn svg{width:26px;height:26px}
 #plusPanel{display:none;max-width:760px;width:100%;margin:0 auto;padding:0 var(--padb) calc(16px + env(safe-area-inset-bottom,0));gap:12px;flex-shrink:0}
@@ -450,9 +450,9 @@ if(summing.has(c.id)||c.msgs.length<keep+10||c.msgs.length-keep-upto<10)return;
 summing.add(c.id);
 try{const part=c.msgs.slice(upto,c.msgs.length-keep).map(m=>(m.role==="user"?"Usuario: ":"EGO: ")+noImg(Array.isArray(m.content)?((m.content.find(x=>x.type==="text")||{}).text||""):m.content).slice(0,1500)).join("\n");
 const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({summarize:true,text:part,prev:c.summary||""})});
+const j=await r.json();if(j&&typeof j.summary==="string"&&j.summary){c.summary=j.summary;c.sumUpTo=c.msgs.length-keep;saveChats()}}catch(e){}
 // ===== FIN PARTE 4 =====
   // ===== INICIO PARTE 5 =====
-const j=await r.json();if(j&&typeof j.summary==="string"&&j.summary){c.summary=j.summary;c.sumUpTo=c.msgs.length-keep;saveChats()}}catch(e){}
 summing.delete(c.id)}
 function pendingText(){return"Pensando…"}
 function typeOut(d,text){
@@ -562,14 +562,14 @@ const question=text||"Analiza este archivo, resume su contenido y ayúdame con c
 const prompt="Archivo adjunto: "+att.name+"\n\n"+att.rawText+"\n\n"+question;
 c.msgs.push({role:"user",content:prompt,fileMsg:true});saveChats();renderList();
 bubble("user").textContent="📎 "+att.name+(text?" — "+text:"");
-// ===== FIN PARTE 5 =====
-  // ===== INICIO PARTE 6 =====
 }
 ask();
 return}
 if(!text)return;
 input.value="";input.style.height="auto";
 {const mr=memCmd(text);
+// ===== FIN PARTE 5 =====
+  // ===== INICIO PARTE 6 =====
 if(mr){let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[]};chats.push(c);curId=c.id}
 if(!chat.querySelector(".msg"))chat.innerHTML="";
 chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
@@ -714,7 +714,9 @@ else toast("Los permisos se piden en la app instalada")
 Cloud.user=ld("ego_user",null);renderAcct();setTimeout(()=>Cloud.init(),400);
 if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
-applyBars(document.documentElement.getAttribute("data-theme"));
+const curBars=()=>applyBars(document.documentElement.getAttribute("data-theme"));
+curBars();setTimeout(curBars,400);setTimeout(curBars,1500);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)curBars()});
 requestAnimationFrame(function(){requestAnimationFrame(function(){document.documentElement.setAttribute("data-ready","1")})});
 
 }catch(e){document.documentElement.setAttribute('data-ready','1');console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
