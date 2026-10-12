@@ -13,7 +13,7 @@
 --btn-sh:0 7px 13px -4px rgba(140,143,160,.48),-3px -3px 8px rgba(255,255,255,.95),inset 0 1px 0 #fff,inset 0 -2px 4px rgba(130,133,150,.14);
 --inset-bg:linear-gradient(180deg,#f0f0f3,#fafafb);--inset-bd:1px solid #e5e6ea;--inset-sh:inset 0 2px 5px rgba(120,123,140,.16),inset 0 -1px 0 #fff;--shadow-pop:0 12px 32px #0000002e}
 :root[data-theme="dark"]{--bg:#09090b;--panel:#111113;--line:#27282c;--text:#f3f3f5;--muted:#a4a5ad;--userbg:#1a1a1d;--v:#fff;--v2:#d9d9de;--on-v:#000;--ai:#f3f3f5;
---bgimg:linear-gradient(118deg,transparent 26%,rgba(255,255,255,.05) 40%,transparent 52%),radial-gradient(90% 45% at 88% 88%,rgba(255,255,255,.055),transparent 62%),linear-gradient(180deg,#0e0e10,#08080a);
+--bgimg:linear-gradient(118deg,transparent 26%,rgba(255,255,255,.05) 40%,transparent 52%),radial-gradient(90% 45% at 88% 88%,rgba(255,255,255,.055),transparent 62%),linear-gradient(180deg,#0e0e10,#0a0a0c);
 --raise:linear-gradient(160deg,rgba(255,255,255,.13),rgba(255,255,255,.03) 48%,rgba(255,255,255,.07));--raise-bd:1px solid rgba(255,255,255,.24);
 --card-sh:inset 0 1px 0 rgba(255,255,255,.42),inset 0 -1px 0 rgba(255,255,255,.14),inset 0 0 22px rgba(255,255,255,.03),0 14px 28px rgba(0,0,0,.6);
 --btn-sh:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -1px 2px rgba(255,255,255,.16),inset 0 0 10px rgba(255,255,255,.05),0 8px 16px rgba(0,0,0,.65);
@@ -84,7 +84,7 @@ form{display:block;flex-shrink:0;max-width:760px;width:100%;margin:0 auto;paddin
 #bar #input{flex:1;min-width:0;resize:none;background:none;border:0;box-shadow:none;border-radius:0;padding:calc((clamp(42px,11.2vw,46px) - 22px)/2 - 1px) 4px calc((clamp(42px,11.2vw,46px) - 22px)/2 - 1px) clamp(14px,4.4vw,19px);font:inherit;font-size:16px;line-height:22px;max-height:130px;outline:none;color:var(--text)}
 #bar #input::placeholder{color:var(--muted);opacity:1}
 /* ===== FIN PARTE 1 ===== */
-  /* ===== INICIO PARTE 2 ===== */
+/* ===== INICIO PARTE 2 ===== */
 #bar #send{display:none;flex-shrink:0;width:clamp(38px,10.2vw,42px);height:clamp(38px,10.2vw,42px);margin:1px;border:0;border-radius:50%;background:var(--v);color:var(--on-v);font-size:16px;align-items:center;justify-content:center;box-shadow:0 5px 10px -3px #0005}
 #plusBtn svg{width:26px;height:26px}
 #plusPanel{display:none;max-width:760px;width:100%;margin:0 auto;padding:0 var(--padb) calc(16px + env(safe-area-inset-bottom,0));gap:12px;flex-shrink:0}
@@ -200,9 +200,9 @@ dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso
 teacher:" Eres un profesor paciente: explica desde cero, con analogías y ejemplos, y comprueba comprensión.",
 creative:" Eres creativo y original: ideas distintas, estilo vivo, varias opciones.",
 direct:" Sé breve y directo: la respuesta primero, sin relleno.",
+security:" Eres experto en ciberseguridad defensiva y educativa: explicas cómo funcionan las amenazas para que el usuario se proteja, cómo revisar y asegurar su propia red, router o dispositivos, buenas prácticas y conceptos de pentesting ético sobre sistemas propios o con autorización. No das instrucciones para atacar sistemas de terceros sin autorización ni creas malware."
 // ===== FIN PARTE 2 =====
   // ===== INICIO PARTE 3 =====
-security:" Eres experto en ciberseguridad defensiva y educativa: explicas cómo funcionan las amenazas para que el usuario se proteja, cómo revisar y asegurar su propia red, router o dispositivos, buenas prácticas y conceptos de pentesting ético sobre sistemas propios o con autorización. No das instrucciones para atacar sistemas de terceros sin autorización ni creas malware."
 };
 const chat=document.getElementById("chat"),input=document.getElementById("input"),send=document.getElementById("send"),list=document.getElementById("list"),side=document.getElementById("side"),overlay=document.getElementById("overlay");
 const personaBtn=document.getElementById("personaBtn"),personaMenu=document.getElementById("personaMenu");
@@ -292,7 +292,7 @@ document.getElementById("newchat").onclick=()=>{curId=null;renderList();renderCh
 function toggleSide(hide){if(hide===undefined)hide=!side.classList.contains("hidden");side.classList.toggle("hidden",hide);overlay.style.display=(!hide&&window.innerWidth<=640)?"block":"none"}
 document.getElementById("toggleSide").onclick=()=>toggleSide();
 overlay.onclick=()=>toggleSide(true);
-document.getElementById("theme").onclick=()=>{const t=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);sv("ego_theme",t);document.getElementById("theme").textContent=t==="dark"?"☀️":"🌙"};
+document.getElementById("theme").onclick=()=>{const t=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",t);sv("ego_theme",t);document.getElementById("theme").textContent=t==="dark"?"☀️":"🌙";applyBars(t)};
 chat.addEventListener("click",e=>{const t=e.target.closest("[data-a],.chip,.cc,.cr");if(!t)return;
 if(t.classList.contains("cr")){openPreview(t.closest(".code").querySelector("pre").textContent);return}
 if(t.classList.contains("chip")){const txt=t.querySelector("b").textContent;input.value=txt;updateSend();input.focus();return}
@@ -316,9 +316,9 @@ micBtn.onclick=()=>alert("Tu Android no soporta reconocimiento de voz en esta vi
 }
 const fileInput=document.getElementById("fileInput"),photoInput=document.getElementById("photoInput");
 const attachPreview=document.getElementById("attachPreview"),attachPreviewImg=document.getElementById("attachPreviewImg"),attachPreviewName=document.getElementById("attachPreviewName"),attachPreviewRemove=document.getElementById("attachPreviewRemove");
+let pendingAttachment=null;
 // ===== FIN PARTE 3 =====
   // ===== INICIO PARTE 4 =====
-let pendingAttachment=null;
 function shrink(dataUrl,cb){const im=new Image();im.onload=()=>{const mk=(max,q)=>{const k=Math.min(1,max/Math.max(im.width,im.height));const cv=document.createElement("canvas");cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);return cv.toDataURL("image/jpeg",q)};cb(mk(1024,0.8),mk(320,0.6))};im.onerror=()=>cb(dataUrl,dataUrl);im.src=dataUrl}
 function setAttachment(dataUrl,name,isImage,rawText,thumb){
 pendingAttachment={dataUrl,name,isImage,rawText,thumb};
@@ -449,9 +449,9 @@ const keep=24,upto=c.sumUpTo||0;
 if(summing.has(c.id)||c.msgs.length<keep+10||c.msgs.length-keep-upto<10)return;
 summing.add(c.id);
 try{const part=c.msgs.slice(upto,c.msgs.length-keep).map(m=>(m.role==="user"?"Usuario: ":"EGO: ")+noImg(Array.isArray(m.content)?((m.content.find(x=>x.type==="text")||{}).text||""):m.content).slice(0,1500)).join("\n");
+const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({summarize:true,text:part,prev:c.summary||""})});
 // ===== FIN PARTE 4 =====
   // ===== INICIO PARTE 5 =====
-const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({summarize:true,text:part,prev:c.summary||""})});
 const j=await r.json();if(j&&typeof j.summary==="string"&&j.summary){c.summary=j.summary;c.sumUpTo=c.msgs.length-keep;saveChats()}}catch(e){}
 summing.delete(c.id)}
 function pendingText(){return"Pensando…"}
@@ -559,11 +559,11 @@ c.msgs.push(userMsg);saveChats();renderList();
 const ub=bubble("user");ub.innerHTML=esc(text||"Imagen enviada")+'<img class="thumb" src="'+(att.thumb||att.dataUrl)+'">';
 }else{
 const question=text||"Analiza este archivo, resume su contenido y ayúdame con cualquier problema que encuentres.";
-// ===== FIN PARTE 5 =====
-  // ===== INICIO PARTE 6 =====
 const prompt="Archivo adjunto: "+att.name+"\n\n"+att.rawText+"\n\n"+question;
 c.msgs.push({role:"user",content:prompt,fileMsg:true});saveChats();renderList();
 bubble("user").textContent="📎 "+att.name+(text?" — "+text:"");
+// ===== FIN PARTE 5 =====
+  // ===== INICIO PARTE 6 =====
 }
 ask();
 return}
@@ -617,6 +617,8 @@ function nat(plugin,method,args){const C=window.Capacitor;
 if(C&&C.Plugins&&C.Plugins[plugin]&&typeof C.Plugins[plugin][method]==="function")return C.Plugins[plugin][method](args||{});
 if(C&&C.nativePromise)return C.nativePromise(plugin,method,args||{});
 return Promise.reject(new Error("not available"))}
+// Pinta las barras del sistema (arriba y abajo) del mismo color que la interfaz
+function applyBars(t){try{const d=t==="dark";nat("EgoNative","setBars",{dark:d,top:d?"#0e0e10":"#fcfcfd",bottom:d?"#0a0a0c":"#f4f4f7"}).catch(()=>{})}catch(e){}}
 const FBU=n=>"https://www.gstatic.com/firebasejs/10.14.1/firebase-"+n+".js";
 Object.assign(Cloud,{
 timer:null,pending:{},fb:null,
@@ -712,6 +714,7 @@ else toast("Los permisos se piden en la app instalada")
 Cloud.user=ld("ego_user",null);renderAcct();setTimeout(()=>Cloud.init(),400);
 if(window.innerWidth>640){side.classList.remove("hidden")}
 renderList();renderChat();
+applyBars(document.documentElement.getAttribute("data-theme"));
 requestAnimationFrame(function(){requestAnimationFrame(function(){document.documentElement.setAttribute("data-ready","1")})});
 
 }catch(e){document.documentElement.setAttribute('data-ready','1');console.error('EGO AI init error:', e); document.body.innerHTML = '<div style="padding:30px;font-family:sans-serif">Hubo un problema al cargar EGO AI. Cierra y abre la app de nuevo.<br><br>'+e.message+'</div>';}
