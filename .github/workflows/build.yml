@@ -257,11 +257,11 @@ jobs:
           print('splash images written')
           PYEOF
 
-      # ===== FIN PARTE 2 =====
-            # ===== INICIO PARTE 3 =====
       - name: Instant splash + dark/light colors (no flicker)
         run: |
           node <<'EOF'
+          // ===== FIN PARTE 2 =====
+                    // ===== INICIO PARTE 3 =====
           const fs = require('fs');
           const path = require('path');
           const res = 'android/app/src/main/res/';
@@ -362,7 +362,6 @@ jobs:
           import android.view.WindowManager;
           import android.webkit.WebView;
           import androidx.core.app.ActivityCompat;
-          import androidx.activity.OnBackPressedCallback;
           import androidx.core.content.ContextCompat;
           import androidx.core.view.WindowCompat;
           import androidx.core.view.WindowInsetsControllerCompat;
@@ -555,11 +554,13 @@ jobs:
           // MainActivity: registra el puente y mantiene el splash hasta que la app esta lista
           fs.writeFileSync(dir + 'MainActivity.java', `package com.egoai.app;
 
+          import android.os.Build;
           import android.os.Bundle;
           import android.os.Handler;
           import android.os.Looper;
           import android.os.SystemClock;
           import android.webkit.WebView;
+          import android.window.OnBackInvokedDispatcher;
           import androidx.core.content.ContextCompat;
           import androidx.core.splashscreen.SplashScreen;
           import com.getcapacitor.BridgeActivity;
@@ -577,21 +578,10 @@ jobs:
                   registerPlugin(EgoNativePlugin.class);
                   super.onCreate(savedInstanceState);
                   EgoNativePlugin.paintSaved(this);
-                  getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-                      @Override
-                      public void handleOnBackPressed() {
-                          if (getBridge() == null || getBridge().getWebView() == null) { finish(); return; }
-                          final OnBackPressedCallback self = this;
-                          getBridge().getWebView().evaluateJavascript(
-                              "(function(){try{return (window.egoBack&&window.egoBack())?'1':'0'}catch(e){return '0'}})()",
-                              value -> {
-                                  if (!"\\"1\\"".equals(value)) {
-                                      self.setEnabled(false);
-                                      finish();
-                                  }
-                              });
-                      }
-                  });
+                  if (Build.VERSION.SDK_INT >= 33) {
+                      getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                          OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> handleBack());
+                  }
                   t0 = SystemClock.uptimeMillis();
                   if (getBridge() != null && getBridge().getWebView() != null) {
                       WebView wv = getBridge().getWebView();
@@ -600,6 +590,23 @@ jobs:
                   } else {
                       ready = true;
                   }
+              }
+
+              // Boton atras: primero cierra lo que haya abierto en la app (visor, ajustes, menu); si no hay nada, sale
+              @Override
+              public void onBackPressed() {
+                  handleBack();
+              }
+
+              private void handleBack() {
+                  if (getBridge() == null || getBridge().getWebView() == null) { finish(); return; }
+                  getBridge().getWebView().evaluateJavascript(
+                      "(function(){try{return (window.egoBack&&window.egoBack())?'1':'0'}catch(e){return '0'}})()",
+                      value -> {
+                          if (!"\\"1\\"".equals(value)) {
+                              finish();
+                          }
+                      });
               }
 
               @Override
