@@ -49,7 +49,7 @@ header button.icon:active{transform:scale(.96)}
 .user{align-self:flex-end;max-width:84%;background:var(--raise);color:var(--text);padding:12px 18px;border-radius:24px 24px 7px 24px;white-space:pre-wrap;box-shadow:var(--btn-sh);border:var(--raise-bd)}
 .bot{align-self:stretch}
 .bot p{margin:0 0 12px}.bot h2,.bot h3,.bot h4{margin:16px 0 8px;font-weight:700}
-.bot ul,.bot ol{margin:0 0 12px;padding-left:22px}
+  .bot ul,.bot ol{margin:0 0 12px;padding-left:22px}
 .bot code{background:var(--userbg);padding:1px 6px;border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:13.5px}
 .bot a{color:var(--text);text-decoration:underline;text-underline-offset:3px}
 .bot img{max-width:100%;border-radius:16px;display:block;margin:8px 0}
@@ -92,12 +92,10 @@ form{display:block;flex-shrink:0;max-width:760px;width:100%;margin:0 auto;paddin
 #attachPreview{display:none;align-items:center;gap:10px;padding:8px var(--padb);max-width:760px;width:100%;margin:0 auto}
 #attachPreview img{width:48px;height:48px;object-fit:cover;border-radius:14px;border:1px solid var(--line)}
 #attachPreview span{flex:1;font-size:13px;color:var(--muted)}
-/* ===== FIN PARTE 1 ===== */
-  /* ===== INICIO PARTE 2 ===== */
 #attachPreview button{background:var(--raise);border:var(--raise-bd);color:var(--text);border-radius:50%;width:30px;height:30px;font-size:13px;box-shadow:var(--btn-sh)}
 .overlay{position:fixed;inset:0;background:#0007;display:none;z-index:5}
 @media(max-width:640px){#side{position:absolute;top:0;bottom:0;left:0;z-index:10;height:100%;box-shadow:var(--shadow-pop)}#side.hidden{margin-left:-310px;box-shadow:none}}
-#list{flex:1;overflow-y:auto;min-height:0}
+  #list{flex:1;overflow-y:auto;min-height:0}
 .acct{flex-shrink:0;border-top:1px solid var(--line);padding-top:10px;margin-top:8px;display:flex;flex-direction:column;gap:8px}
 .gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:18px;padding:12px;font-size:14px;font-weight:600}
 :root[data-theme="dark"] .gbtn{background:#1b1b1e;color:var(--text);border-color:var(--line)}
@@ -160,7 +158,7 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 #modalBox .acct{border:0;margin:0;padding:0}
 #modalBox .srow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:13px 14px;font-size:15px}
 #modalBox .srow small{margin-left:auto;color:var(--muted);font-size:13px}
-#modalBox .sgrp{margin:8px 2px 0;color:var(--muted);font-size:12.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+  #modalBox .sgrp{margin:8px 2px 0;color:var(--muted);font-size:12.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
 #modalBox .seg{display:flex;gap:8px}
 #modalBox .seg button{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:16px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:15px}
 #modalBox .seg button.on{border-color:var(--text);font-weight:700}
@@ -212,8 +210,6 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 <form id="form">
 <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="photoInput" accept="image/*" style="display:none">
-<!-- ===== FIN PARTE 2 ===== -->
-  <!-- ===== INICIO PARTE 3 ===== -->
 <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.log,.js,.py,.html,.css,.xml,.yml,.yaml,.java,.kt,.ts,.sql,text/*,application/pdf" style="display:none">
 <div id="bar">
 <button class="ib" id="camBtn" type="button" title="Tomar foto"><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9ZM12 9.4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" fill="currentColor"/><circle cx="12" cy="12.9" r="1.5" fill="currentColor"/></svg></button>
@@ -246,7 +242,14 @@ return u}
 /* Toda petición al Worker lleva el correo en el encabezado X-Usuario-Correo y en el cuerpo ("correo"); sin sesión va vacío */
 function wHeaders(){return{"Content-Type":"application/json","X-Usuario-Correo":correoUsuario()}}
 function wBody(o){o.correo=correoUsuario();return JSON.stringify(o)}
-function wPost(o,signal){return fetch(API,{method:"POST",headers:wHeaders(),body:wBody(o),signal:signal})}
+/* Ense\u00f1ar a EGO ("Estudia esto: ..."): solo el creador puede; el Worker exige el token de sesi\u00f3n firmado por Google, as\u00ed que la app lo env\u00eda SOLO en esos mensajes */
+const RX_TEACH=/^[\s"'“”‘’«»¡!¿]*(?:(?:estudia|est[uú]dia|aprende|guarda en la biblioteca)(?:\s+(?:esto|eso|lo siguiente|que))?(?:\s+y\s+(?:aprend[eé]lo|apr[eé]ndelo|estud[ií]alo|est[uú]dialo))?(?:\s+(?:con|a)\s+(?:profundidad|fondo))?\s*:|(?:estudia|est[uú]dia|aprende)\s+(?:esto|eso|lo siguiente)(?:\s+y\s+(?:aprend[eé]lo|apr[eé]ndelo|estud[ií]alo|est[uú]dialo))?(?:\s+(?:con|a)\s+(?:profundidad|fondo))?[ \t]*[\r\n]|(?:borra|elimina)\s+la\s+lecci[oó]n\s*:)/i;
+async function tokenSesion(){try{const u=Cloud.fb&&Cloud.fb.au&&Cloud.fb.au.currentUser;return u?await u.getIdToken():null}catch(e){return null}}
+async function wPost(o,signal){
+try{if(Array.isArray(o.messages)){const m=o.messages.slice().reverse().find(x=>x&&x.role==="user");
+const t=m?(typeof m.content==="string"?m.content:((Array.isArray(m.content)&&m.content.find(p=>p&&p.type==="text"))||{}).text||""):"";
+if(RX_TEACH.test(t)){const tk=await tokenSesion();if(tk)o.idToken=tk}}}catch(e){}
+return fetch(API,{method:"POST",headers:wHeaders(),body:wBody(o),signal:signal})}
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
 const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Dentro de la app EGO AI tienes estas capacidades: crear y editar imágenes en alta calidad (el usuario escribe por ejemplo \"créame una imagen de…\" o adjunta una foto y dice qué cambiar), buscar en internet en tiempo real, razonamiento profundo, equipo de modelos y agente (se activan solos según lo que pidas, sin botones), memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto y fotos). Si el usuario pide algo de esto y te llega como mensaje normal, explícale cómo usarlo en vez de decir que no puedes.";
@@ -260,7 +263,7 @@ security:" Eres experto en ciberseguridad defensiva y educativa: explicas cómo 
 };
 const chat=document.getElementById("chat"),input=document.getElementById("input"),send=document.getElementById("send"),list=document.getElementById("list"),side=document.getElementById("side"),overlay=document.getElementById("overlay");
 const personaBtn=document.getElementById("personaBtn"),personaMenu=document.getElementById("personaMenu");
-const PLABEL={normal:"Normal",dev:"Programador",teacher:"Profesor",creative:"Creativo",direct:"Directo",security:"Seguridad"};
+  const PLABEL={normal:"Normal",dev:"Programador",teacher:"Profesor",creative:"Creativo",direct:"Directo",security:"Seguridad"};
 let busy=false,stop=false;
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
@@ -326,11 +329,9 @@ else if(m=line.match(/^\s*[-*]\s+(.*)/)){open("ul");out.push("<li>"+inl(m[1])+"<
 else if(!line.trim())close();
 else{close();out.push("<p>"+inl(line)+"</p>")}}
 close();return out.join("");}
-// ===== FIN PARTE 3 =====
-  // ===== INICIO PARTE 4 =====
 const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
-function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(/!\[imagen\]\(/.test(text)?'<button data-a="saveimg" type="button">Guardar</button><button data-a="shareimg" type="button">Compartir</button><button data-a="editimg" type="button">Editar</button>':"")+(last&&!/^(Imagen (generada|editada)|\u2705 Versi\u00f3n mejorada|No pude)/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
+  function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(/!\[imagen\]\(/.test(text)?'<button data-a="saveimg" type="button">Guardar</button><button data-a="shareimg" type="button">Compartir</button><button data-a="editimg" type="button">Editar</button>':"")+(last&&!/^(Imagen (generada|editada)|\u2705 Versi\u00f3n mejorada|No pude)/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 function renderChat(){chat.innerHTML="";const c=cur();
 if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b>'+
 '<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c.8 5.2 2.6 7.6 9.8 9.8-7.2 2.2-9 4.6-9.8 9.8-.8-5.2-2.6-7.6-9.8-9.8 7.2-2.2 9-4.6 9.8-9.8Z"/></svg></span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span></button>'+
@@ -386,7 +387,7 @@ updateSend();input.focus();}
 function updateSend(){const has=input.value.trim().length>0||!!pendingAttachment||send.textContent==="■";send.style.display=has?"flex":"none";micBtn.style.display=has?"none":"flex"}
 input.addEventListener("input",updateSend);
 new MutationObserver(updateSend).observe(send,{childList:true,characterData:true,subtree:true});
-attachPreviewRemove.onclick=()=>{pendingAttachment=null;attachPreview.style.display="none";updateSend()};
+  attachPreviewRemove.onclick=()=>{pendingAttachment=null;attachPreview.style.display="none";updateSend()};
 function handleFile(file){
 if(!file)return;
 const ext=(file.name.split(".").pop()||"").toLowerCase();
@@ -455,12 +456,10 @@ let pendingRemember=false;
 async function forgetServer(){try{const r=await wPost({forget:true,usuario:usuarioId()});return r.ok}catch(e){return false}}
 /* Olvidar todo: borra SOLO los recuerdos personales (local + Worker); la Biblioteca compartida no se toca */
 async function olvidarTodo(){Mem=[];sv("ego_mem",Mem);updMem();const ok=await forgetServer();toast(ok?"Listo, olvid\u00e9 todo lo personal que sab\u00eda de ti":"Borr\u00e9 la memoria de este tel\u00e9fono, pero no pude contactar al Worker",3500);return ok}
-// ===== FIN PARTE 4 =====
-  // ===== INICIO PARTE 5 =====
 function memCmd(text){let m;
 if(pendingRemember){pendingRemember=false;const f=text.trim();if(f.length>=3&&!/^[\s¡!]*(?:olvida|borra de tu memoria)/i.test(f))return memAdd(f)?"Listo, lo recordaré: "+f:"Eso ya lo tenía guardado."}
 if(/^[\s¡!¿]*(?:por favor,?\s+)?(?:recuerda|acu[eé]rdate|an[oó]ta)(?:\s+(?:esto|eso|lo siguiente))?[\s:.,!]*$/i.test(text)){pendingRemember=true;return"Claro, dime qué quieres que recuerde y lo guardo."}
-if(m=text.match(/^[\s¡!]*(?:por favor,?\s+)?(?:recuerda|acu[eé]rdate|ten en cuenta|guarda en (?:tu )?memoria|an[oó]ta)(?:\s+(?:que|esto|eso|lo siguiente))?[:,\s]+(.{3,})$/i))return memAdd(m[1])?"Listo, lo recordaré: "+m[1].trim():"Eso ya lo tenía guardado.";
+  if(m=text.match(/^[\s¡!]*(?:por favor,?\s+)?(?:recuerda|acu[eé]rdate|ten en cuenta|guarda en (?:tu )?memoria|an[oó]ta)(?:\s+(?:que|esto|eso|lo siguiente))?[:,\s]+(.{3,})$/i))return memAdd(m[1])?"Listo, lo recordaré: "+m[1].trim():"Eso ya lo tenía guardado.";
 if(/^[\s¡!]*(?:olvida|borra de tu memoria)\s+(?:todo|toda la memoria)[.!\s]*$/i.test(text)){olvidarTodo();return"Listo, borré toda mi memoria personal sobre ti. La biblioteca compartida no se toca."}
 if(m=text.match(/^[\s¡!]*(?:olvida|borra de tu memoria)(?:\s+que)?\s+(.{3,})$/i)){const q=m[1].toLowerCase().replace(/[.!\s]+$/,""),n=Mem.length;Mem=Mem.filter(x=>!x.toLowerCase().includes(q));sv("ego_mem",Mem);updMem();return n!==Mem.length?"Listo, lo olvidé.":"No encontré eso en mi memoria."}
 if(/^[\s¡!]*(?:qu[eé] recuerdas de m[ií]|qu[eé] sabes de m[ií]|ver memoria|mi memoria)[?.!\s]*$/i.test(text))return Mem.length?"Esto es lo que recuerdo de ti:\n"+Mem.map(x=>"- "+x).join("\n"):"Todavía no tengo nada guardado. Dime «recuerda que…» y lo guardo.";
@@ -478,6 +477,7 @@ else if(k==="del"){memDel(+b.dataset.i);openMem()}
 else if(k==="add"){const v=document.getElementById("mIn").value;if(memAdd(v))openMem();else toast("Escribe algo nuevo para recordar")}});
 updMem();
 /* ===== Menú lateral: Proyectos, Ajustes, Cuenta ===== */
+const CORREO_OFICIAL="egoai.oficial2026@gmail.com";
 const ERRLOG=[];
 addEventListener("error",e=>{ERRLOG.push(String(e.message||e).slice(0,160));if(ERRLOG.length>10)ERRLOG.shift()});
 addEventListener("unhandledrejection",e=>{ERRLOG.push(String((e.reason&&e.reason.message)||e.reason||"promesa rechazada").slice(0,160));if(ERRLOG.length>10)ERRLOG.shift()});
@@ -498,7 +498,7 @@ lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2
 bug:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8.5c-2.5 0-4 1.6-4 4.2 0 2.9 1.6 5.3 4 5.3s4-2.4 4-5.3c0-2.6-1.5-4.2-4-4.2ZM9.5 8V6.5a2.5 2.5 0 0 1 5 0V8M4 13h3M17 13h3M5 18l2.5-1.5M19 18l-2.5-1.5M5 8l2.5 1.5M19 8l-2.5 1.5"/></svg>',
 info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8v.1"/></svg>',
 folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2.2h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V7.5Z"/></svg>',
-trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.2h9.2L17.5 7"/></svg>'};
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.2h9.2L17.5 7"/></svg>'};
 const mh=t=>'<div class="mh"><b>'+t+'</b><button data-m="close" type="button">✕</button></div>';
 function openProjects(){
 const rows=Projs.map(p=>'<button class="srow" data-p="open:'+p.id+'" type="button">'+IC.folder+'<span>'+esc(p.name)+'</span><small>'+chats.filter(c=>c.proj===p.id).length+' chats</small></button>').join("");
@@ -527,11 +527,9 @@ showModal(mh("Ajustes")+'<div class="ml">'
 +'<button class="srow" data-s="report" type="button">'+IC.bug+'<span>Reporte de la app</span></button>'
 +'<button class="srow" data-s="about" type="button">'+IC.info+'<span>Acerca de EGO AI</span></button>'
 +'</div>')}
-function openReport(){showModal(mh("Reporte de la app")+'<div class="ml"><p class="mu">Cuéntanos qué falló. El reporte incluye datos técnicos del teléfono y los últimos errores de la app, sin tus mensajes ni tu correo.</p><textarea id="rpTxt" placeholder="Describe el problema…"></textarea><button class="pbtn" data-s="rp-share" type="button">Compartir reporte</button><button class="srow" data-s="rp-copy" type="button"><span>Copiar reporte</span></button></div>')}
+function openReport(){showModal(mh("Reporte de la app")+'<div class="ml"><p class="mu">Cuéntanos qué falló. El reporte llega al correo oficial de EGO AI e incluye datos técnicos del teléfono y los últimos errores de la app, sin tus mensajes.</p><textarea id="rpTxt" placeholder="Describe el problema…"></textarea><button class="pbtn" data-s="rp-mail" type="button">Enviar al correo oficial</button><button class="srow" data-s="rp-share" type="button"><span>Compartir de otra forma</span></button><button class="srow" data-s="rp-copy" type="button"><span>Copiar reporte</span></button></div>')}
 function reportText(){const d=(document.getElementById("rpTxt")||{}).value||"";
 return["REPORTE EGO AI","Fecha: "+new Date().toISOString(),"Pantalla: "+innerWidth+"x"+innerHeight+" @"+(window.devicePixelRatio||1),"Tema: "+document.documentElement.getAttribute("data-theme"),"Modo: "+currentPersona,"Idioma de respuestas: "+curLang,"Chats: "+chats.length+(Cloud.user?" (cuenta conectada)":""),"Navegador: "+navigator.userAgent,"","Errores recientes:",ERRLOG.length?ERRLOG.join("\n"):"(ninguno)","","Descripción:",d.trim()||"(sin descripción)"].join("\n")}
-// ===== FIN PARTE 5 =====
-// ===== INICIO PARTE 6 =====
 async function copyText(t){try{await navigator.clipboard.writeText(t);return true}catch(e){try{const a=document.createElement("textarea");a.value=t;a.style.cssText="position:fixed;opacity:0";document.body.appendChild(a);a.select();const ok=document.execCommand("copy");a.remove();return ok}catch(_){return false}}}
 modalBox.addEventListener("click",async e=>{const b=e.target.closest("[data-s]");if(!b)return;const k=b.dataset.s;
 if(k==="th-light"||k==="th-dark"){setTheme(k==="th-dark"?"dark":"light");openSettings()}
@@ -542,6 +540,11 @@ else if(k==="forget"){if(confirm("¿Olvidar todos tus recuerdos personales (nomb
 else if(k==="clear"){if(confirm("¿Borrar TODOS tus chats? Esta acción no se puede deshacer.")){const ids=chats.map(c=>c.id);chats=[];curId=null;ids.forEach(id=>{try{Cloud.remove(id)}catch(_){}});saveChats();renderList();renderChat();closeModal();toast("Chats borrados")}}
 else if(k==="report")openReport();
 else if(k==="about")showModal(mh("Acerca de EGO AI")+'<div class="ml"><p class="mu" style="font-size:14.5px;line-height:1.5">EGO AI — Tu mente, sin límites.<br>Chat con inteligencia artificial, análisis de fotos y archivos, imágenes y búsqueda en internet.</p></div>');
+else if(k==="rp-mail"){const d=((document.getElementById("rpTxt")||{}).value||"").trim();
+if(!d){toast("Describe el problema antes de enviarlo");return}
+const asunto="Reporte de la app EGO AI: "+d.replace(/\s+/g," ").slice(0,60);
+const url="mailto:"+CORREO_OFICIAL+"?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(reportText().slice(0,1800));
+try{window.location.href=url;toast("Se abrirá tu correo con el reporte listo: pulsa Enviar",4500)}catch(err){toast(await copyText(reportText())?"No pude abrir el correo; copié el reporte. Envíalo a "+CORREO_OFICIAL:"No pude abrir el correo",5000)}}
 else if(k==="rp-copy"){toast(await copyText(reportText())?"Reporte copiado":"No se pudo copiar")}
 else if(k==="rp-share"){const t=reportText();try{if(navigator.share){await navigator.share({title:"Reporte EGO AI",text:t})}else throw 0}catch(err){if(err&&err.name==="AbortError")return;toast(await copyText(t)?"Reporte copiado: pégalo donde quieras enviarlo":"No se pudo compartir")}}});
 modalBox.addEventListener("click",e=>{const b=e.target.closest("[data-p]");if(!b)return;const k=b.dataset.p;const x=k.indexOf(":");const a=x<0?k:k.slice(0,x),v=x<0?"":k.slice(x+1);
@@ -591,7 +594,7 @@ const lib=await import(base+"pdf.min.mjs");
 const wt=await(await fetch(base+"pdf.worker.min.mjs")).text();
 lib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([wt],{type:"text/javascript"}));
 const pdf=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
-let out="";
+  let out="";
 for(let i=1;i<=pdf.numPages&&out.length<60000;i++){const pg=await pdf.getPage(i);const tc=await pg.getTextContent();out+="\n--- Página "+i+" ---\n"+tc.items.map(x=>x.str).join(" ")}
 if(out.replace(/--- Página \d+ ---|\s/g,"").length<20)throw new Error("scan");
 return out.slice(0,60000)}
@@ -648,12 +651,10 @@ const IM_N="(?:imagen|im[aá]genes|imagenes|foto|fotos|fotograf[ií]a|dibujo|ilu
 const IM_P="^[\\s\\u00a1!\\u00bf]*(?:(?:por favor|porfa|oye|hola|ey)[,\\s]+)*(?:(?:puedes|podr[ií]as|me\\s+puedes|me\\s+podr[ií]as|quiero que|necesito que|quisiera que|me\\s+gustar[ií]a que)\\s+(?:me\\s+)?)?";
 const IM_CV="(?:crea|cr[eé]ame|cr[eé]a|crear|genera|gen[eé]rame|generar|haz|hazme|hacer|dibuja|dib[uú]jame|dibujar|dise[nñ]a|dise[nñ][aá]me|dise[nñ]ar|pinta|p[ií]ntame|pintar|ilustra|ilustr[aá]me|fabrica|prepara|renderiza|crees|hagas|generes|dibujes)";
 const IM_WV="(?:quiero|necesito|dame|mu[eé]strame|ens[eé][nñ]ame|quisiera)";
-// ===== FIN PARTE 6 =====
-  // ===== INICIO PARTE 7 =====
 const IM_EV="(?:ed[ií]t(?:a|ame|ala|alo)|edit[aá]|modific(?:a|ame|ala|alo)|modif[ií]cal[eao]|cambi(?:a|ame|ala|alo|ale)|c[aá]mbial[eao]|transform(?:a|ame|ala|alo)|transf[oó]rmal[eao]|convi[eé]rt(?:e|ela|elo|eme)|retoc(?:a|ala|alo)|mejor(?:a|ala|alo)|mej[oó]ral[eao]|qu[ií]ta(?:le|lo|la)?|qu[ií]tal[eao]|elimin(?:a|ala|alo)|elim[ií]nal[eao]|borr(?:a|ala|alo)|b[oó]rral[eao]|agrega(?:le)?|agr[eé]gal[eao]|a[nñ]ade(?:le)?|a[nñ][aá]del[eao]|pon(?:le)?|recorta|colorea|restaura|anima|aplica(?:le)?|cartooniza|haz(?:lo|la|le))";
 const IM_DV="(?:dibuja(?:me)?|dib[uú]jame|dibujar|pinta|p[ií]ntame|pintar|ilustra|ilustr[aá]me|ilustrar)";
 const IM_DRAW=new RegExp(IM_P+IM_DV+"\\s+(?![^.\\n]*\\b(?:c[oó]digo|canvas|svg|python|javascript|html|css|tabla|gr[aá]fic[oa]|diagrama|funci[oó]n)\\b)\\S","i");
-const IM_CREATE=new RegExp(IM_P+"(?:"+IM_CV+"[^.\\n?!]{0,45}?\\b"+IM_N+"\\b|"+IM_WV+"\\s+(?:me\\s+)?(?:una|un|la|el)?\\s*"+IM_N+"\\b)","i");
+  const IM_CREATE=new RegExp(IM_P+"(?:"+IM_CV+"[^.\\n?!]{0,45}?\\b"+IM_N+"\\b|"+IM_WV+"\\s+(?:me\\s+)?(?:una|un|la|el)?\\s*"+IM_N+"\\b)","i");
 const IM_START=new RegExp("^[\\s\\u00a1!\\u00bf]*"+IM_N+"\\s+(?:de\\s+|del\\s+|con\\s+|:)?\\S+","i");
 const IM_EDITN=new RegExp(IM_P+IM_EV+"\\b[^.\\n?!]{0,50}?\\b(?:esta|esa|la|mi|ese|este|dicha|aquella)?\\s*"+IM_N+"\\b","i");
 const IM_EDITS=new RegExp(IM_P+IM_EV+"\\b","i");
@@ -696,7 +697,7 @@ else if((m=ch.match(/^(?:qu[ií]t(?:ale|ar(?:le)?)|elimin(?:ale|ar(?:le)?)|borr(
 else ch="con los cambios: "+ch;
 return String(base||"").replace(/[\s.]+$/,"")+", "+ch+", mantener el mismo estilo y escena"}
 function packImg(u,mx,q){return new Promise(res=>{if(!/^data:/.test(u))return res(u);const im=new Image();im.onload=()=>{const k=Math.min(1,(mx||768)/Math.max(im.width,im.height));const cv=document.createElement("canvas");cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);res(cv.toDataURL("image/jpeg",q||0.78))};im.onerror=()=>res(u);im.src=u})}
-async function genImage(c,d,prompt,ref,opt){opt=opt||{};
+  async function genImage(c,d,prompt,ref,opt){opt=opt||{};
 busy=true;stop=false;send.textContent="■";
 let url=null,why="";
 if(ref)ref=await packImg(ref,1280,0.9);
@@ -766,8 +767,6 @@ let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[],proj:newProj|
 c.msgs.push({role:"user",content:text});saveChats();renderList();
 if(!chat.querySelector(".msg"))chat.innerHTML="";
 bubble("user").textContent=text;
-// ===== FIN PARTE 7 =====
-  // ===== INICIO PARTE 8 =====
 const d=bubble("bot");d.innerHTML='<span class="dots">Buscando en internet…</span>';scroll();
 searchAndAsk(searchMatch[1],c,d);
 return}
@@ -784,7 +783,7 @@ if(intent==="noref"){const r="Para editar una imagen, adjúntala con el botón +
 let ref=intent==="edit"||intent==="improve"?(forcedRef||lastImgRef(c)):null;
 let imp=null;
 if(intent==="improve"||(intent==="edit"&&forcedRef)){const inf=forcedRef?infoForSrc(c,forcedRef):lastImgInfo(c);if(inf&&inf.prompt){imp=inf;ref=null}}
-forcedRef=null;
+  forcedRef=null;
 const d=bubble("bot");d.innerHTML='<span class="dots">'+(imp?"Mejorando imagen…":ref?"Editando imagen…":"Creando imagen…")+'</span>';scroll();
 if(imp){genImage(c,d,buildImprove(imp.prompt,text),null,{improved:true});return}
 genImage(c,d,imgCmd?imgCmd[1]:(ref?(text.replace(/^[\s\u00a1!\u00bf]*edita(?:me)?\s+esta\s+imagen[:,]?\s*/i,"").trim()||text):text),ref);
@@ -863,7 +862,7 @@ queue(c){this.pending[c.id]=c;clearTimeout(this.timer);this.timer=setTimeout(()=
 async flush(){
 if(!this.fb||!this.user)return;
 const items=Object.values(this.pending);this.pending={};
-for(const c of items){try{await this.fb.fs.setDoc(this.fb.fs.doc(this.fb.db,"users",this.user.uid,"chats",String(c.id)),this.pack(c))}catch(e){console.error(e);this.pending[c.id]=c}}},
+  for(const c of items){try{await this.fb.fs.setDoc(this.fb.fs.doc(this.fb.db,"users",this.user.uid,"chats",String(c.id)),this.pack(c))}catch(e){console.error(e);this.pending[c.id]=c}}},
 async remove(id){
 if(!this.on||!this.fb)return;
 try{await this.fb.fs.deleteDoc(this.fb.fs.doc(this.fb.db,"users",this.user.uid,"chats",String(id)))}catch(e){console.error(e)}},
