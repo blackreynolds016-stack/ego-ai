@@ -66,7 +66,7 @@ header button.icon:active{transform:scale(.96)}
 .chip .ic{flex-shrink:0;width:clamp(48px,13vw,54px);height:clamp(48px,13vw,54px);border-radius:50%;background:var(--raise);border:var(--raise-bd);box-shadow:var(--btn-sh);display:flex;align-items:center;justify-content:center;color:var(--text)}
 .chip .ic svg{width:52%;height:52%}
 .chip .tx{flex:1;min-width:0}
-.chip .tx b{display:block;font-size:clamp(15px,3.9vw,16.5px);font-weight:600;letter-spacing:-.2px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chip .tx b{display:block;font-size:clamp(15px,3.9vw,16.5px);font-weight:600;letter-spacing:-.2px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip .tx small{display:block;margin-top:5px;color:var(--muted);font-size:clamp(13px,3.4vw,14.5px)}
 .chip::after{content:"";flex-shrink:0;width:22px;height:22px;background:var(--text);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E") center/contain no-repeat}
 form{display:block;flex-shrink:0;max-width:760px;width:100%;margin:0 auto;padding:6px var(--padb) calc(18px + env(safe-area-inset-bottom,0));border:0;background:none}
@@ -135,7 +135,6 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 .msg hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 .msg blockquote{margin:0 0 10px;padding:4px 12px;border-left:3px solid var(--muted);color:var(--muted)}
 @media(min-width:720px){header{max-width:760px;width:100%;margin:0 auto}}
-
 #side{padding:calc(14px + env(safe-area-inset-top,0)) 16px calc(14px + env(safe-area-inset-bottom,0))}
 .sh{display:flex;align-items:center;justify-content:space-between;margin:2px 0 14px;flex-shrink:0}
 .sh h2{margin:0 0 0 4px;font-size:25px;font-weight:700;letter-spacing:-.5px}
@@ -210,9 +209,10 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 <form id="form">
 <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="photoInput" accept="image/*" style="display:none">
+<input type="file" id="videoInput" accept="video/*" style="display:none">
 <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.log,.js,.py,.html,.css,.xml,.yml,.yaml,.java,.kt,.ts,.sql,text/*,application/pdf" style="display:none">
 <div id="bar">
-<button class="ib" id="camBtn" type="button" title="Tomar foto"><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9ZM12 9.4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" fill="currentColor"/><circle cx="12" cy="12.9" r="1.5" fill="currentColor"/></svg></button>
+  <button class="ib" id="camBtn" type="button" title="Tomar foto"><svg viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9ZM12 9.4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" fill="currentColor"/><circle cx="12" cy="12.9" r="1.5" fill="currentColor"/></svg></button>
 <div id="inwrap"><textarea id="input" rows="1" placeholder="Mensaje…"></textarea>
 <button class="ib" id="micBtn" type="button" title="Hablar"><svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" fill="currentColor"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
 <button id="send" type="submit">➤</button></div>
@@ -222,11 +222,12 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 <div id="plusPanel">
 <button class="tile" id="tileCam" type="button"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1-1.6A1 1 0 0 1 9.86 5h4.28a1 1 0 0 1 .86.4L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z" fill="currentColor"/><circle cx="12" cy="13" r="3.2" fill="var(--panel)"/></svg><span>Cámara</span></button>
 <button class="tile" id="tilePhoto" type="button"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="currentColor"/><circle cx="9" cy="10" r="1.7" fill="var(--panel)"/><path d="M5 17.5l4.2-4.4 3 3 2.6-2.8 4.2 4.2" stroke="var(--panel)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fotos</span></button>
+<button class="tile" id="tileVideo" type="button"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="13" height="12" rx="3" fill="currentColor"/><path d="M17.2 10.3l3.8-2.2v7.8l-3.8-2.2z" fill="currentColor"/></svg><span>Video</span></button>
 <button class="tile" id="tileFile" type="button"><svg viewBox="0 0 24 24" fill="none"><path d="M16.5 6.5 8.4 14.6a3 3 0 0 0 4.24 4.24l8.1-8.1a5 5 0 0 0-7.07-7.07l-8.1 8.1a7 7 0 0 0 9.9 9.9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Archivos</span></button>
 </div>
 </div>
 </div>
-<div id="viewer"><img id="vimg" alt=""><div class="vb"><button id="vSave" type="button">⬇ Guardar</button><button id="vShare" type="button">⤴ Compartir</button><button id="vEdit" type="button">✎ Editar</button><button id="vClose" type="button">✕ Cerrar</button></div></div>
+<div id="viewer"><img id="vimg" alt=""><div class="vb"><button id="vSave" type="button">⬇ Guardar</button><button id="vShare" type="button">⤴ Compartir</button><button id="vEdit" type="button" style="display:none">✎ Editar</button><button id="vClose" type="button">✕ Cerrar</button></div></div>
 <div id="modal"><div id="modalBox"></div></div>
 <div id="toast"></div>
 <script>
@@ -244,15 +245,19 @@ function wHeaders(){return{"Content-Type":"application/json","X-Usuario-Correo":
 function wBody(o){o.correo=correoUsuario();return JSON.stringify(o)}
 /* Ense\u00f1ar a EGO ("Estudia esto: ..."): solo el creador puede; el Worker exige el token de sesi\u00f3n firmado por Google, as\u00ed que la app lo env\u00eda SOLO en esos mensajes */
 const RX_TEACH=/^[\s"'“”‘’«»¡!¿]*(?:(?:estudia|est[uú]dia|aprende|guarda en la biblioteca)(?:\s+(?:esto|eso|lo siguiente|que))?(?:\s+y\s+(?:aprend[eé]lo|apr[eé]ndelo|estud[ií]alo|est[uú]dialo))?(?:\s+(?:con|a)\s+(?:profundidad|fondo))?\s*:|(?:estudia|est[uú]dia|aprende)\s+(?:esto|eso|lo siguiente)(?:\s+y\s+(?:aprend[eé]lo|apr[eé]ndelo|estud[ií]alo|est[uú]dialo))?(?:\s+(?:con|a)\s+(?:profundidad|fondo))?[ \t]*[\r\n]|(?:borra|elimina)\s+la\s+lecci[oó]n\s*:)/i;
+const MSG_NO_APRENDE="EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
+const RX_LISTAR=/^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
+const esCmdAdmin=t=>RX_TEACH.test(t)||RX_LISTAR.test(t);
+function esAdminLocal(){try{return !!(Cloud.user&&String(Cloud.user.email||"").trim().toLowerCase()==="egoai.oficial2026@gmail.com")}catch(e){return false}}
 async function tokenSesion(){try{const u=Cloud.fb&&Cloud.fb.au&&Cloud.fb.au.currentUser;return u?await u.getIdToken():null}catch(e){return null}}
 async function wPost(o,signal){
 try{if(Array.isArray(o.messages)){const m=o.messages.slice().reverse().find(x=>x&&x.role==="user");
 const t=m?(typeof m.content==="string"?m.content:((Array.isArray(m.content)&&m.content.find(p=>p&&p.type==="text"))||{}).text||""):"";
-if(RX_TEACH.test(t)){const tk=await tokenSesion();if(tk)o.idToken=tk}}}catch(e){}
+if(esCmdAdmin(t)&&esAdminLocal()){const tk=await tokenSesion();if(tk)o.idToken=tk}}}catch(e){}
 return fetch(API,{method:"POST",headers:wHeaders(),body:wBody(o),signal:signal})}
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Resuelves tareas difíciles con conocimiento amplio. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Dentro de la app EGO AI tienes estas capacidades: crear y editar imágenes en alta calidad (el usuario escribe por ejemplo \"créame una imagen de…\" o adjunta una foto y dice qué cambiar), buscar en internet en tiempo real, razonamiento profundo, equipo de modelos y agente (se activan solos según lo que pidas, sin botones), memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto y fotos). Si el usuario pide algo de esto y te llega como mensaje normal, explícale cómo usarlo en vez de decir que no puedes.";
+const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Eres una IA especializada en programación, matemáticas, ciencias y creación de apps y juegos. Resuelves problemas difíciles con rigor, razonas paso a paso y entregas código completo que funciona. Lees y analizas imágenes y videos: texto, código, ecuaciones, errores en capturas y problemas en pantalla. Si te piden otro tema, dilo con amabilidad en una frase y ofrece ayuda dentro de tu especialidad. NO generas ni editas imágenes: si lo piden, explica que EGO AI ahora se dedica a código, matemáticas, ciencias y creaciones, y que sí puede analizar imágenes y videos. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Capacidades de la app: memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto), fotos y videos.";
 const P={
 normal:"",
 dev:" Eres ingeniero senior: código limpio, probado mentalmente, explicado paso a paso, con casos límite.",
@@ -331,18 +336,18 @@ else{close();out.push("<p>"+inl(line)+"</p>")}}
 close();return out.join("");}
 const scroll=()=>{chat.scrollTop=chat.scrollHeight};
 function bubble(role){const d=document.createElement("div");d.className="msg "+role;chat.appendChild(d);return d}
-function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(/!\[imagen\]\(/.test(text)?'<button data-a="saveimg" type="button">Guardar</button><button data-a="shareimg" type="button">Compartir</button><button data-a="editimg" type="button">Editar</button>':"")+(last&&!/^(Imagen (generada|editada)|\u2705 Versi\u00f3n mejorada|No pude)/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
+function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(/!\[imagen\]\(/.test(text)?'<button data-a="saveimg" type="button">Guardar</button><button data-a="shareimg" type="button">Compartir</button>':"")+(last&&!/^(Imagen (generada|editada)|\u2705 Versi\u00f3n mejorada|No pude)/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 function renderChat(){chat.innerHTML="";const c=cur();
 if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b>'+
-'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c.8 5.2 2.6 7.6 9.8 9.8-7.2 2.2-9 4.6-9.8 9.8-.8-5.2-2.6-7.6-9.8-9.8 7.2-2.2 9-4.6 9.8-9.8Z"/></svg></span><span class="tx"><b>Explícame algo difícil</b><small>de forma simple</small></span></button>'+
+'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c.8 5.2 2.6 7.6 9.8 9.8-7.2 2.2-9 4.6-9.8 9.8-.8-5.2-2.6-7.6-9.8-9.8 7.2-2.2 9-4.6 9.8-9.8Z"/></svg></span><span class="tx"><b>Resuélveme este problema de matemáticas:</b><small>escríbelo o sube una foto</small></span></button>'+
 '<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.6 4.8l-3.2 14.4"/></svg></span><span class="tx"><b>Escribe un código para...</b><small>o lo que necesites</small></span></button>'+
-'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3.2" fill="currentColor"/><circle cx="8.2" cy="9.2" r="1.7" fill="var(--panel)"/><path d="M4.6 17.4l5-4.7 3.2 3 2.6-2.6 4.6 4.3" stroke="var(--panel)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="tx"><b>/imagen un paisaje futuro</b><small>o una idea loca</small></span></button></div>';return}
+'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10.6-6.8c.6-.4.6-1.4 0-1.8L9.6 4.3C8.9 3.9 8 4.4 8 5.2Z"/></svg></span><span class="tx"><b>Crea un juego para el móvil que</b><small>completo y jugable</small></span></button></div>';return}
 c.msgs.forEach((m,i)=>{const d=bubble(m.role==="user"?"user":"bot");
 if(m.role==="user"){
 if(Array.isArray(m.content)){
 const txt=m.content.find(p=>p.type==="text");
 const img=m.content.find(p=>p.type==="image_url");
-d.innerHTML=(txt?esc(txt.text):"Foto enviada")+(img?'<img class="thumb" src="'+img.image_url.url+'">':"");
+d.innerHTML=(m.videoNote?"🎬 ":"")+(txt?esc(txt.text):"Foto enviada")+(img?'<img class="thumb" src="'+img.image_url.url+'">':"");
 }else{d.textContent=m.content}
 }else{finish(d,m.content,i===c.msgs.length-1)}});scroll()}
 document.getElementById("newchat").onclick=()=>{newProj=null;curId=null;renderList();renderChat();if(window.innerWidth<=640)toggleSide(true)};
@@ -373,7 +378,7 @@ micBtn.onclick=()=>{micBtn.classList.add("rec");try{rec.start()}catch(e){micBtn.
 }else{
 micBtn.onclick=()=>alert("Tu Android no soporta reconocimiento de voz en esta vista.");
 }
-const fileInput=document.getElementById("fileInput"),photoInput=document.getElementById("photoInput");
+const fileInput=document.getElementById("fileInput"),photoInput=document.getElementById("photoInput"),videoInput=document.getElementById("videoInput");
 const attachPreview=document.getElementById("attachPreview"),attachPreviewImg=document.getElementById("attachPreviewImg"),attachPreviewName=document.getElementById("attachPreviewName"),attachPreviewRemove=document.getElementById("attachPreviewRemove");
 let pendingAttachment=null;
 function shrink(dataUrl,cb){const im=new Image();im.onload=()=>{const mk=(max,q)=>{const k=Math.min(1,max/Math.max(im.width,im.height));const cv=document.createElement("canvas");cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);return cv.toDataURL("image/jpeg",q)};cb(mk(1024,0.8),mk(320,0.6))};im.onerror=()=>cb(dataUrl,dataUrl);im.src=dataUrl}
@@ -388,9 +393,38 @@ function updateSend(){const has=input.value.trim().length>0||!!pendingAttachment
 input.addEventListener("input",updateSend);
 new MutationObserver(updateSend).observe(send,{childList:true,characterData:true,subtree:true});
 attachPreviewRemove.onclick=()=>{pendingAttachment=null;attachPreview.style.display="none";updateSend()};
+/* Video: se toman fotogramas repartidos (6 a 10) y se mandan como imágenes en orden */
+function videoFrames(file){return new Promise((ok,fail)=>{
+const v=document.createElement("video");v.muted=true;v.playsInline=true;v.preload="auto";
+const url=URL.createObjectURL(file);let done=false,tmo=0;
+const end=(f,x)=>{if(done)return;done=true;clearTimeout(tmo);try{URL.revokeObjectURL(url)}catch(e){}try{v.removeAttribute("src");v.load()}catch(e){}f(x)};
+tmo=setTimeout(()=>end(fail,new Error("tiempo")),90000);
+v.onerror=()=>end(fail,new Error("formato"));
+v.onloadedmetadata=async()=>{try{
+const dur=isFinite(v.duration)?v.duration:0;if(!(dur>0))return end(fail,new Error("duracion"));
+const n=dur<=12?6:dur<=40?8:10;
+const vw=v.videoWidth||768,vh=v.videoHeight||432,k=Math.min(1,768/Math.max(vw,vh));
+const w=Math.max(1,Math.round(vw*k)),h=Math.max(1,Math.round(vh*k));
+const cv=document.createElement("canvas");cv.width=w;cv.height=h;const cx=cv.getContext("2d");
+const frames=[],times=[];let thumb="";
+for(let i=0;i<n;i++){const t=Math.max(0,Math.min(dur-0.05,(i+0.5)/n*dur));
+await new Promise(r=>{let s=false;const f=()=>{if(s)return;s=true;v.removeEventListener("seeked",f);r()};v.addEventListener("seeked",f);setTimeout(f,6000);v.currentTime=t});
+cx.drawImage(v,0,0,w,h);frames.push(cv.toDataURL("image/jpeg",0.72));times.push(Math.round(t*10)/10);
+if(i===0){const tk=Math.min(1,320/Math.max(w,h)),tc=document.createElement("canvas");tc.width=Math.max(1,Math.round(w*tk));tc.height=Math.max(1,Math.round(h*tk));tc.getContext("2d").drawImage(v,0,0,tc.width,tc.height);thumb=tc.toDataURL("image/jpeg",0.6)}}
+end(ok,{frames,times,dur,thumb})}catch(e){end(fail,e)}}
+v.src=url})}
+function handleVideo(file){
+toast("Preparando el video…",60000);
+videoFrames(file).then(r=>{toast("Video listo",1500);setAttachment(r.frames[0],file.name||"Video",true,undefined,r.thumb);
+pendingAttachment.isVideo=true;pendingAttachment.frames=r.frames;pendingAttachment.times=r.times;pendingAttachment.dur=r.dur;
+if(r.dur>300)setTimeout(()=>toast("El video es largo: analizo "+r.frames.length+" fotogramas repartidos. Para más detalle, sube un tramo corto.",6000),1700)})
+.catch(()=>toast("No pude leer ese video. Prueba con un MP4 más corto.",5000))}
+function videoNote(a){const f=x=>x>=60?Math.floor(x/60)+" min "+Math.round(x%60)+" s":(Math.round(x*10)/10)+" s";
+return"[Video de "+f(a.dur)+". Estos "+a.frames.length+" fotogramas son muestras en orden de tiempo (marcas: "+a.times.map(x=>x+"s").join(", ")+"). No es el video completo.]"}
 function handleFile(file){
 if(!file)return;
 const ext=(file.name.split(".").pop()||"").toLowerCase();
+if(file.type.startsWith("video/")||/^(mp4|mov|m4v|webm|3gp|mkv)$/.test(ext)){handleVideo(file);return}
 if(file.type.startsWith("image/")){
 const reader=new FileReader();
 reader.onload=()=>shrink(reader.result,(u,t)=>setAttachment(u,file.name,true,undefined,t));
@@ -407,6 +441,7 @@ reader.readAsText(file);
 }
 fileInput.onchange=()=>{handleFile(fileInput.files[0]);fileInput.value=""};
 photoInput.onchange=()=>{handleFile(photoInput.files[0]);photoInput.value=""};
+videoInput.onchange=()=>{handleFile(videoInput.files[0]);videoInput.value=""};
 camBtn.onclick=()=>camInput.click();
 camInput.onchange=()=>{
 const file=camInput.files[0];if(!file)return;
@@ -427,6 +462,7 @@ plusBtn.onclick=()=>plus();
 input.addEventListener("focus",()=>plus(false));
 document.getElementById("tileCam").onclick=()=>{plus(false);camInput.click()};
 document.getElementById("tilePhoto").onclick=()=>{plus(false);photoInput.click()};
+document.getElementById("tileVideo").onclick=()=>{plus(false);videoInput.click()};
 document.getElementById("tileFile").onclick=()=>{plus(false);fileInput.click()};
 if(window.visualViewport){const vv=window.visualViewport;
 const fit=()=>{if(vv.height<window.innerHeight-80){document.body.style.height=vv.height+"px";window.scrollTo(0,0)}else document.body.style.height="";setTimeout(scroll,30)};
@@ -483,7 +519,7 @@ addEventListener("error",e=>{ERRLOG.push(String(e.message||e).slice(0,160));if(E
 addEventListener("unhandledrejection",e=>{ERRLOG.push(String((e.reason&&e.reason.message)||e.reason||"promesa rechazada").slice(0,160));if(ERRLOG.length>10)ERRLOG.shift()});
 const LANGS={auto:["Automático",""],es:["Español","español"],en:["English","English"],pt:["Português","portugués"],fr:["Français","francés"],de:["Deutsch","alemán"],it:["Italiano","italiano"]};
 let curLang=ld("ego_lang","auto");if(!LANGS[curLang])curLang="auto";
-let Projs=ld("ego_proj",[]);if(!Array.isArray(Projs))Projs=[];let newProj=null;
+  let Projs=ld("ego_proj",[]);if(!Array.isArray(Projs))Projs=[];let newProj=null;
 const projOf=id=>Projs.find(p=>p.id===id);
 function saveProjs(){sv("ego_proj",Projs)}
 function projP(){const c=cur();const p=projOf((c&&c.proj)||newProj);return p&&p.inst?"\n\nEste chat pertenece al proyecto \u00ab"+p.name+"\u00bb. Sigue estas instrucciones del proyecto: "+p.inst:""}
@@ -530,7 +566,7 @@ showModal(mh("Ajustes")+'<div class="ml">'
 function openReport(){showModal(mh("Reporte de la app")+'<div class="ml"><p class="mu">Cuéntanos qué falló. El reporte llega al correo oficial de EGO AI e incluye datos técnicos del teléfono y los últimos errores de la app, sin tus mensajes.</p><textarea id="rpTxt" placeholder="Describe el problema…"></textarea><button class="pbtn" data-s="rp-mail" type="button">Enviar al correo oficial</button><button class="srow" data-s="rp-share" type="button"><span>Compartir de otra forma</span></button><button class="srow" data-s="rp-copy" type="button"><span>Copiar reporte</span></button></div>')}
 function reportText(){const d=(document.getElementById("rpTxt")||{}).value||"";
 return["REPORTE EGO AI","Fecha: "+new Date().toISOString(),"Pantalla: "+innerWidth+"x"+innerHeight+" @"+(window.devicePixelRatio||1),"Tema: "+document.documentElement.getAttribute("data-theme"),"Modo: "+currentPersona,"Idioma de respuestas: "+curLang,"Chats: "+chats.length+(Cloud.user?" (cuenta conectada)":""),"Navegador: "+navigator.userAgent,"","Errores recientes:",ERRLOG.length?ERRLOG.join("\n"):"(ninguno)","","Descripción:",d.trim()||"(sin descripción)"].join("\n")}
-async function copyText(t){try{await navigator.clipboard.writeText(t);return true}catch(e){try{const a=document.createElement("textarea");a.value=t;a.style.cssText="position:fixed;opacity:0";document.body.appendChild(a);a.select();const ok=document.execCommand("copy");a.remove();return ok}catch(_){return false}}}
+  async function copyText(t){try{await navigator.clipboard.writeText(t);return true}catch(e){try{const a=document.createElement("textarea");a.value=t;a.style.cssText="position:fixed;opacity:0";document.body.appendChild(a);a.select();const ok=document.execCommand("copy");a.remove();return ok}catch(_){return false}}}
 modalBox.addEventListener("click",async e=>{const b=e.target.closest("[data-s]");if(!b)return;const k=b.dataset.s;
 if(k==="th-light"||k==="th-dark"){setTheme(k==="th-dark"?"dark":"light");openSettings()}
 else if(k==="lang-toggle"){const o=document.getElementById("lOpts");const on=o.style.display!=="flex";o.style.display=on?"flex":"none";b.setAttribute("aria-expanded",on)}
@@ -610,7 +646,7 @@ async function maybeSummarize(c){
 const keep=24,upto=c.sumUpTo||0;
 if(summing.has(c.id)||c.msgs.length<keep+10||c.msgs.length-keep-upto<10)return;
 summing.add(c.id);
-try{const part=c.msgs.slice(upto,c.msgs.length-keep).map(m=>(m.role==="user"?"Usuario: ":"EGO: ")+noImg(Array.isArray(m.content)?((m.content.find(x=>x.type==="text")||{}).text||""):m.content).slice(0,1500)).join("\n");
+  try{const part=c.msgs.slice(upto,c.msgs.length-keep).map(m=>(m.role==="user"?"Usuario: ":"EGO: ")+noImg(Array.isArray(m.content)?((m.content.find(x=>x.type==="text")||{}).text||""):m.content).slice(0,1500)).join("\n");
 const r=await wPost({summarize:true,text:part,prev:c.summary||"",usuario:usuarioId()});
 const j=await r.json();if(j&&typeof j.summary==="string"&&j.summary){c.summary=j.summary;c.sumUpTo=c.msgs.length-keep;saveChats()}}catch(e){}
 summing.delete(c.id)}
@@ -626,7 +662,7 @@ const toastEl=document.getElementById("toast");let tt=0;
 function toast(m,ms){toastEl.textContent=m;toastEl.style.display="block";clearTimeout(tt);tt=setTimeout(()=>{toastEl.style.display="none"},ms||2800)}
 let ctrl=null;
 async function callAPI(messages,o){o=o||{};
-ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},170000);
+ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},290000);
 let tz="";try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){}
 try{const body={messages,tz,memory:memText(),usuario:usuarioId()};if(o.web)body.web=true;if(o.summary)body.summary=o.summary;
 const r=await wPost(body,ctrl.signal);
@@ -641,7 +677,7 @@ if(Array.isArray(j.used)&&j.used.length)out+="\n\n*⚙️ Usé: "+j.used.join(" 
 if(Array.isArray(j.warnings))for(const w of j.warnings)out+="\n\n⚠️ "+w;
 return out}catch(e){return null}finally{clearTimeout(tm);ctrl=null}}
 function apiHistory(c){const a=c.summary?c.msgs.slice(c.sumUpTo||0):c.msgs.slice(-30);
-return a.map((m,i)=>{if(Array.isArray(m.content))return i<a.length-1?{role:m.role,content:((m.content.find(p=>p.type==="text")||{}).text||"")+" [imagen omitida]"}:{role:m.role,content:m.content};const t=String(m.content).replace(/!\[[^\]]*\]\(data:image[^)]*\)/g,"[imagen generada]");const lim=(m.fileMsg&&i>=a.length-6)?40000:3000;return{role:m.role,content:t.length>lim?t.slice(0,lim)+"…":t}})}
+return a.map((m,i)=>{if(Array.isArray(m.content)){const tx=(m.content.find(p=>p.type==="text")||{}).text||"";return i<a.length-1?{role:m.role,content:tx+(m.videoNote?" [video omitido]":" [imagen omitida]")}:{role:m.role,content:m.videoNote?m.content.map(p=>p.type==="text"?{type:"text",text:m.videoNote+"\n\n"+p.text}:p):m.content}};const t=String(m.content).replace(/!\[[^\]]*\]\(data:image[^)]*\)/g,"[imagen generada]");const lim=(m.fileMsg&&i>=a.length-6)?40000:3000;return{role:m.role,content:t.length>lim?t.slice(0,lim)+"…":t}})}
 async function deliver(d,c,reply){
 if(reply===null){d.dataset.err="1";d.textContent=stop?"Respuesta detenida.":"No se pudo obtener respuesta. Revisa tu internet e inténtalo de nuevo.";
 d.insertAdjacentHTML("beforeend",'<div class="act"><button data-a="regen" type="button">Reintentar</button></div>')}
@@ -668,25 +704,10 @@ function infoForSrc(c,src){for(let i=c.msgs.length-1;i>=0;i--){const m=c.msgs[i]
    LEER (lee, transcribe, resume, explica, corrige, describe, "a texto"...) -> chat/visión
    EDITAR (cambia, mejora, edita, ponle, quítale...) -> modo imagen
    cualquier otra cosa con foto -> chat/visión */
-const RX_READ=/(?:\b(?:l[eé]e(?:me|lo|la|r)?|transcrib(?:e|eme|ir)|transcripci[oó]n|resum(?:e|eme|ir|en)|res[uú]men|explic(?:a|ame|ar)|expl[ií]came|corrig(?:e|eme|elo|ela|ir)|descri(?:be|beme|bir)|descr[ií]beme|qu[eé]\s+(?:dice|hay|ves|es|significa|pone)|extr(?:ae|aer|aeme)|analiza(?:r|me)?|anal[ií]zame|traduc(?:e|eme|ir)|resuelve(?:me)?|identifica|reconoce|ocr|cu[aá]nt[oa]s?|cu[aá]l(?:es)?|por\s+qu[eé]|d[oó]nde|qui[eé]n)\b|\b(?:convert(?:ir|ido)?|convi[eé]rte(?:lo|la|me)?|pasa(?:r|lo|la)?|p[aá]sa(?:lo|la)|transfor(?:ma|mar|m[aá]lo|m[aá]la))\b[^.\n?!]{0,40}\b(?:a|en|como)\s+(?:texto|word|pdf|excel|tabla|lista|c[oó]digo|markdown|datos)\b)/i;
+  const RX_READ=/(?:\b(?:l[eé]e(?:me|lo|la|r)?|transcrib(?:e|eme|ir)|transcripci[oó]n|resum(?:e|eme|ir|en)|res[uú]men|explic(?:a|ame|ar)|expl[ií]came|corrig(?:e|eme|elo|ela|ir)|descri(?:be|beme|bir)|descr[ií]beme|qu[eé]\s+(?:dice|hay|ves|es|significa|pone)|extr(?:ae|aer|aeme)|analiza(?:r|me)?|anal[ií]zame|traduc(?:e|eme|ir)|resuelve(?:me)?|identifica|reconoce|ocr|cu[aá]nt[oa]s?|cu[aá]l(?:es)?|por\s+qu[eé]|d[oó]nde|qui[eé]n)\b|\b(?:convert(?:ir|ido)?|convi[eé]rte(?:lo|la|me)?|pasa(?:r|lo|la)?|p[aá]sa(?:lo|la)|transfor(?:ma|mar|m[aá]lo|m[aá]la))\b[^.\n?!]{0,40}\b(?:a|en|como)\s+(?:texto|word|pdf|excel|tabla|lista|c[oó]digo|markdown|datos)\b)/i;
 const RX_EDIT=/\b(?:cambi(?:a|ar|ame|alo|ala|ale)|c[aá]mbial[eao]|modific(?:a|ar|ame|alo|ala)|modif[ií]cal[eao]|mejor(?:a|ar|ame|alo|ala)|mej[oó]ral[eao]|ed[ií]t(?:a|ar|ame|alo|ala)|edit[aá]|ret?oc(?:a|ar|ame|alo|ala)|pon(?:er|erlo|erla|erle|le|lo|la)?|p[oó]nl[eao]|qu[ií]t(?:a|ar|ale|alo|ala)|qu[ií]tal[eao]|elimin(?:a|ar|ale|alo|ala)|borr(?:a|ar|ale|alo|ala)|agr[eé]g(?:a|ar|ale|alo|ala)|a[nñ][aá]d(?:e|ir|ele|elo|ela)|a[nñ][aá]d[eé]l[eao]|h[aá]z(?:lo|la)|hacer(?:lo|la)|d[eé]j(?:a|alo|ala)|convi[eé]rt(?:e|elo|ela)|convert(?:ir|irlo|irla)|transf[oó]rm(?:a|alo|ala)|aclara|oscurece|aumenta|reduce|recorta|ampl[ií]a|colorea|pinta|rellena|difumina|desenfoca|enfoca|nitidez|restaura|repara|upscale|agranda|ilumina|satura)\b/i;
 const RX_TEXTY=/\b(?:texto|redacci[oó]n|ortograf[ií]a|gram[aá]tica|escrito|p[aá]rrafo|ensayo|respuesta|tarea|ejercicio|documento|resumen|traducci[oó]n)\b/i;
-function imgIntent(text,hasAtt,c){
-const t=String(text||"");
-if(hasAtt){
-if(RX_READ.test(t))return null;
-if(RX_TEXTY.test(t)&&!/\b(?:imagen|foto|fotograf[ií]a|dibujo|fondo)\b/i.test(t))return null;
-if(IM_ASKQ.test(t))return null;
-return(IM_CREATE.test(t)||IM_DRAW.test(t)||IM_EDITN.test(t)||RX_EDIT.test(t))?"edit":null}
-if(IM_CREATE.test(t)||IM_DRAW.test(t))return"gen";
-const info=lastImgInfo(c||{msgs:[]});
-const lastIsImg=!!(c&&c.msgs&&c.msgs.length&&/^(?:Imagen (?:generada|editada)|✅ Versión mejorada)/.test(String((c.msgs[c.msgs.length-1]||{}).content||"")));
-let wantsEdit=false;
-if(IM_EDITN.test(t))wantsEdit=true;
-else if(lastIsImg&&!RX_READ.test(t)&&!IM_ASKQ.test(t)&&(IM_EDITS.test(t)||RX_EDIT.test(t)))wantsEdit=true;
-if(wantsEdit){if(!info)return"noref";return info.prompt?"improve":"edit"}
-if(IM_START.test(t))return"gen";
-return null}
+function imgIntent(){return null}
 /* "Mejorar imagen" en el cliente: prompt original + cambios -> imagen nueva */
 function buildImprove(base,text){
 let ch=String(text||"").replace(/^[\s¡!¿]*(?:(?:por favor|porfa|oye|ahora|y)[,\s]+)*(?:(?:puedes|podr[ií]as|quiero que|necesito que)\s+)?(?:edita(?:me)?\s+esta\s+imagen[:,]?\s*)?/i,"").replace(/[\s.!?¡¿]+$/,"");
@@ -728,6 +749,7 @@ await deliver(d,c,reply);maybeSummarize(c)}
 document.getElementById("form").addEventListener("submit",e=>{e.preventDefault();plus(false);setTimeout(updateSend,0);
 if(busy){stop=true;if(ctrl)ctrl.abort();return}
 let text=input.value.trim();
+if(RX_TEACH.test(text)&&!esAdminLocal()){input.value="";input.style.height="auto";updateSend();if(!chat.querySelector(".msg"))chat.innerHTML="";finish(bubble("bot"),MSG_NO_APRENDE,false);scroll();return}
 if(pendingAttachment){
 const att=pendingAttachment;pendingAttachment=null;attachPreview.style.display="none";
 input.value="";input.style.height="auto";
@@ -741,10 +763,10 @@ const d=bubble("bot");d.innerHTML='<span class="dots">Editando imagen…</span>'
 genImage(c,d,text,att.dataUrl);
 return}
 if(att.isImage){
-const question=text||"Analiza esta imagen con detalle: describe qué ves y, si hay algún problema, error o duda visible, explícalo y ayúdame a resolverlo.";
-const userMsg={role:"user",content:[{type:"text",text:question},{type:"image_url",image_url:{url:att.dataUrl}}],thumb:att.thumb};
+const question=text||(att.isVideo?"Analiza este video con detalle: describe qué pasa de principio a fin y, si ves algo que parezca un problema, explícamelo.":"Analiza esta imagen con detalle: lee todo el texto que tenga, describe qué ves y, si hay algo que parezca un problema, explícamelo.");
+const userMsg=att.isVideo?{role:"user",content:[{type:"text",text:question}].concat(att.frames.map(u=>({type:"image_url",image_url:{url:u}}))),thumb:att.thumb,videoNote:videoNote(att)}:{role:"user",content:[{type:"text",text:question},{type:"image_url",image_url:{url:att.dataUrl}}],thumb:att.thumb};
 c.msgs.push(userMsg);saveChats();renderList();
-const ub=bubble("user");ub.innerHTML=esc(text||"Imagen enviada")+'<img class="thumb" src="'+(att.thumb||att.dataUrl)+'">';
+const ub=bubble("user");ub.innerHTML=(att.isVideo?"🎬 ":"")+esc(text||(att.isVideo?"Video enviado":"Imagen enviada"))+'<img class="thumb" src="'+(att.thumb||att.dataUrl)+'">';
 }else{
 const question=text||"Analiza este archivo, resume su contenido y ayúdame con cualquier problema que encuentres.";
 const prompt="Archivo adjunto: "+att.name+"\n\n"+att.rawText+"\n\n"+question;
@@ -755,11 +777,11 @@ ask();
 return}
 if(!text)return;
 input.value="";input.style.height="auto";
-{const mr=memCmd(text);
+{const mr=esCmdAdmin(text)?null:memCmd(text);
 if(mr){let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[],proj:newProj||undefined};chats.push(c);curId=c.id}
 if(!chat.querySelector(".msg"))chat.innerHTML="";
 chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
-c.msgs.push({role:"user",content:text});c.msgs.push({role:"assistant",content:mr});saveChats();renderList();
+  c.msgs.push({role:"user",content:text});c.msgs.push({role:"assistant",content:mr});saveChats();renderList();
 bubble("user").textContent=text;finish(bubble("bot"),mr,false);scroll();return}}
 const searchMatch=text.match(/^\/buscar\s+(.+)/i);
 if(searchMatch){
@@ -770,7 +792,7 @@ bubble("user").textContent=text;
 const d=bubble("bot");d.innerHTML='<span class="dots">Buscando en internet…</span>';scroll();
 searchAndAsk(searchMatch[1],c,d);
 return}
-const imgCmd=text.match(/^\/imagen\s+(.+)/i);
+const imgCmd=null;
 const cc=cur()||{msgs:[]};
 const intent=imgCmd?"gen":imgIntent(text,false,cc);
 if(intent){
@@ -868,7 +890,7 @@ if(!this.on||!this.fb)return;
 try{await this.fb.fs.deleteDoc(this.fb.fs.doc(this.fb.db,"users",this.user.uid,"chats",String(id)))}catch(e){console.error(e)}},
 async pull(){
 if(!this.fb||!this.user)return;
-try{const f=this.fb;
+  try{const f=this.fb;
 const snap=await f.fs.getDocs(f.fs.collection(f.db,"users",this.user.uid,"chats"));
 const remote={};snap.forEach(d=>{remote[d.id]=d.data()});
 let changed=false;
