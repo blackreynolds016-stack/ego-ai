@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v12.1.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v12.2.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -27,7 +27,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v12.1.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v12.2.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Solo trabajas en: código (cualquier lenguaje), depuración, algoritmos, matemáticas, física, química, biología y demás ciencias, y crear apps, juegos, páginas e interfaces. También respondes saludos y preguntas sobre ti.
@@ -846,7 +846,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "12.1.0",
+    version: "12.2.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -1005,6 +1005,33 @@ async function generarVoz(body, env, request) {
   }
 }
 
+
+// Lee la respuesta del modelo: formato por delimitadores (preferido) o JSON de respaldo.
+function leerProyectoModelo(raw) {
+  const t=String(raw||"").replace(/\r\n/g,"\n");
+  const rxIni=/^===\s*ARCHIVO:\s*(.+?)\s*===\s*$/gm;
+  const marcas=[]; let m;
+  while ((m=rxIni.exec(t))) marcas.push({ruta:m[1].trim().replace(/^[`'"]+|[`'"]+$/g,""),ini:m.index,fin:m.index+m[0].length});
+  if (marcas.length) {
+    const nombre=(t.match(/^PROYECTO:\s*(.+)$/m)||[])[1]||"";
+    const files=[]; const incompleto=!/===\s*FIN\s*===\s*$/.test(t.trim());
+    marcas.forEach((mk,i)=>{
+      const sig=i+1<marcas.length?marcas[i+1].ini:t.length;
+      let c=t.slice(mk.fin,sig);
+      const f=c.search(/^===\s*FIN\s*===\s*$/m);
+      const terminado=f>=0; if(terminado) c=c.slice(0,f);
+      if(!terminado && i===marcas.length-1 && incompleto) return; // último archivo cortado: se descarta
+      c=c.replace(/^\n/,"").replace(/\s+$/,"")+"\n";
+      const fence=c.match(/^```[a-zA-Z0-9]*\n([\s\S]*?)\n```\n?$/); if(fence) c=fence[1]+"\n";
+      files.push({path:mk.ruta,content:c});
+    });
+    return {name:nombre.trim(),description:"",files};
+  }
+  const j=extractJson(t);
+  if (j && Array.isArray(j.files)) return {name:j.name,description:j.description,files:j.files.filter(f=>f&&typeof f.path==="string")};
+  return null;
+}
+
 function safeProjectPath(path) {
   const p = String(path || "").replace(/\\/g, "/").replace(/^\/+/, "");
   if (!p || p.length > 180 || p.split("/").some(x => !x || x === "." || x === "..") || /[<>:"|?*\x00-\x1f]/.test(p)) return null;
@@ -1025,38 +1052,45 @@ async function generarProyecto(body, env, minecraft, request) {
   const kind = minecraft ? String(body.packType || "behavior").slice(0, 30) : String(body.kind || "web").slice(0, 40);
   const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 25 : 35)), 50));
   const system = minecraft
-    ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO como JSON válido, sin Markdown ni texto extra: {"name":"...","description":"...","files":[{"path":"...","content":"..."}]}.
+    ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO.
 Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y carpeta "RP/" (resource pack). Cada uno con su manifest.json (format_version 2, header con name, description, uuid, version [1,0,0], min_engine_version [1,21,0]; modules con su propio uuid distinto; el BP depende del RP y el RP del BP usando el uuid del header del otro, con version [1,0,0]). Todos los UUID deben ser v4 válidos y DISTINTOS entre sí.
 Ítems personalizados: BP/items/<nombre>.json con formato "minecraft:item" (format_version "1.21.0"), identificador con prefijo propio (por ejemplo ego:espada_trueno), componentes como minecraft:icon, minecraft:max_stack_size, minecraft:damage, minecraft:hand_equipped, minecraft:durability y minecraft:cooldown. Textos en RP/texts/es_ES.lang y RP/texts/en_US.lang y RP/texts/languages.json.
 Icono: NO puedes crear imágenes binarias. En RP/textures/item_texture.json apunta a una textura que ya exista en el juego (por ejemplo "textures/items/diamond_sword") para que no falte ninguna imagen; documenta en README.md cómo cambiarla por un PNG propio.
 Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script API con "@minecraft/server" en BP/scripts/main.js (módulo "script" en el manifest con language "javascript", entry "scripts/main.js", y dependencia @minecraft/server con una version estable). Para rayos usa dimension.spawnEntity("minecraft:lightning_bolt", ubicacion) o /summon; para partículas dimension.spawnParticle o RP/particles; para sonidos world.playSound o dimension.playSound. Escucha eventos como world.afterEvents.itemUse y world.afterEvents.entityHitEntity y comprueba que el ítem sea el tuyo. Añade cooldown y no uses APIs inventadas. Explica en README.md si hay que activar Experimentos (Beta APIs) y cómo instalarlo.
 Incluye todos los archivos con contenido completo, sin placeholders, sin binarios, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.`
-    : `Eres un arquitecto de software senior. Genera un proyecto ejecutable completo como JSON válido y sin Markdown: {"name":"...","description":"...","files":[{"path":"...","content":"..."}]}. Incluye README.md con instalación y ejecución, archivos de configuración, código completo y pruebas básicas cuando proceda. Elige una estructura simple y consistente con el stack solicitado. Máximo ${maxFiles} archivos. No incluyas placeholders, secretos, ni rutas absolutas.`;
+    : `Eres un arquitecto de software senior. Genera un proyecto ejecutable completo. Incluye README.md con instalación y ejecución, archivos de configuración, código completo y pruebas básicas cuando proceda. Elige una estructura simple y consistente con el stack solicitado. Máximo ${maxFiles} archivos. No incluyas placeholders, secretos, ni rutas absolutas.`;
+  const FORMATO = `\n\nFORMATO DE RESPUESTA (obligatorio, sin Markdown, sin explicaciones antes ni después): la primera línea es "PROYECTO: nombre-corto-sin-espacios". Después, para CADA archivo, escribe una línea exacta "=== ARCHIVO: ruta/relativa.ext ===", luego el contenido completo del archivo tal cual (sin comillas ni escapes, sin bloques de código) y termina con la línea exacta "=== FIN ===". Incluye README.md.`;
+  const system2 = system + FORMATO;
   const user = `Crea este proyecto con calidad profesional, funcional y adaptado a móvil cuando aplique. Solicitud: ${prompt}`;
-  let raw="", model="";
+  let model="", parsed=null; const intentos=[];
   try {
-    if (routerApiKey(env)) {
-      let lastError = null;
-      for (const chosen of openRouterCandidates(env, "code")) {
-        try {
-          const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method:"POST", headers:{"Authorization":`Bearer ${routerApiKey(env)}`,"Content-Type":"application/json","HTTP-Referer":env.OPENROUTER_SITE_URL||"https://ego-ai.app","X-Title":"EGO AI"},
-            body:JSON.stringify({model:chosen,messages:[{role:"system",content:system},{role:"user",content:user}],temperature:0.15,max_tokens:16000})
-          });
-          const data=await r.json().catch(()=>({}));
-          if(!r.ok) throw new Error(`OpenRouter HTTP ${r.status}: ${String(data?.error?.message||"error").slice(0,140)}`);
-          raw=salida(data); model=`openrouter:${chosen}`;
-          if (raw) break;
-        } catch (err) { lastError = err; }
-      }
-      if (!raw) throw lastError || new Error("Los modelos gratuitos no devolvieron contenido");
-    } else if (env.AI) {
+    const mensajes=[{role:"system",content:system2},{role:"user",content:user}];
+    const candidatos=[];
+    if (env.AI) {
       const cadena=env.PROJECT_CF_MODEL?[String(env.PROJECT_CF_MODEL),...CF_MODELS.codigo.filter(m=>m!==String(env.PROJECT_CF_MODEL))]:CF_MODELS.codigo;
-      const r=await cfChatSeguro(cadena,[{role:"system",content:system},{role:"user",content:user}],env,12000);
-      raw=r.content; model=r.model;
-    } else return respuestaJsonError("Configura Workers AI o OPENROUTER_API_KEY para generar proyectos.",503);
-    const parsed=extractJson(raw);
-    if(!parsed || !Array.isArray(parsed.files)) return json({error:"El modelo no devolvió un manifiesto de archivos válido. Reintenta con una solicitud más concreta.",model},502);
+      for (const m of cadena.slice(0,3)) candidatos.push({tipo:"cf",id:m});
+    }
+    if (routerApiKey(env)) for (const m of openRouterCandidates(env,"code").slice(0,2)) candidatos.push({tipo:"or",id:m});
+    if (!candidatos.length) return respuestaJsonError("Configura Workers AI o OPENROUTER_API_KEY para generar proyectos.",503);
+    const limite=Date.now()+230000;
+    for (const c of candidatos.slice(0,5)) {
+      if (Date.now()>limite) { intentos.push("se agotó el tiempo"); break; }
+      let raw="", etiqueta=c.tipo==="or"?`openrouter:${c.id}`:c.id;
+      try {
+        if (c.tipo==="cf") { const r=await cfChat(c.id,mensajes,env,12000); raw=r.content; }
+        else {
+          const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Authorization":`Bearer ${routerApiKey(env)}`,"Content-Type":"application/json","HTTP-Referer":env.OPENROUTER_SITE_URL||"https://ego-ai.app","X-Title":"EGO AI"},body:JSON.stringify({model:c.id,messages:mensajes,temperature:0.15,max_tokens:16000})});
+          const data=await r.json().catch(()=>({}));
+          if(!r.ok) throw new Error(`HTTP ${r.status} ${String(data?.error?.message||"").slice(0,80)}`);
+          raw=salida(data);
+        }
+      } catch(err) { intentos.push(`${etiqueta.split("/").pop()}: ${String(err?.message||err).slice(0,90)}`); continue; }
+      const p=leerProyectoModelo(raw);
+      const ok=p && p.files.length && (!minecraft || p.files.some(f=>/manifest\.json$/i.test(f.path)));
+      if (ok) { parsed=p; model=etiqueta; break; }
+      intentos.push(`${etiqueta.split("/").pop()}: ${raw?`respuesta no válida (${raw.length} caracteres)`:"respuesta vacía"}`);
+    }
+    if(!parsed) return json({error:"Ningún modelo devolvió un proyecto válido. Intentos: "+intentos.join(" | ").slice(0,420)+". Prueba de nuevo o con una petición más concreta.",intentos},502);
     const files=[]; const seen=new Set();
     for(const f of parsed.files.slice(0,maxFiles)) {
       const path=safeProjectPath(f?.path);
@@ -1204,7 +1238,7 @@ async function manejar(request, env) {
   const correoUsuario = obtenerCorreo(request, null);
 
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "12.1.0", aiConfigured: !!env.AI,
+    ok: true, version: "12.2.0", aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -1229,7 +1263,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v12.1.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v12.2.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -1299,7 +1333,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "12.1.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "12.2.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
