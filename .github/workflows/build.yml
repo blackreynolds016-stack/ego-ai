@@ -470,6 +470,92 @@ jobs:
                   }
               }
 
+              // ===== Archivos (zip, mcaddon, etc.): guardar en Descargas/EGO AI + notificacion =====
+              private Uri storeFile(byte[] bytes, String name, String mime) throws Exception {
+                  if (Build.VERSION.SDK_INT < 29) throw new Exception("requiere Android 10 o superior");
+                  ContentValues v = new ContentValues();
+                  v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                  v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+                  v.put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/EGO AI");
+                  v.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                  ContentResolver cr = getContext().getContentResolver();
+                  Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                  if (uri == null) throw new Exception("sin acceso a Descargas");
+                  OutputStream os = cr.openOutputStream(uri);
+                  os.write(bytes);
+                  os.close();
+                  ContentValues d = new ContentValues();
+                  d.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                  cr.update(uri, d, null, null);
+                  return uri;
+              }
+
+              private void notifyFile(Uri uri, String name, String mime) {
+                  try {
+                      Context c = getContext();
+                      android.app.NotificationManager nm = (android.app.NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+                      String ch = "ego_files";
+                      if (Build.VERSION.SDK_INT >= 26) {
+                          nm.createNotificationChannel(new android.app.NotificationChannel(ch, "Archivos de EGO AI", android.app.NotificationManager.IMPORTANCE_DEFAULT));
+                      }
+                      Intent open = new Intent(Intent.ACTION_VIEW);
+                      open.setDataAndType(uri, mime);
+                      open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                      int id = (int) (System.currentTimeMillis() % 100000);
+                      int fl = Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_IMMUTABLE : 0;
+                      android.app.PendingIntent pi = android.app.PendingIntent.getActivity(c, id, open, fl);
+                      android.app.Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new android.app.Notification.Builder(c, ch) : new android.app.Notification.Builder(c);
+                      b.setSmallIcon(android.R.drawable.stat_sys_download_done);
+                      b.setContentTitle("Archivo guardado");
+                      b.setContentText(name + " (Descargas/EGO AI)");
+                      b.setContentIntent(pi);
+                      b.setAutoCancel(true);
+                      nm.notify(id, b.build());
+                  } catch (Exception e) {
+                  }
+              }
+
+              @PluginMethod
+              public void saveFile(final PluginCall call) {
+                  try {
+                      String data = call.getString("data", "");
+                      String name = call.getString("name", "EGO-AI-" + System.currentTimeMillis());
+                      String mime = call.getString("mime", "application/octet-stream");
+                      int comma = data.indexOf(',');
+                      byte[] bytes = Base64.decode(comma >= 0 ? data.substring(comma + 1) : data, Base64.DEFAULT);
+                      Uri uri = storeFile(bytes, name, mime);
+                      notifyFile(uri, name, mime);
+                      JSObject r = new JSObject();
+                      r.put("uri", uri.toString());
+                      r.put("folder", "Descargas/EGO AI");
+                      call.resolve(r);
+                  } catch (Exception e) {
+                      call.reject("No se pudo guardar: " + e.getMessage());
+                  }
+              }
+
+              @PluginMethod
+              public void shareFile(final PluginCall call) {
+                  try {
+                      String data = call.getString("data", "");
+                      String name = call.getString("name", "EGO-AI-" + System.currentTimeMillis());
+                      String mime = call.getString("mime", "application/octet-stream");
+                      int comma = data.indexOf(',');
+                      byte[] bytes = Base64.decode(comma >= 0 ? data.substring(comma + 1) : data, Base64.DEFAULT);
+                      Uri uri = storeFile(bytes, name, mime);
+                      Intent i = new Intent(Intent.ACTION_SEND);
+                      i.setType(mime);
+                      i.putExtra(Intent.EXTRA_STREAM, uri);
+                      i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                      getActivity().startActivity(Intent.createChooser(i, "Compartir archivo"));
+                      JSObject r = new JSObject();
+                      r.put("uri", uri.toString());
+                      call.resolve(r);
+                  } catch (Exception e) {
+                      call.reject("No se pudo compartir: " + e.getMessage());
+                  }
+              }
+
               // Pinta las barras del sistema (arriba y abajo). Se puede llamar desde cualquier hilo.
               static void paint(final Activity act, final boolean dark, final int top, final int bottom) {
                   if (act == null) return;
