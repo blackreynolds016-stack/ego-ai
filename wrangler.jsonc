@@ -1,0 +1,14 @@
+{
+  "name": "proud-glade-48c1",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "keep_vars": true,
+  "observability": { "enabled": true },
+  "ai": { "binding": "AI" },
+  "kv_namespaces": [
+    { "binding": "EGO_BIBLIOTECA", "id": "e71e811e539c472cab662f213639ef84" },
+    { "binding": "EGO_MEMORY", "id": "2ee2b743aa2f43bc80d88cb0260a1072" },
+    { "binding": "EGO_PERFILES", "id": "4337829076ed45c3820b4baca7cc4a6e" },
+    { "binding": "EGO_PRO_USERS", "id": "02d6d5f2f3e244cf8c7a8e089e14fcf7" }
+  ]
+}
