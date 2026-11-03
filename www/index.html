@@ -759,12 +759,17 @@ if(RX_MCW.test(t)&&RX_MC.test(t))return"mc";
 if(RX_PROJ.test(t))return"proj";return null}
 function fmtKB(n){return n<1024?n+" B":(n/1024).toFixed(n<10240?1:0)+" KB"}
 function fileBtn(d,id){const f=FILES.get(id);if(!f)return;const a=d.querySelector(".act");
-const h='<button class="dlfile" data-id="'+id+'" type="button">⬇ Descargar '+esc(f.name)+" ("+fmtKB(f.blob.size)+')</button>';
+const h='<button class="dlfile" data-id="'+id+'" type="button">⬇ Descargar '+esc(f.name)+" ("+fmtKB(f.blob.size)+')</button><button class="shfile" data-id="'+id+'" type="button">⤴ Compartir</button>';
 if(a)a.insertAdjacentHTML("afterbegin",h);else d.insertAdjacentHTML("beforeend",'<div class="act">'+h+"</div>")}
-chat.addEventListener("click",async e=>{const b=e.target.closest(".dlfile");if(!b)return;const f=FILES.get(b.dataset.id);if(!f){toast("El archivo ya no está en memoria. Pídelo de nuevo.",4000);return}
+function blobB64(b){return new Promise((res,rej)=>{const f=new FileReader();f.onload=()=>res(String(f.result).split(",")[1]||"");f.onerror=()=>rej(new Error("lectura"));f.readAsDataURL(b)})}
+chat.addEventListener("click",async e=>{const b=e.target.closest(".dlfile,.shfile");if(!b)return;const f=FILES.get(b.dataset.id);if(!f){toast("El archivo ya no está en memoria. Pídelo de nuevo.",4000);return}
+const share=b.classList.contains("shfile");
+try{const data=await blobB64(f.blob);await nat("EgoNative",share?"shareFile":"saveFile",{data:data,name:f.name,mime:f.mime||"application/octet-stream"});
+toast(share?"Elige dónde compartirlo":"✅ Guardado en Descargas › EGO AI",5000);return}
+catch(x){if(/No se pudo/.test(String(x&&x.message))){toast(x.message,6000);return}}
 try{const file=new File([f.blob],f.name,{type:f.blob.type||"application/octet-stream"});
-if(navigator.canShare&&navigator.canShare({files:[file]})&&e.shiftKey!==true){try{await navigator.share({files:[file],title:f.name});return}catch(x){if(x&&x.name==="AbortError")return}}
-const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u;a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast("Descargando "+f.name+"…",3500)}catch(x){toast("No se pudo guardar el archivo",4000)}});
+if(share||(navigator.canShare&&navigator.canShare({files:[file]}))){if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:f.name});return}catch(x){if(x&&x.name==="AbortError")return}}}
+const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u;a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast("Descargando "+f.name+"… (si no aparece, usa Compartir)",5000)}catch(x){toast("No se pudo guardar el archivo",4000)}});
 async function genProject(c,d,text,kind){
 busy=true;stop=false;send.textContent="■";let blob=null,name="",why="",nfiles=0;
 try{ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},290000);
@@ -777,7 +782,7 @@ catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":"sin conexión con
 ctrl=null;
 if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";return}
 let reply,id=null;
-if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob});
+if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:/\.zip$/i.test(name)?"application/zip":"application/octet-stream"});
 reply="✅ Listo, creé tu "+(kind==="mc"?"add-on de Minecraft":"proyecto")+" con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n"+
 (kind==="mc"?"Pulsa el botón de descarga. Para instalarlo en Minecraft Bedrock abre el archivo **.mcaddon** con Minecraft (o renómbralo si tu teléfono lo guardó como .zip), activa **Experimentos** si el add-on usa Script API y crea un mundo con los packs activados.\n\n":"Pulsa el botón de descarga y descomprime el .zip; dentro hay un README.md con las instrucciones.\n\n")+
 "_Revisa y prueba el resultado: lo escribió una IA y puede tener errores. El archivo se guarda solo mientras la app esté abierta._"}
