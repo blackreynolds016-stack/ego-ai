@@ -1,7 +1,7 @@
 {
   "name": "proud-glade-48c1",
   "main": "worker.js",
-  "compatibility_date": "2025-09-01",
+  "compatibility_date": "2026-10-06",
   "keep_vars": true,
   "observability": { "enabled": true },
   "ai": { "binding": "AI" },
