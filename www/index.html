@@ -707,7 +707,16 @@ function infoForSrc(c,src){for(let i=c.msgs.length-1;i>=0;i--){const m=c.msgs[i]
   const RX_READ=/(?:\b(?:l[eé]e(?:me|lo|la|r)?|transcrib(?:e|eme|ir)|transcripci[oó]n|resum(?:e|eme|ir|en)|res[uú]men|explic(?:a|ame|ar)|expl[ií]came|corrig(?:e|eme|elo|ela|ir)|descri(?:be|beme|bir)|descr[ií]beme|qu[eé]\s+(?:dice|hay|ves|es|significa|pone)|extr(?:ae|aer|aeme)|analiza(?:r|me)?|anal[ií]zame|traduc(?:e|eme|ir)|resuelve(?:me)?|identifica|reconoce|ocr|cu[aá]nt[oa]s?|cu[aá]l(?:es)?|por\s+qu[eé]|d[oó]nde|qui[eé]n)\b|\b(?:convert(?:ir|ido)?|convi[eé]rte(?:lo|la|me)?|pasa(?:r|lo|la)?|p[aá]sa(?:lo|la)|transfor(?:ma|mar|m[aá]lo|m[aá]la))\b[^.\n?!]{0,40}\b(?:a|en|como)\s+(?:texto|word|pdf|excel|tabla|lista|c[oó]digo|markdown|datos)\b)/i;
 const RX_EDIT=/\b(?:cambi(?:a|ar|ame|alo|ala|ale)|c[aá]mbial[eao]|modific(?:a|ar|ame|alo|ala)|modif[ií]cal[eao]|mejor(?:a|ar|ame|alo|ala)|mej[oó]ral[eao]|ed[ií]t(?:a|ar|ame|alo|ala)|edit[aá]|ret?oc(?:a|ar|ame|alo|ala)|pon(?:er|erlo|erla|erle|le|lo|la)?|p[oó]nl[eao]|qu[ií]t(?:a|ar|ale|alo|ala)|qu[ií]tal[eao]|elimin(?:a|ar|ale|alo|ala)|borr(?:a|ar|ale|alo|ala)|agr[eé]g(?:a|ar|ale|alo|ala)|a[nñ][aá]d(?:e|ir|ele|elo|ela)|a[nñ][aá]d[eé]l[eao]|h[aá]z(?:lo|la)|hacer(?:lo|la)|d[eé]j(?:a|alo|ala)|convi[eé]rt(?:e|elo|ela)|convert(?:ir|irlo|irla)|transf[oó]rm(?:a|alo|ala)|aclara|oscurece|aumenta|reduce|recorta|ampl[ií]a|colorea|pinta|rellena|difumina|desenfoca|enfoca|nitidez|restaura|repara|upscale|agranda|ilumina|satura)\b/i;
 const RX_TEXTY=/\b(?:texto|redacci[oó]n|ortograf[ií]a|gram[aá]tica|escrito|p[aá]rrafo|ensayo|respuesta|tarea|ejercicio|documento|resumen|traducci[oó]n)\b/i;
-function imgIntent(){return null}
+const RX_NOIMG=/\b(?:c[oó]digo|canvas|svg|python|javascript|html|css|tabla|gr[aá]fic[oa]|diagrama|funci[oó]n|juego|app\b|aplicaci[oó]n|p[aá]gina|sitio|add-?on|addon|minecraft|script|programa|bot\b|api\b|zip)\b/i;
+function imgIntent(text,hasAtt,c){
+text=String(text||"");
+if(hasAtt){if(RX_READ.test(text)&&!/\b(?:cambi|pon|quit|edit|modific|agreg|a[nñ]ad|elimin|borr|colore|retoc|mejor)/i.test(text))return null;
+return(RX_EDIT.test(text)||IM_EDITS.test(text)||IM_ANYE.test(text)||/\\bquiero que\\b[^.\\n]{0,60}\\b(?:tenga|sea|est[eé]|quede|se vea|lleve|use|salga)\\b|\\bcolor\\b|\\bde color\\b|\\bmodific/i.test(text))?"edit":null}
+if(IM_ASKQ.test(text))return null;
+if(RX_NOIMG.test(text)&&!/\b(?:imagen|foto|dibujo|ilustraci[oó]n|logo|p[oó]ster|wallpaper)\b/i.test(text))return null;
+if(IM_CREATE.test(text)||IM_DRAW.test(text)||IM_START.test(text)){if(RX_NOIMG.test(text)&&/\b(?:c[oó]digo|html|css|svg|canvas|python|javascript)\b/i.test(text))return null;return"gen"}
+if(IM_EDITN.test(text)||(IM_ANYE.test(text)&&c&&lastImgRef(c)&&text.length<120&&!RX_TEXTY.test(text)&&!RX_NOIMG.test(text)))return lastImgRef(c)?"edit":"noref";
+return null}
 /* "Mejorar imagen" en el cliente: prompt original + cambios -> imagen nueva */
 function buildImprove(base,text){
 let ch=String(text||"").replace(/^[\s¡!¿]*(?:(?:por favor|porfa|oye|ahora|y)[,\s]+)*(?:(?:puedes|podr[ií]as|quiero que|necesito que)\s+)?(?:edita(?:me)?\s+esta\s+imagen[:,]?\s*)?/i,"").replace(/[\s.!?¡¿]+$/,"");
@@ -721,11 +730,11 @@ function packImg(u,mx,q){return new Promise(res=>{if(!/^data:/.test(u))return re
 async function genImage(c,d,prompt,ref,opt){opt=opt||{};
 busy=true;stop=false;send.textContent="■";
 let url=null,why="";
-if(ref)ref=await packImg(ref,1280,0.9);
+if(ref)ref=await packImg(ref,512,0.9);
 try{ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},140000);
-try{const r=await wPost(ref?{editImage:true,imageBase64:ref,prompt:prompt,usuario:usuarioId()}:{image:true,prompt:prompt,usuario:usuarioId()},ctrl.signal);
+try{const r=await wPost(ref?{action:"image_edit",image:ref,prompt:prompt,usuario:usuarioId()}:{action:"image_generate",prompt:prompt,usuario:usuarioId()},ctrl.signal);
 if(r.ok){const j=await r.json();
-if(j&&typeof j.image==="string"&&j.image)url=j.image;
+if(j&&typeof j.image==="string"&&j.image)url=j.image;else if(j&&typeof j.imageUrl==="string"&&j.imageUrl)url=j.imageUrl;
 else if(j&&typeof j.reply==="string")why="old";
 else if(j&&j.error)why=String(j.error)+(!j.credit&&Array.isArray(j.detail)&&j.detail.length?" — "+j.detail.slice(0,3).join(" | "):"");
 else why="respuesta vacía"}else why="el worker respondió con error "+r.status}finally{clearTimeout(tm)}}catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":"sin conexión con el worker"}
@@ -737,6 +746,44 @@ reply=(opt.improved?"\u2705 Versi\u00f3n mejorada: ":ref?"Imagen editada: ":"Ima
 else{reply="No pude "+(ref?"editar":opt.improved?"mejorar":"crear")+" la imagen."+(why==="old"?"\n\nTu worker de Cloudflare todavía es la versión vieja: pega el worker.js nuevo (Edit code) y pulsa Deploy.":(why?"\n\nMotivo: "+why:""))}
 c.msgs.push(url?{role:"assistant",content:reply,imgPrompt:prompt}:{role:"assistant",content:reply});saveChats();renderList();
 finish(d,reply,true);
+busy=false;stop=false;send.textContent="➤";scroll()}
+
+/* ===== Proyectos y add-ons: el Worker devuelve un archivo (zip / mcaddon) ===== */
+const FILES=new Map();
+const RX_VERBO=/\b(?:cre(?:a|ar|ame|es|arme)|cr[eé]ame|haz(?:me)?|hacer|hagas|genera(?:r|me)?|gen[eé]rame|constru(?:ye|ir|yeme)|prog(?:rama|ramar)|desarroll(?:a|ar)|dame|quiero|necesito|armar?me?|prepara(?:me)?)\b/i;
+const RX_MC=/\b(?:add-?on|addon|mcaddon|mcpack|behaviou?r pack|resource pack|pack de (?:comportamiento|recursos)|mod)\b/i;
+const RX_MCW=/\bminecraft|bedrock\b/i;
+const RX_PROJ=/\b(?:proyecto\s+completo|app\s+nativa|aplicaci[oó]n\s+nativa|app\s+(?:de\s+)?android|aplicaci[oó]n\s+(?:de\s+)?android|apk|en\s+(?:un\s+)?zip|archivo\s+zip|con\s+todos\s+los\s+archivos|en\s+archivos)\b/i;
+function proyectoIntent(t){t=String(t||"");if(IM_ASKQ.test(t)||!RX_VERBO.test(t))return null;
+if(RX_MCW.test(t)&&RX_MC.test(t))return"mc";
+if(RX_PROJ.test(t))return"proj";return null}
+function fmtKB(n){return n<1024?n+" B":(n/1024).toFixed(n<10240?1:0)+" KB"}
+function fileBtn(d,id){const f=FILES.get(id);if(!f)return;const a=d.querySelector(".act");
+const h='<button class="dlfile" data-id="'+id+'" type="button">⬇ Descargar '+esc(f.name)+" ("+fmtKB(f.blob.size)+')</button>';
+if(a)a.insertAdjacentHTML("afterbegin",h);else d.insertAdjacentHTML("beforeend",'<div class="act">'+h+"</div>")}
+chat.addEventListener("click",async e=>{const b=e.target.closest(".dlfile");if(!b)return;const f=FILES.get(b.dataset.id);if(!f){toast("El archivo ya no está en memoria. Pídelo de nuevo.",4000);return}
+try{const file=new File([f.blob],f.name,{type:f.blob.type||"application/octet-stream"});
+if(navigator.canShare&&navigator.canShare({files:[file]})&&e.shiftKey!==true){try{await navigator.share({files:[file],title:f.name});return}catch(x){if(x&&x.name==="AbortError")return}}
+const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u;a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast("Descargando "+f.name+"…",3500)}catch(x){toast("No se pudo guardar el archivo",4000)}});
+async function genProject(c,d,text,kind){
+busy=true;stop=false;send.textContent="■";let blob=null,name="",why="",nfiles=0;
+try{ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},290000);
+try{const r=await wPost({action:kind==="mc"?"minecraft_generate":"project_generate",prompt:text,usuario:usuarioId()},ctrl.signal);
+const ct=r.headers.get("content-type")||"";
+if(r.ok&&/zip|octet-stream/.test(ct)){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
+const cd=r.headers.get("content-disposition")||"";const m=cd.match(/filename="?([^";]+)"?/i);name=m?m[1]:(kind==="mc"?"ego-addon.mcaddon":"ego-proyecto.zip")}
+else{let j=null;try{j=await r.json()}catch(x){}why=(j&&j.error)?String(j.error):"el Worker respondió con error "+r.status}}finally{clearTimeout(tm)}}
+catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":"sin conexión con el Worker"}
+ctrl=null;
+if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";return}
+let reply,id=null;
+if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob});
+reply="✅ Listo, creé tu "+(kind==="mc"?"add-on de Minecraft":"proyecto")+" con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n"+
+(kind==="mc"?"Pulsa el botón de descarga. Para instalarlo en Minecraft Bedrock abre el archivo **.mcaddon** con Minecraft (o renómbralo si tu teléfono lo guardó como .zip), activa **Experimentos** si el add-on usa Script API y crea un mundo con los packs activados.\n\n":"Pulsa el botón de descarga y descomprime el .zip; dentro hay un README.md con las instrucciones.\n\n")+
+"_Revisa y prueba el resultado: lo escribió una IA y puede tener errores. El archivo se guarda solo mientras la app esté abierta._"}
+else reply="No pude crear el archivo."+(why?"\n\nMotivo: "+why:"");
+c.msgs.push({role:"assistant",content:reply});saveChats();renderList();
+finish(d,reply,true);if(id)fileBtn(d,id);
 busy=false;stop=false;send.textContent="➤";scroll()}
 async function searchAndAsk(query,c,d){
 busy=true;stop=false;send.textContent="■";
@@ -792,6 +839,14 @@ bubble("user").textContent=text;
 const d=bubble("bot");d.innerHTML='<span class="dots">Buscando en internet…</span>';scroll();
 searchAndAsk(searchMatch[1],c,d);
 return}
+{const pk=proyectoIntent(text);
+if(pk){let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[],proj:newProj||undefined};chats.push(c);curId=c.id}
+if(!chat.querySelector(".msg"))chat.innerHTML="";
+chat.querySelectorAll(".act button[data-a=regen]").forEach(b=>b.remove());
+c.msgs.push({role:"user",content:text});saveChats();renderList();
+bubble("user").textContent=text;
+const d=bubble("bot");d.innerHTML='<span class="dots">'+(pk==="mc"?"Creando tu add-on… puede tardar uno o dos minutos":"Creando tu proyecto… puede tardar uno o dos minutos")+'</span>';scroll();
+genProject(c,d,text,pk);return}}
 const imgCmd=null;
 const cc=cur()||{msgs:[]};
 const intent=imgCmd?"gen":imgIntent(text,false,cc);
@@ -804,7 +859,7 @@ bubble("user").textContent=text;
 if(intent==="noref"){const r="Para editar una imagen, adjúntala con el botón + (Fotos o Cámara) y dime qué quieres cambiar.";c.msgs.push({role:"assistant",content:r});saveChats();finish(bubble("bot"),r,true);scroll();return}
 let ref=intent==="edit"||intent==="improve"?(forcedRef||lastImgRef(c)):null;
 let imp=null;
-if(intent==="improve"||(intent==="edit"&&forcedRef)){const inf=forcedRef?infoForSrc(c,forcedRef):lastImgInfo(c);if(inf&&inf.prompt){imp=inf;ref=null}}
+if(false){const inf=forcedRef?infoForSrc(c,forcedRef):lastImgInfo(c);if(inf&&inf.prompt){imp=inf;ref=null}}
 forcedRef=null;
 const d=bubble("bot");d.innerHTML='<span class="dots">'+(imp?"Mejorando imagen…":ref?"Editando imagen…":"Creando imagen…")+'</span>';scroll();
 if(imp){genImage(c,d,buildImprove(imp.prompt,text),null,{improved:true});return}
