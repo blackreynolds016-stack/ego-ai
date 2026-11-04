@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v12.2.1 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v13.0.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -28,11 +28,11 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v12.2.1, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v13.0.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
-1. Solo trabajas en: código (cualquier lenguaje), depuración, algoritmos, matemáticas, física, química, biología y demás ciencias, y crear apps, juegos, páginas e interfaces. También respondes saludos y preguntas sobre ti.
-2. Si la petición es de otro tema, dilo en una sola frase amable y ofrece ayuda dentro de tu especialidad. No hagas la tarea fuera de tema.
+1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
+2. Si la petición es de otro tema cotidiano (consejos, redacción, estudio, ideas), ayuda igualmente de forma útil y breve. Rechaza con amabilidad solo lo dañino: malware, ataques o espionaje a terceros, acoso, engaños, contenido sexual explícito o cualquier cosa ilegal; ofrece siempre una alternativa segura.
 3. La aplicación puede generar imágenes mediante action=image_generate, editar imágenes originales mediante action=image_edit, crear texturas 2D para modelos 3D mediante action=texture_generate y generar voz mediante action=tts o action=addon_voice. No afirmes que ejecutaste una generación si no se invocó esa acción. Minecraft: SIEMPRE Bedrock (Android, Windows, consolas), nunca Java ni Forge/Fabric. Si piden un add-on, di que la app lo crea como archivo .mcaddon cuando el usuario escribe algo como «crea un add-on para Minecraft con …»; no pegues código Java. Puedes analizar imágenes y videos enviados en el chat.
 
 === CÓMO PIENSAS Y TRABAJAS ===
@@ -212,7 +212,7 @@ const STOP = new Set("para como esta este esto esos esas pero porque cuando dond
 // ============================================================
 // 🏫 CURRÍCULO BASE (lecciones que ya trae EGO de fábrica; el creador puede añadir más)
 // ============================================================
-const BASE_VERSION = "1";
+const BASE_VERSION = "2";
 const BASE_LECCIONES = [
 {
   titulo: "Juegos web de alta calidad (técnica)",
@@ -353,6 +353,171 @@ addEventListener('pointerdown',()=>{if(state!=='play')reset()});requestAnimation
     "Está organizada y se entiende a la primera.",
     "Indica próximos pasos o recomendaciones accionables.",
     "Reconoce incertidumbre con honestidad."
+  ],
+  original: ""
+},
+{
+  titulo: "Minecraft Bedrock: add-ons completos (referencia técnica)",
+  claves: ["minecraft","bedrock","addon","add-on","mcaddon","mcpack","behavior pack","resource pack","manifest","script api","item","espada","arma","bloque","entidad","mob","receta","loot","particulas","rayos","poderes","habilidad","herramienta","armadura","mod"],
+  resumen: "Cómo construir un add-on de Minecraft Bedrock (Android, Windows, consolas) con behavior pack + resource pack enlazados, ítems personalizados y Script API, listo para importar como .mcaddon.",
+  reglas: [
+    "Minecraft es SIEMPRE Bedrock aquí: nunca Java, Forge ni Fabric. Un add-on son DOS carpetas en la raíz del paquete: BP/ (behavior pack) y RP/ (resource pack), cada una con su manifest.json. Nunca pongas archivos sueltos en la raíz.",
+    "manifest.json: format_version 2; header con name, description, uuid, version [1,0,0] y min_engine_version [1,21,0] (ajústalo si el usuario dice su versión). Todos los UUID (headers y módulos) deben ser UUID v4 distintos entre sí. El BP depende del RP y el RP del BP usando el uuid del header del otro pack.",
+    "BP modules: {type:'data'} y, si hay scripts, {type:'script', language:'javascript', entry:'scripts/main.js'} más la dependencia {module_name:'@minecraft/server', version:'<versión estable reciente>'}. No uses módulos beta salvo que haga falta; si usas @minecraft/server-ui o similares, declara también su dependencia.",
+    "Ítems personalizados: BP/items/<nombre>.json con format_version '1.21.0', 'minecraft:item' > description.identifier con prefijo propio (ej. ego:espada_trueno) y menu_category {category:'equipment', group:'minecraft:itemGroup.name.sword'}; components típicos: minecraft:icon, minecraft:max_stack_size, minecraft:hand_equipped, minecraft:damage, minecraft:durability, minecraft:enchantable.",
+    "Icono y textura: no puedes crear imágenes binarias. En RP/textures/item_texture.json apunta a una textura que ya existe en el juego (ej. textures/items/diamond_sword) para que nunca falte una imagen, y explica en el README cómo cambiarla por un PNG propio (16x16 o 32x32) en RP/textures/items/.",
+    "Nombres visibles: RP/texts/en_US.lang y RP/texts/es_ES.lang con la línea item.<identificador>=Nombre, y RP/texts/languages.json con ['en_US','es_ES']. Sin esto el ítem aparece con el identificador en crudo.",
+    "Poderes y efectos (rayos, partículas, sonidos, habilidades) van en BP/scripts/main.js con Script API: import { world, system } from '@minecraft/server'. Eventos útiles: world.afterEvents.itemUse (usar el ítem; ev.source es el jugador, ev.itemStack el ítem) y world.afterEvents.entityHitEntity (golpear; ev.damagingEntity, ev.hitEntity). Comprueba siempre itemStack.typeId === tu identificador.",
+    "Rayo: dimension.spawnEntity('minecraft:lightning_bolt', ubicacion). Apuntar: jugador.getEntitiesFromViewDirection({maxDistance:30}) (devuelve lista con .entity) o jugador.getBlockFromViewDirection({maxDistance:30}) (devuelve algo con .block, puede ser undefined). Partículas: dimension.spawnParticle('minecraft:totem_particle', ubicacion) usando solo partículas que existan. Sonido: jugador.playSound('random.explode').",
+    "Enfriamiento (cooldown) y control: guarda el último uso por jugador en un Map con system.currentTick; evita que un solo uso dispare mil rayos; usa system.runTimeout / system.runInterval para efectos retardados. Envuelve el código de eventos en try/catch y no uses APIs inventadas: si dudas de una API, usa un comando (jugador.runCommand('summon lightning_bolt ~ ~ ~')) que sí existe.",
+    "Entidades, recetas y loot: BP/entities/*.json (format_version '1.21.0'), BP/recipes/*.json (minecraft:recipe_shaped con pattern, key, result) y BP/loot_tables/. Para mobs nuevos con modelo propio hace falta un RP con geometría y textura; si no puedes crearlas, usa un mob vanilla modificado y dilo.",
+    "Entrega: lista completa de archivos con su contenido (nada de '...'), un README.md con instalación (abrir el .mcaddon con Minecraft, activar ambos packs en el mundo, activar Experimentos/Funciones creativas solo si algo no aparece), cómo probarlo (/give @s ego:espada_trueno) y qué se puede personalizar."
+  ],
+  calidad: [
+    "Los dos manifest.json son JSON válido, con UUID v4 distintos y dependencias cruzadas correctas.",
+    "Cada ítem tiene identificador con prefijo, icono resuelto a una textura existente y nombre en es_ES y en_US.",
+    "El script solo usa APIs reales de @minecraft/server, comprueba el ítem y tiene cooldown.",
+    "No hay archivos sueltos en la raíz ni binarios inventados.",
+    "El README explica instalación, prueba y personalización en pocos pasos."
+  ],
+  original:
+`EJEMPLO MÍNIMO QUE FUNCIONA (adáptalo):
+BP/items/espada_trueno.json
+{"format_version":"1.21.0","minecraft:item":{"description":{"identifier":"ego:espada_trueno","menu_category":{"category":"equipment","group":"minecraft:itemGroup.name.sword"}},"components":{"minecraft:icon":{"textures":{"default":"ego_espada_trueno"}},"minecraft:max_stack_size":1,"minecraft:hand_equipped":true,"minecraft:damage":8,"minecraft:durability":{"max_durability":1500}}}}
+RP/textures/item_texture.json
+{"resource_pack_name":"ego","texture_name":"atlas.items","texture_data":{"ego_espada_trueno":{"textures":"textures/items/diamond_sword"}}}
+RP/texts/en_US.lang  ->  item.ego:espada_trueno=Thunder Sword
+BP/scripts/main.js
+import { world, system } from "@minecraft/server";
+const espera = new Map();
+world.afterEvents.itemUse.subscribe((ev) => {
+  const j = ev.source;
+  if (ev.itemStack.typeId !== "ego:espada_trueno") return;
+  if ((espera.get(j.id) ?? 0) > system.currentTick) return;
+  espera.set(j.id, system.currentTick + 40);
+  const objetivo = j.getEntitiesFromViewDirection({ maxDistance: 30 })[0]?.entity;
+  const lugar = objetivo ? objetivo.location : j.getBlockFromViewDirection({ maxDistance: 30 })?.block?.location;
+  if (!lugar) return;
+  j.dimension.spawnEntity("minecraft:lightning_bolt", lugar);
+  j.playSound("random.explode");
+});`
+},
+{
+  titulo: "Ciberseguridad defensiva y ética",
+  claves: ["ciberseguridad","seguridad","hackeo","hackear","hackeado","contrasena","contraseña","phishing","malware","virus","vpn","owasp","vulnerabilidad","inyeccion","sql injection","xss","csrf","cifrado","2fa","pentest","ctf","firewall","privacidad","cuenta robada","estafa","enlace sospechoso"],
+  resumen: "Cómo proteger cuentas, apps y redes, revisar código por vulnerabilidades y aprender seguridad de forma legal, sin ayudar a atacar a nadie.",
+  reglas: [
+    "Enfoque defensivo y educativo: explicas cómo funcionan los ataques para que la persona se proteja, y siempre dentro de la ley y con autorización (sus propios sistemas o laboratorios legales).",
+    "No creas malware, ransomware, keyloggers, exploits listos para usar, phishing, robo de cuentas, espionaje ni evasión de seguridad contra terceros, aunque lo pidan 'para aprender'. Ofrece la alternativa segura: laboratorios legales (TryHackMe, Hack The Box, OverTheWire, PortSwigger Web Security Academy, DVWA/Juice Shop en local).",
+    "Revisión de código: busca los fallos del OWASP Top 10 (inyección SQL/comandos, XSS, autenticación rota, control de acceso, secretos en el código, deserialización insegura, SSRF, configuración insegura, dependencias vulnerables). Muestra la línea débil, el riesgo y el código corregido.",
+    "Buenas prácticas al programar: validar y escapar toda entrada, consultas parametrizadas, hash de contraseñas con bcrypt/argon2 (nunca MD5/SHA1 solos), HTTPS, cabeceras de seguridad, mínimo privilegio, secretos en variables de entorno o gestores (nunca en GitHub ni en el frontend), CORS restringido, límites de peticiones y registros sin datos sensibles.",
+    "Cuentas y teléfono: contraseñas largas y únicas con gestor de contraseñas, verificación en dos pasos (preferir app autenticadora o llave física sobre SMS), revisar sesiones activas, actualizar el sistema, instalar apps solo de tiendas oficiales y desconfiar de permisos innecesarios.",
+    "Enlaces, mensajes y archivos sospechosos: enseña señales de phishing (urgencia, remitente raro, dominio parecido, pedir claves o códigos). Nunca pidas ni guardes contraseñas o códigos de la persona. Sugiere verificar con el sitio oficial escrito a mano y analizar con herramientas como VirusTotal.",
+    "Si le hackearon una cuenta: cambiar la contraseña desde un dispositivo limpio, cerrar todas las sesiones, activar 2FA, revisar correo de recuperación y reglas de reenvío, avisar a contactos, usar el formulario oficial de recuperación de la plataforma y vigilar movimientos bancarios.",
+    "Redes y privacidad: cambiar la clave por defecto del router, WPA2/WPA3, no usar WiFi público para operaciones sensibles sin VPN confiable, y explicar que una VPN no da anonimato total.",
+    "Aprendizaje: ruta clara (redes, Linux, programación web, criptografía básica, OWASP, CTF) con recursos gratuitos y proyectos prácticos en laboratorio propio.",
+    "Sé honesto con el riesgo: no prometas seguridad total, indica qué mitiga cada medida y qué no."
+  ],
+  calidad: [
+    "Ayuda a protegerse, no a atacar; deja claro el límite legal sin sermonear.",
+    "Da pasos concretos y ordenados que la persona puede hacer hoy.",
+    "En revisión de código señala el fallo exacto y entrega la versión corregida.",
+    "No inventa vulnerabilidades ni herramientas."
+  ],
+  original: ""
+},
+{
+  titulo: "Maestro de matemáticas y ciencias",
+  claves: ["matematicas","matemáticas","algebra","álgebra","calculo","cálculo","derivada","integral","ecuacion","ecuación","geometria","trigonometria","probabilidad","estadistica","fisica","física","quimica","química","biologia","biología","ciencias","problema","ejercicio","formula","demuestra","teorema","examen","tarea","despejar","unidades"],
+  resumen: "Cómo enseñar y resolver matemáticas y ciencias paso a paso, verificando el resultado y adaptándose al nivel del estudiante.",
+  reglas: [
+    "Identifica el nivel (primaria, secundaria, bachillerato, universidad) y el dato pedido; reescribe el problema con sus datos y la incógnita antes de resolver.",
+    "Resuelve paso a paso, un paso por línea, nombrando la regla o fórmula que usas y por qué; no saltes pasos algebraicos que un estudiante necesita ver.",
+    "Escribe las matemáticas en texto claro y legible en móvil: x^2, sqrt(x), a/b, (a+b)/(c-d), pi, ∫, Σ, y usa un renglón por operación. Evita notaciones que se rompen en pantallas pequeñas.",
+    "Verifica siempre: sustituye la solución en la ecuación original, comprueba unidades y orden de magnitud, y comenta si el resultado es razonable. Marca claramente la respuesta final.",
+    "Física y química: lista datos con unidades (SI), escribe la fórmula, despeja con símbolos antes de reemplazar números, cuida cifras significativas y balancea ecuaciones químicas comprobando átomos a ambos lados.",
+    "Estadística y probabilidad: define el espacio muestral o el modelo, nombra la distribución y sus supuestos, y interpreta el resultado en palabras.",
+    "Para demostraciones: enuncia qué se quiere probar, elige el método (directo, contradicción, inducción) y cierra con la conclusión.",
+    "Si la persona quiere aprender, no solo copiar: explica la idea, da un ejemplo parecido resuelto, y propone un ejercicio corto para practicar con su corrección posterior.",
+    "Si un enunciado es ambiguo o faltan datos, dilo y plantea la interpretación más razonable en lugar de inventar valores. Nunca inventes un resultado: si no puedes asegurarlo, indícalo.",
+    "Ciencias en general: explica con analogías simples, distingue hecho de teoría, y cuando hables de datos o descubrimientos recientes indica que conviene verificarlos en una fuente actual."
+  ],
+  calidad: [
+    "El resultado es correcto y está comprobado.",
+    "Cada paso se entiende sin saltos.",
+    "La respuesta final está marcada y con unidades.",
+    "Se adapta al nivel de la persona y propone práctica."
+  ],
+  original: ""
+},
+{
+  titulo: "Conversación, ligue y relaciones con respeto",
+  claves: ["ligar","ligue","coquetear","coqueteo","conquistar","chico","chica","me gusta","cita","salir","tinder","bumble","hinge","mensaje","conversacion","conversación","pareja","crush","enamorar","rechazo","primera cita","perfil","amistad","ex","reconquistar"],
+  resumen: "Cómo ayudar a alguien a conocer gente, escribir mensajes naturales y tener citas, con honestidad, consentimiento y respeto.",
+  reglas: [
+    "Ayudas a cualquier persona, de cualquier género u orientación, a conversar mejor y a conocer a alguien. El objetivo es conexión real, no manipulación: nada de engaños, presión, insistencia, juegos psicológicos, celos ni técnicas para 'conseguir' a alguien contra su voluntad.",
+    "Consentimiento primero: enseña a leer señales (respuestas cortas o tardías suelen ser desinterés), a aceptar un no con elegancia y a no insistir. Si la otra persona dijo que no, la respuesta es respetar y seguir adelante.",
+    "Si la persona parece menor de 18 años, no ayudes con ligue romántico ni con contenido sexual; ofrece consejos de amistad, respeto y hablar con una persona adulta de confianza.",
+    "Antes de escribir mensajes pregunta lo mínimo útil: ¿cómo se conocieron (app, escuela, trabajo, amigos)?, ¿qué intereses tienen en común?, ¿qué tono quieres (divertido, tierno, directo)? Si ya lo dijo, ve directo.",
+    "Entrega 2 o 3 opciones de mensaje cortas y naturales, con distinto tono, escritas como las escribiría una persona real (sin frases robadas ni cursilerías forzadas), y explica en una línea por qué funcionan.",
+    "Principios que funcionan: ser auténtico, mostrar curiosidad por la otra persona, hacer preguntas abiertas sobre sus intereses, humor ligero, propuestas concretas y fáciles de aceptar (un café, una caminata) y no escribir ni demasiado ni demasiado poco.",
+    "Perfiles de apps: ayuda a elegir fotos claras y sonrientes, redactar una bio breve con personalidad y detalles específicos en lugar de clichés, y a evitar mentir en edad, fotos o intenciones.",
+    "Primera cita: lugar público y cómodo, avisar a un amigo, llegar a tiempo, escuchar más de lo que hablas, estar presente sin el celular y terminar con claridad (me gustó verte, ¿repetimos?).",
+    "Rechazo y nervios: normaliza que pasa, enfoca en aprender y no en culparse, y propone pasos pequeños. Si hay ansiedad fuerte o tristeza persistente, sugiere con cariño hablar con alguien de confianza o un profesional.",
+    "Límites: no escribes contenido sexual explícito, no ayudas a acosar, vigilar, espiar o chantajear a nadie, ni a engañar a una pareja. Si una situación parece de abuso o control, dilo con claridad y sugiere buscar apoyo.",
+    "Mantén un tono cálido, cercano y sin juicios; respeta la identidad y las preferencias de la persona."
+  ],
+  calidad: [
+    "Los mensajes suenan naturales, propios de la persona y respetuosos.",
+    "Pregunta lo mínimo y entrega opciones útiles enseguida.",
+    "Promueve honestidad y consentimiento, sin manipulación.",
+    "Es cálida y práctica, no sermonea."
+  ],
+  original: ""
+},
+{
+  titulo: "Apps y webs completas: del móvil a producción",
+  claves: ["app","aplicacion","aplicación","pagina web","página web","sitio web","web","pwa","landing","tienda","calculadora","tareas","todo","dashboard","formulario","android","kotlin","capacitor","react","nativa","apk","pantalla","login","base de datos","api","zip","proyecto completo","backend"],
+  resumen: "Cómo crear apps y sitios completos, bonitos y funcionales: una web de un solo archivo, una PWA o un proyecto multiarchivo en ZIP.",
+  reglas: [
+    "Decide el formato: para una app o web que se abre de inmediato, entrega UN archivo HTML completo (HTML+CSS+JS, sin librerías externas); para algo grande (varias pantallas, backend, app Android) recomienda el proyecto completo en ZIP y dile al usuario que escriba, por ejemplo: 'crea un proyecto completo de app nativa Android de ...' para recibirlo como archivo.",
+    "Mobile-first: viewport correcto, botones de al menos 44 px, tipografía legible, modo oscuro con prefers-color-scheme, y layout con flex/grid que no se rompa a 360 px de ancho.",
+    "Estructura limpia: estado en un objeto, funciones pequeñas con una sola responsabilidad (render, acciones, almacenamiento), sin variables globales sueltas, y nombres claros en español o inglés de forma consistente.",
+    "Persistencia: localStorage o IndexedDB envueltos en try/catch, con datos iniciales sensatos y botón de exportar/borrar. Valida y escapa todo lo que el usuario escribe antes de mostrarlo (textContent en vez de innerHTML).",
+    "Estados completos: vacío, cargando, error y éxito; mensajes de error comprensibles; ningún botón que no haga nada; nada de 'aquí va tu código'.",
+    "Accesibilidad básica: etiquetas en formularios, contraste suficiente, foco visible y atributos aria donde hagan falta.",
+    "Diseño: paleta coherente (3 colores), espaciado consistente, esquinas redondeadas, sombras suaves, transiciones cortas y un solo punto de énfasis por pantalla; que parezca una app real, no una demo.",
+    "Apps Android nativas: ofrece Kotlin + Jetpack Compose (o Capacitor/WebView si se quiere reutilizar la web); incluye estructura de carpetas, build.gradle, AndroidManifest con solo los permisos necesarios, y cómo compilar con Android Studio o GitHub Actions.",
+    "APIs y backend: Cloudflare Workers (gratis y rápidos) con KV o D1 para datos; nunca pongas claves en el frontend; valida entradas y limita peticiones.",
+    "Antes de entregar revisa mentalmente: ¿abre sin errores?, ¿funciona en móvil?, ¿se guardan los datos?, ¿se puede reiniciar?, ¿las rutas y archivos mencionados existen?"
+  ],
+  calidad: [
+    "Funciona al abrirlo, sin errores de consola y sin partes omitidas.",
+    "Se ve profesional y cómodo en móvil.",
+    "Maneja errores y estados vacíos.",
+    "Si es grande, se entrega como proyecto con README de instalación."
+  ],
+  original: ""
+},
+{
+  titulo: "Scripts y automatización robustos",
+  claves: ["script","automatizar","automatizacion","automatización","bot","python","bash","termux","node","cron","scraping","archivos","renombrar","cli","linea de comandos","powershell","macro","tarea programada","json","csv","excel"],
+  resumen: "Cómo escribir scripts útiles y seguros en Python, Bash o JavaScript que se puedan ejecutar de verdad, incluso desde el móvil con Termux.",
+  reglas: [
+    "Pregunta o deduce dónde se ejecutará (PC, Termux en Android, servidor, Cloudflare Worker) y entrega un script completo que corra tal cual, con las instrucciones exactas para instalarlo y lanzarlo.",
+    "Estructura: constantes de configuración arriba, funciones pequeñas, una función main(), argumentos de línea de comandos (argparse en Python, process.argv en Node) y mensajes de ayuda en español.",
+    "Robustez: manejo de errores con mensajes claros, validación de entradas, rutas con pathlib, codificación UTF-8, tiempos de espera y reintentos en red, y salidas que no borren datos sin confirmar.",
+    "Seguridad: nunca pongas claves en el script; léelas de variables de entorno. No ejecutes cadenas de texto como código ni construyas comandos de shell con entrada sin validar.",
+    "Idempotencia y registro: que ejecutarlo dos veces no duplique trabajo; registra lo que hace con logging; ofrece un modo de prueba (--dry-run) para acciones destructivas.",
+    "Rendimiento: procesa archivos grandes por partes, usa generadores y evita cargar todo en memoria; respeta los límites de las páginas web (robots.txt, términos y pausas entre peticiones).",
+    "Limítate a automatizaciones legítimas: no hagas scripts para acceso no autorizado, spam, fraude, evasión de pagos o acoso.",
+    "Cierra con un ejemplo de uso real y la salida esperada, y sugiere cómo programarlo (cron, Tareas programadas, Termux:Boot) si tiene sentido."
+  ],
+  calidad: [
+    "El script corre tal cual y hace lo pedido.",
+    "Falla con mensajes claros y no destruye datos.",
+    "No contiene secretos ni ejecuta entrada sin validar.",
+    "Incluye cómo instalarlo y usarlo."
   ],
   original: ""
 }
@@ -774,11 +939,32 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
   } finally { clearTimeout(timer); }
 }
 
+async function visionOpenRouter(messages, env) {
+  const model = openRouterCandidates(env, "vision")[0];
+  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${routerApiKey(env)}`, "Content-Type": "application/json", "HTTP-Referer": env.OPENROUTER_SITE_URL || "https://ego-ai.app", "X-Title": "EGO AI" },
+    body: JSON.stringify({ model, messages: messages.map(m => ({ role: ["system", "user", "assistant"].includes(m?.role) ? m.role : "user", content: m.content })), max_tokens: 4000, temperature: 0.2 })
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`OpenRouter HTTP ${r.status}: ${String(data?.error?.message || "error").slice(0, 100)}`);
+  const content = salida(data);
+  if (!content) throw new Error("OpenRouter devolvió una respuesta vacía");
+  return { content, model: `openrouter:${model}` };
+}
 async function cfVision(messages, env) {
-  if (!env.AI) throw new Error("AI no disponible");
-  const r = await cfChat(CF_MODELS.vision[0], messages, env, 4000);
-  if (!r.content) throw new Error("el modelo de visión no devolvió texto");
-  return r;
+  let ultimo = null;
+  if (env.AI) {
+    try {
+      const r = await cfChat(CF_MODELS.vision[0], messages, env, 4000);
+      if (r.content) return r;
+      ultimo = new Error("el modelo de visión no devolvió texto");
+    } catch (e) { ultimo = e; }
+  }
+  if (routerApiKey(env)) {
+    try { return await visionOpenRouter(messages, env); } catch (e) { ultimo = e; }
+  }
+  throw ultimo || new Error("visión no disponible");
 }
 
 // ---------- Imágenes y fotogramas de video ----------
@@ -847,7 +1033,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "12.2.1",
+    version: "13.0.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -898,19 +1084,61 @@ function imagenResultado(result, model) {
   return { image: `data:image/png;base64,${image}`, model, mimeType: "image/png" };
 }
 
+
+// FLUX.2 [klein] 4B en Workers AI recibe "multipart" (prompt, width, height, input_image_0...).
+const dimImg = (v, d) => { const n = Math.round(Number(v) / 16) * 16; return Number.isFinite(n) && n >= 256 ? Math.min(n, 1536) : d; };
+async function correrFlux(env, model, prompt, width, height, ref) {
+  const form = new FormData();
+  form.append("prompt", prompt);
+  form.append("width", String(width));
+  form.append("height", String(height));
+  if (ref) form.append("input_image_0", new Blob([ref.bytes], { type: ref.mime }), ref.nombre);
+  const ser = new Response(form);
+  try {
+    return await env.AI.run(model, { multipart: { body: ser.body, contentType: ser.headers.get("content-type") } });
+  } catch (e1) {
+    if (ref) throw e1;                                   // la edición no tiene alternativa en JSON
+    console.warn("flux_multipart", String(e1?.message || e1).slice(0, 140));
+    return await env.AI.run(model, { prompt, width, height });
+  }
+}
+
+
+// Reescribe la idea del usuario (en cualquier idioma) como un prompt profesional en inglés para FLUX.
+async function mejorarPromptImagen(prompt, env) {
+  if (!env.AI || prompt.length > 1200) return prompt;
+  try {
+    const r = await cfChat(MODELO_RAPIDO, [
+      { role: "system", content: "You are an expert prompt engineer for FLUX text-to-image models. Rewrite the user's idea (any language) as ONE detailed English prompt of 60 to 110 words: main subject and action, setting, composition and camera angle, lens, lighting, color palette, art style, and quality cues (sharp focus, natural anatomy, coherent perspective, clean details). Keep EVERY detail the user asked for and never contradict it. Do not put any written words or text inside the image unless the user explicitly asks. Output ONLY the prompt, with no quotes or explanations." },
+      { role: "user", content: prompt }
+    ], env, 300);
+    const t = String(r.content || "").replace(/^["'\s]+|["'\s]+$/g, "").replace(/\s+/g, " ");
+    return t.length >= 30 && t.length <= 1600 ? t : prompt;
+  } catch { return prompt; }
+}
+
 async function generarImagen(body, env) {
   const prompt = String(body.prompt || "").trim().slice(0, 5000);
   if (!prompt) return respuestaJsonError("Falta prompt.");
-  const enhanced = promptImagenProfesional(prompt, body);
+  const mejorado = body.mejorar === false ? prompt : await mejorarPromptImagen(prompt, env);
+  const enhanced = promptImagenProfesional(mejorado, body);
   // Workers AI FLUX.2 Klein ofrece generación y edición con referencia. Se usa primero
   // si está disponible; se conserva el fallback de proveedores ya configurado.
   if (env.AI) {
     const model = String(env.IMAGE_MODEL || "@cf/black-forest-labs/flux-2-klein-4b");
     try {
-      const result = await env.AI.run(model, { prompt: enhanced, width: 1024, height: 1024 });
+      const result = await correrFlux(env, model, enhanced, dimImg(body.width, 1024), dimImg(body.height, 1024));
       const out = imagenResultado(result, model);
       if (out) return json(out);
     } catch (e) { console.warn("cf_image_generate", String(e?.message || e).slice(0, 160)); }
+    // Respaldo: FLUX.1 schnell (JSON simple) si el modelo principal falla o se queda sin cuota.
+    if (!env.IMAGE_MODEL) {
+      try {
+        const r2 = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt: enhanced.slice(0, 2000), steps: 8 });
+        const out2 = imagenResultado(r2, "@cf/black-forest-labs/flux-1-schnell");
+        if (out2) return json({ ...out2, respaldo: true });
+      } catch (e) { console.warn("cf_image_schnell", String(e?.message || e).slice(0, 160)); }
+    }
   }
   if (routerApiKey(env) && env.OPENROUTER_IMAGE_MODEL) {
     try {
@@ -942,11 +1170,9 @@ async function editarImagen(body, env) {
   if (bytes.byteLength > 2_000_000) return respuestaJsonError("La imagen para edición debe pesar menos de 2 MB. Redúcela en la app antes de enviarla.",413);
   const model = String(env.IMAGE_EDIT_MODEL || "@cf/black-forest-labs/flux-2-klein-4b");
   try {
-    const form = new FormData();
-    form.append("prompt", `Edit the provided original image. Preserve the original subject, identity, framing, and all areas not requested to change. Apply only this change: ${prompt}. Do not replace the image with an unrelated new scene.`);
-    form.append("input_image_0", new Blob([bytes], {type:source.mime}), source.mime === "image/jpeg" ? "input.jpg" : source.mime === "image/webp" ? "input.webp" : "input.png");
-    const serialized = new Response(form);
-    const result = await env.AI.run(model, { multipart: { body: serialized.body, contentType: serialized.headers.get("content-type") } });
+    const promptEd = `Edit the provided original image. Preserve the original subject, identity, framing, and all areas not requested to change. Apply only this change: ${prompt}. Do not replace the image with an unrelated new scene.`;
+    const nombre = source.mime === "image/jpeg" ? "input.jpg" : source.mime === "image/webp" ? "input.webp" : "input.png";
+    const result = await correrFlux(env, model, promptEd, dimImg(body.width, 1024), dimImg(body.height, 768), { bytes, mime: source.mime, nombre });
     const out = imagenResultado(result, model);
     if (!out) return json({error:"El modelo de edición no devolvió una imagen."},502);
     return json({...out, edited:true, preservesOriginalReference:true});
@@ -964,7 +1190,7 @@ async function generarTextura(body, env) {
   if (!env.AI) return respuestaJsonError("La generación de texturas requiere Workers AI (AI).",503);
   const model = String(env.TEXTURE_MODEL || env.IMAGE_MODEL || "@cf/black-forest-labs/flux-2-klein-4b");
   try {
-    const result = await env.AI.run(model, {prompt:texturePrompt,width:1024,height:1024});
+    const result = await correrFlux(env, model, texturePrompt, 1024, 1024);
     const out = imagenResultado(result,model);
     if (!out) return json({error:"El modelo no devolvió una textura."},502);
     return json({...out,texture:true,logicalSize:size,format:"png",tileableRequested:true,notes:"La imagen es una textura 2D para aplicar a un modelo 3D. Verifica los bordes y conviértela a la resolución exacta con un editor de píxeles antes de incluirla en el pack."});
@@ -1061,7 +1287,9 @@ Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script 
 Incluye todos los archivos con contenido completo, sin placeholders, sin binarios, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.`
     : `Eres un arquitecto de software senior. Genera un proyecto ejecutable completo. Incluye README.md con instalación y ejecución, archivos de configuración, código completo y pruebas básicas cuando proceda. Elige una estructura simple y consistente con el stack solicitado. Máximo ${maxFiles} archivos. No incluyas placeholders, secretos, ni rutas absolutas.`;
   const FORMATO = `\n\nFORMATO DE RESPUESTA (obligatorio, sin Markdown, sin explicaciones antes ni después): la primera línea es "PROYECTO: nombre-corto-sin-espacios". Después, para CADA archivo, escribe una línea exacta "=== ARCHIVO: ruta/relativa.ext ===", luego el contenido completo del archivo tal cual (sin comillas ni escapes, sin bloques de código) y termina con la línea exacta "=== FIN ===". Incluye README.md.`;
-  const system2 = system + FORMATO;
+  const guiaLec = BASE_LECCIONES.find(l => l.titulo.startsWith(minecraft ? "Minecraft Bedrock" : "Apps y webs completas"));
+  const guiaTxt = guiaLec ? "\n\nGUÍA TÉCNICA OBLIGATORIA (síguela):\n- " + guiaLec.reglas.join("\n- ") + (guiaLec.original ? "\n\n" + guiaLec.original : "") : "";
+  const system2 = system + guiaTxt + FORMATO;
   const user = `Crea este proyecto con calidad profesional, funcional y adaptado a móvil cuando aplique. Solicitud: ${prompt}`;
   let model="", parsed=null; const intentos=[];
   try {
@@ -1103,7 +1331,7 @@ Incluye todos los archivos con contenido completo, sin placeholders, sin binario
     const readmeExists=files.some(f=>/^README\.md$/i.test(f.path));
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
     const avisos=minecraft?repararAddon(files):[];
-    if(avisos.length){const ix=files.findIndex(f=>/^README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n";}
+    if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n";}
     const zip=await createZip(files);
     return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Model":model,"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
   } catch(e) {
@@ -1118,6 +1346,15 @@ const RX_UUID4=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 function nuevoUuid(){return crypto.randomUUID();}
 function repararAddon(files){
   const avisos=[]; const usados=new Map(); const cambios=new Map();
+  // Un .mcaddon son carpetas de packs en la raíz; los archivos sueltos de la raíz confunden a Minecraft.
+  const carpetas=[...new Set(files.filter(f=>/^[^/]+\/manifest\.json$/i.test(f.path)).map(f=>f.path.split("/")[0]))];
+  if(carpetas.length>=2){
+    for(let k=files.length-1;k>=0;k--){
+      const f=files[k]; if(f.path.includes("/")) continue;
+      if(/^README\.md$/i.test(f.path)){ f.path=carpetas[0]+"/README.md"; }
+      else { avisos.push(`Se quitó ${f.path} de la raíz (Minecraft solo espera las carpetas de los packs).`); files.splice(k,1); }
+    }
+  }
   const manifests=files.filter(f=>/(^|\/)manifest\.json$/i.test(f.path));
   if(!manifests.length) avisos.push("No se generó ningún manifest.json; el add-on no se podrá instalar.");
   const objs=[];
@@ -1164,10 +1401,11 @@ function u16(n){return [n&255,(n>>>8)&255];} function u32(n){return [n&255,(n>>>
 function concatBytes(parts){let len=parts.reduce((a,b)=>a+b.length,0),out=new Uint8Array(len),o=0;let pos=0;for(const p of parts){out.set(p,pos);pos+=p.length;}return out;}
 async function createZip(files){
   const enc=new TextEncoder(), local=[], central=[];let offset=0;
+  const ahora=new Date(), DT=((ahora.getUTCHours()<<11)|(ahora.getUTCMinutes()<<5)|(ahora.getUTCSeconds()>>1))&0xffff, DD=(((ahora.getUTCFullYear()-1980)<<9)|((ahora.getUTCMonth()+1)<<5)|ahora.getUTCDate())&0xffff;
   for(const f of files){const name=enc.encode(f.path),data=enc.encode(f.content),crc=crc32(data);
-    const lh=new Uint8Array([...u32(0x04034b50),...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...name]);
+    const lh=new Uint8Array([...u32(0x04034b50),...u16(20),...u16(0x0800),...u16(0),...u16(DT),...u16(DD),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...name]);
     local.push(lh,data);
-    const ch=new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(offset),...name]);
+    const ch=new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(DT),...u16(DD),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(offset),...name]);
     central.push(ch);offset+=lh.length+data.length;
   }
   const cd=concatBytes(central), end=new Uint8Array([...u32(0x06054b50),...u16(0),...u16(0),...u16(files.length),...u16(files.length),...u32(cd.length),...u32(offset),...u16(0)]);
@@ -1239,7 +1477,7 @@ async function manejar(request, env) {
   const correoUsuario = obtenerCorreo(request, null);
 
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "12.2.1", aiConfigured: !!env.AI,
+    ok: true, version: "13.0.0", aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -1264,7 +1502,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v12.2.1 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v13.0.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -1334,7 +1572,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "12.2.1", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "13.0.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
@@ -1468,7 +1706,7 @@ async function manejar(request, env) {
 
   // 👁️ VISIÓN: imágenes y fotogramas de video
   if (conImagen) {
-    if (!env.AI) return json({ error: "Visión no disponible" }, 500);
+    if (!env.AI && !routerApiKey(env)) return json({ error: "Visión no disponible" }, 503);
     // Si piden resolver algo de código o matemáticas: visión lee → modelo fuerte resuelve
     if (RX_CODIGO.test(text) || RX_MATE.test(text)) {
       try {
@@ -1482,7 +1720,7 @@ async function manejar(request, env) {
     try {
       const r = await cfVision(msgsL, env);
       return json({ reply: r.content + confirmacion, tipo: "imagen", modelo: r.model, ...base });
-    } catch (e) { return json({ error: "Visión: " + String(e.message || e) }, 500); }
+    } catch (e) { return json({ error: "No pude leer la imagen ahora mismo (" + String(e.message || e).slice(0, 120) + "). Inténtalo de nuevo en un momento." }, 503); }
   }
 
   // 💬 RESPUESTA FINAL DEL CHAT
