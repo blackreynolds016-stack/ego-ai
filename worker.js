@@ -1,12 +1,12 @@
 // ============================================================
-// EGO AI WORKER v14.0.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.1.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
 const MODELO_RAPIDO = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const CF_MODELS = {
   chat: MODELO_RAPIDO,   // resúmenes y estudio de lecciones
-  codigo:  ["@cf/moonshotai/kimi-k2.7-code", "@cf/qwen/qwen2.5-coder-32b-instruct", "@cf/qwen/qwen3.8-27b", MODELO_RAPIDO],
+  codigo:  ["@cf/moonshotai/kimi-k2.7-code", "@cf/qwen/qwen3-coder-next", "@cf/qwen/qwen2.5-coder-32b-instruct", "@cf/qwen/qwen3.8-27b", MODELO_RAPIDO],
   razonar: ["@cf/deepseek-ai/deepseek-v4-pro-0813", "@cf/moonshotai/kimi-k2.7-code", "@cf/qwen/qwen3.8-27b", MODELO_RAPIDO],
   rapido:  [MODELO_RAPIDO, "@cf/qwen/qwen3.8-27b"],
   vision:  ["@cf/qwen/qwen3.8-27b"]
@@ -28,12 +28,12 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.0.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.1.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
 2. Si la petición es de otro tema cotidiano (consejos, redacción, estudio, ideas), ayuda igualmente de forma útil y breve. Rechaza con amabilidad solo lo dañino: malware, ataques o espionaje a terceros, acoso, engaños, contenido sexual explícito o cualquier cosa ilegal; ofrece siempre una alternativa segura.
-3. La aplicación puede generar imágenes mediante action=image_generate, editar imágenes originales mediante action=image_edit, crear texturas 2D para modelos 3D mediante action=texture_generate y generar voz mediante action=tts o action=addon_voice. No afirmes que ejecutaste una generación si no se invocó esa acción. Minecraft: SIEMPRE Bedrock (Android, Windows, consolas), nunca Java ni Forge/Fabric. Si piden un add-on, di que la app lo crea como archivo .mcaddon cuando el usuario escribe algo como «crea un add-on para Minecraft con …»; no pegues código Java. Puedes analizar imágenes y videos enviados en el chat.
+3. La aplicación puede generar imágenes mediante action=image_generate, editar imágenes originales mediante action=image_edit, crear texturas 2D para modelos 3D mediante action=texture_generate y generar voz mediante action=tts o action=addon_voice. No afirmes que ejecutaste una generación si no se invocó esa acción. Minecraft: SIEMPRE Bedrock (Android, Windows, consolas), nunca Java ni Forge/Fabric. Las texturas PNG de los add-ons y las imágenes SÍ las genera la app: nunca digas que no puedes. Si piden un add-on, di que la app lo crea como archivo .mcaddon cuando el usuario escribe algo como «crea un add-on para Minecraft con …»; no pegues código Java. Puedes analizar imágenes y videos enviados en el chat.
 
 === CÓMO PIENSAS Y TRABAJAS ===
 4. Antes de responder entiende qué quiere de verdad la persona (objetivo, nivel, formato). Si falta un dato que cambia mucho el resultado, haz UNA pregunta corta; si no, hazlo.
@@ -212,7 +212,7 @@ const STOP = new Set("para como esta este esto esos esas pero porque cuando dond
 // ============================================================
 // 🏫 CURRÍCULO BASE (lecciones que ya trae EGO de fábrica; el creador puede añadir más)
 // ============================================================
-const BASE_VERSION = "2";
+const BASE_VERSION = "3";
 const BASE_LECCIONES = [
 {
   titulo: "Juegos web de alta calidad (técnica)",
@@ -365,7 +365,7 @@ addEventListener('pointerdown',()=>{if(state!=='play')reset()});requestAnimation
     "manifest.json: format_version 2; header con name, description, uuid, version [1,0,0] y min_engine_version [1,21,0] (ajústalo si el usuario dice su versión). Todos los UUID (headers y módulos) deben ser UUID v4 distintos entre sí. El BP depende del RP y el RP del BP usando el uuid del header del otro pack.",
     "BP modules: {type:'data'} y, si hay scripts, {type:'script', language:'javascript', entry:'scripts/main.js'} más la dependencia {module_name:'@minecraft/server', version:'<versión estable reciente>'}. No uses módulos beta salvo que haga falta; si usas @minecraft/server-ui o similares, declara también su dependencia.",
     "Ítems personalizados: BP/items/<nombre>.json con format_version '1.21.0', 'minecraft:item' > description.identifier con prefijo propio (ej. ego:espada_trueno) y menu_category {category:'equipment', group:'minecraft:itemGroup.name.sword'}; components típicos: minecraft:icon, minecraft:max_stack_size, minecraft:hand_equipped, minecraft:damage, minecraft:durability, minecraft:enchantable.",
-    "Icono y textura: no puedes crear imágenes binarias. En RP/textures/item_texture.json apunta a una textura que ya existe en el juego (ej. textures/items/diamond_sword) para que nunca falte una imagen, y explica en el README cómo cambiarla por un PNG propio (16x16 o 32x32) en RP/textures/items/.",
+    "Icono y textura: EGO SÍ genera la textura PNG 16x16 del ítem y el pack_icon.png con su propio código (ítems tipo espada, hacha, pico o vara); nunca digas que no puedes crear texturas. Si hay que describir el ícono, el PNG va en RP/textures/items/<nombre>.png, se registra en RP/textures/item_texture.json (texture_data > nombre > textures: 'textures/items/<nombre>') y el ítem lo usa con minecraft:icon {textures:{default:'<nombre>'}}. No uses minecraft:cooldown en el JSON del ítem; el enfriamiento va en el script.",
     "Nombres visibles: RP/texts/en_US.lang y RP/texts/es_ES.lang con la línea item.<identificador>=Nombre, y RP/texts/languages.json con ['en_US','es_ES']. Sin esto el ítem aparece con el identificador en crudo.",
     "Poderes y efectos (rayos, partículas, sonidos, habilidades) van en BP/scripts/main.js con Script API: import { world, system } from '@minecraft/server'. Eventos útiles: world.afterEvents.itemUse (usar el ítem; ev.source es el jugador, ev.itemStack el ítem) y world.afterEvents.entityHitEntity (golpear; ev.damagingEntity, ev.hitEntity). Comprueba siempre itemStack.typeId === tu identificador.",
     "Rayo: dimension.spawnEntity('minecraft:lightning_bolt', ubicacion). Apuntar: jugador.getEntitiesFromViewDirection({maxDistance:30}) (devuelve lista con .entity) o jugador.getBlockFromViewDirection({maxDistance:30}) (devuelve algo con .block, puede ser undefined). Partículas: dimension.spawnParticle('minecraft:totem_particle', ubicacion) usando solo partículas que existan. Sonido: jugador.playSound('random.explode').",
@@ -952,14 +952,34 @@ async function visionOpenRouter(messages, env) {
   if (!content) throw new Error("OpenRouter devolvió una respuesta vacía");
   return { content, model: `openrouter:${model}` };
 }
+const MODELO_MOONDREAM = "@cf/moondream/moondream3.1-9B-A2B";
+async function moondreamVision(messages, env) {
+  let img = "", preg = "";
+  for (let i = messages.length - 1; i >= 0 && (!img || !preg); i--) {
+    const c = messages[i]?.content;
+    if (!Array.isArray(c)) { if (messages[i]?.role === "user" && !preg && typeof c === "string") preg = c; continue; }
+    if (!img) img = (c.find(p => p?.type === "image_url")?.image_url?.url) || "";
+    if (!preg && messages[i].role === "user") preg = (c.find(p => p?.type === "text")?.text) || "";
+  }
+  if (!img) throw new Error("sin imagen para Moondream");
+  const r = await env.AI.run(MODELO_MOONDREAM, { task: "query", image: img, question: String(preg || "Describe la imagen en detalle.").slice(0, 1500), reasoning: false, max_tokens: 1500 });
+  const t = String(r?.answer || "").trim();
+  if (!t) throw new Error("Moondream no devolvió texto");
+  return { content: t, model: MODELO_MOONDREAM };
+}
 async function cfVision(messages, env) {
   let ultimo = null;
   if (env.AI) {
-    try {
-      const r = await cfChat(CF_MODELS.vision[0], messages, env, 4000);
-      if (r.content) return r;
-      ultimo = new Error("el modelo de visión no devolvió texto");
-    } catch (e) { ultimo = e; }
+    const ult = JSON.stringify((messages[messages.length - 1] || {}).content || "").slice(0, 4000);
+    const descriptiva = /(qu[eé] (?:hay|es|ves|aparece|objeto|animal|cosa)|descr[ií]b|cu[aá]nt[oa]s|d[oó]nde|identifica|qui[eé]n|color|ropa|lugar|what is|describe)/i.test(ult) && !/(ecuaci|resuelve|ejercicio|problema|c[oó]digo|error|lee el texto|transcribe|\d\s*[+\-*\/=])/i.test(ult);
+    const orden = descriptiva ? ["moondream", "qwen"] : ["qwen", "moondream"];
+    for (const quien of orden) {
+      try {
+        const r = quien === "qwen" ? await cfChat(CF_MODELS.vision[0], messages, env, 4000) : await moondreamVision(messages, env);
+        if (r.content) return r;
+        ultimo = new Error("el modelo de visión no devolvió texto");
+      } catch (e) { ultimo = e; }
+    }
   }
   if (routerApiKey(env)) {
     try { return await visionOpenRouter(messages, env); } catch (e) { ultimo = e; }
@@ -1033,7 +1053,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.0.0",
+    version: "14.1.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -1086,6 +1106,8 @@ function imagenResultado(result, model) {
 
 
 // FLUX.2 [klein] 4B en Workers AI recibe "multipart" (prompt, width, height, input_image_0...).
+const MODELOS_IMG = ["@cf/black-forest-labs/flux-2-klein-9b", "@cf/black-forest-labs/flux-2-klein-4b"];
+const cadenaImg = (env, extra) => [...new Set([String(env.IMAGE_MODEL || "").trim(), ...(env.IMAGE_MODEL ? [] : MODELOS_IMG)].filter(Boolean))];
 const dimImg = (v, d) => { const n = Math.round(Number(v) / 16) * 16; return Number.isFinite(n) && n >= 256 ? Math.min(n, 1536) : d; };
 async function correrFlux(env, model, prompt, width, height, ref) {
   const form = new FormData();
@@ -1125,12 +1147,13 @@ async function generarImagen(body, env) {
   // Workers AI FLUX.2 Klein ofrece generación y edición con referencia. Se usa primero
   // si está disponible; se conserva el fallback de proveedores ya configurado.
   if (env.AI) {
-    const model = String(env.IMAGE_MODEL || "@cf/black-forest-labs/flux-2-klein-4b");
-    try {
-      const result = await correrFlux(env, model, enhanced, dimImg(body.width, 1024), dimImg(body.height, 1024));
-      const out = imagenResultado(result, model);
-      if (out) return json(out);
-    } catch (e) { console.warn("cf_image_generate", String(e?.message || e).slice(0, 160)); }
+    for (const model of cadenaImg(env)) {
+      try {
+        const result = await correrFlux(env, model, enhanced, dimImg(body.width, 1024), dimImg(body.height, 1024));
+        const out = imagenResultado(result, model);
+        if (out) return json(out);
+      } catch (e) { console.warn("cf_image_generate", model, String(e?.message || e).slice(0, 160)); }
+    }
     // Respaldo: FLUX.1 schnell (JSON simple) si el modelo principal falla o se queda sin cuota.
     if (!env.IMAGE_MODEL) {
       try {
@@ -1168,18 +1191,19 @@ async function editarImagen(body, env) {
   try { bytes = Uint8Array.from(atob(source.b64), c => c.charCodeAt(0)); }
   catch { return respuestaJsonError("La imagen base64 no es válida."); }
   if (bytes.byteLength > 2_000_000) return respuestaJsonError("La imagen para edición debe pesar menos de 2 MB. Redúcela en la app antes de enviarla.",413);
-  const model = String(env.IMAGE_EDIT_MODEL || "@cf/black-forest-labs/flux-2-klein-4b");
-  try {
-    const promptEd = `Edit the provided original image. Preserve the original subject, identity, framing, and all areas not requested to change. Apply only this change: ${prompt}. Do not replace the image with an unrelated new scene.`;
-    const nombre = source.mime === "image/jpeg" ? "input.jpg" : source.mime === "image/webp" ? "input.webp" : "input.png";
-    const result = await correrFlux(env, model, promptEd, dimImg(body.width, 1024), dimImg(body.height, 768), { bytes, mime: source.mime, nombre });
-    const out = imagenResultado(result, model);
-    if (!out) return json({error:"El modelo de edición no devolvió una imagen."},502);
-    return json({...out, edited:true, preservesOriginalReference:true});
-  } catch(e) {
-    console.error("image_edit",String(e?.message||e).slice(0,200));
-    return json({error:"No se pudo editar la imagen. Comprueba que el modelo admite edición y que la imagen sea compatible.",model},503);
+  const cadena = env.IMAGE_EDIT_MODEL ? [String(env.IMAGE_EDIT_MODEL)] : MODELOS_IMG;
+  const promptEd = `Edit the provided photo. Keep EXACTLY the same person, face, hair, body, pose, clothing cut, camera framing, zoom level and background: the whole subject stays fully visible and nothing is cropped, zoomed or moved. Keep the same lighting, sharpness and photographic quality. Change ONLY this: ${prompt}. Do not add or remove people or objects that were not mentioned.`;
+  const nombre = source.mime === "image/jpeg" ? "input.jpg" : source.mime === "image/webp" ? "input.webp" : "input.png";
+  const fallos = [];
+  for (const model of cadena) {
+    try {
+      const result = await correrFlux(env, model, promptEd, dimImg(body.width, 1024), dimImg(body.height, 768), { bytes, mime: source.mime, nombre });
+      const out = imagenResultado(result, model);
+      if (out) return json({...out, edited:true, preservesOriginalReference:true});
+      fallos.push(model + ": sin imagen");
+    } catch(e) { fallos.push(model + ": " + String(e?.message||e).slice(0,100)); console.error("image_edit", model, String(e?.message||e).slice(0,200)); }
   }
+  return json({error:"No se pudo editar la imagen. Comprueba que el modelo admite edición y que la imagen sea compatible.",detail:fallos},503);
 }
 
 async function generarTextura(body, env) {
@@ -1282,7 +1306,7 @@ async function generarProyecto(body, env, minecraft, request) {
       const spec = await especificarAddon(prompt, env);
       const files = construirAddonItem(spec, env.MC_SERVER_VERSION);
       const zip = await createZip(files);
-      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":"0","X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta y script de habilidades)`),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
+      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":"0","X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
     } catch(e) { console.error("tpl_addon",String(e?.message||e).slice(0,200)); }
   }
   const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 25 : 35)), 50));
@@ -1440,17 +1464,19 @@ function detectarMc(texto){
   else if(/hielo|escarcha|congel|nieve|glaci/.test(t))o.hab="hielo";
   else if(/explos|tnt|bomba|dinamita/.test(t))o.hab="explosion";
   else if(/veneno|toxic|wither|plaga/.test(t))o.hab="veneno";
-  else if(/viento|aire|velocidad|salto|volar/.test(t))o.hab="viento";
+  else if(/viento|aire|salto|volar/.test(t))o.hab="viento";
   else if(/\b(?:cura\w*|vida|sagrad\w*|sanar|angel\w*|regener\w*)/.test(t))o.hab="curacion";
   for(const k of Object.keys(MC_COLORES)){const raiz=k.replace(/[oa]$/,"");if(new RegExp("\\b"+raiz+"(o|a|os|as)?\\b").test(t)){o.color=MC_COLORES[k];break;}}
   if(/mas (danio|fuerte|poder)|poderos|mas dano/.test(t))o.mas=4;
+  if(/mortal|letal|brutal|devastador|asesin|matar/.test(t))o.mas=(o.mas||0)+6;
+  if(/velocidad|rapid|correr|corriendo|veloz|agil|sprint/.test(t))o.vel=true;
   if(/menos (danio|dano)|mas debil/.test(t))o.mas=-3;
   return o;
 }
 function especificacionPorPalabras(prompt){
   const partes=String(prompt||"").split(/Cambios pedidos ahora:/i);
-  const d={};let mas=0,cambioHab=false;
-  partes.forEach((p,i)=>{const x=detectarMc(p);if(x.mas)mas+=x.mas;delete x.mas;if(i>0&&(x.hab||x.tipo))cambioHab=true;Object.assign(d,x);});
+  const d={};let mas=0,cambioHab=false,vel=false;
+  partes.forEach((p,i)=>{const x=detectarMc(p);if(x.mas)mas+=x.mas;delete x.mas;if(x.vel)vel=true;delete x.vel;if(i>0&&(x.hab||x.tipo))cambioHab=true;Object.assign(d,x);});
   const tipo=d.tipo||"espada",hab=d.hab||"rayo",pal=MC_PALETAS[hab];
   // un color pedido antes de cambiar de habilidad ya no aplica (ej. "azul" + "hazlo de fuego")
   let color=d.color||null;
@@ -1460,7 +1486,7 @@ function especificacionPorPalabras(prompt){
   const nomHab={rayo:["del Trueno","del Trueno"],fuego:["de Fuego","de Fuego"],hielo:["de Hielo","de Hielo"],explosion:["Explosiva","Explosivo"],veneno:["Venenosa","Venenoso"],viento:["del Viento","del Viento"],curacion:["Sagrada","Sagrado"]}[hab][tipo==="pico"?1:0];
   const dan0=tipo==="espada"?9:(tipo==="hacha"?10:(tipo==="pico"?6:5));
   const nombre=(nm&&!cambioHab)?tituloCaso(nm[1]):(base0+" "+nomHab);
-  return {nombre,tipo,habilidad:hab,principal:color||pal.principal,acento:pal.acento,danio:Math.max(2,Math.min(20,dan0+mas)),durabilidad:1800,brillo:true};
+  return {nombre,tipo,habilidad:hab,principal:color||pal.principal,acento:pal.acento,danio:Math.max(2,Math.min(20,dan0+mas)),durabilidad:1800,brillo:true,velocidad:vel};
 }
 async function especificarAddon(prompt,env){
   const s=especificacionPorPalabras(prompt);
@@ -1481,6 +1507,7 @@ async function especificarAddon(prompt,env){
   return s;
 }
 
+const AURA={rayo:"minecraft:electric_spark_particle",fuego:"minecraft:basic_flame_particle",hielo:"minecraft:critical_hit_emitter",explosion:"minecraft:basic_smoke_particle",veneno:"minecraft:villager_angry",viento:"minecraft:basic_smoke_particle",curacion:"minecraft:villager_happy"};
 function scriptHabilidad(s){
   const H={
     rayo:{usa:"obj",uso:'  p.dimension.spawnEntity("minecraft:lightning_bolt", lugar);\n  chispas(p.dimension, lugar, "minecraft:electric_spark_particle");\n  p.playSound("ambient.weather.thunder");',
@@ -1548,6 +1575,17 @@ function scriptHabilidad(s){
     '  } catch (e) {}',
     '});',
     '',
+    '// Aura: mientras sostienes el objeto salen partículas'+(s.velocidad?' y corres más rápido':''),
+    'system.runInterval(() => {',
+    '  try {',
+    '    for (const p of world.getAllPlayers()) {',
+    '      if (!enMano(p)) continue;',
+    (s.velocidad?'      p.addEffect("speed", 40, { amplifier: 1, showParticles: false });':'      // sin efecto pasivo'),
+    '      chispas(p.dimension, { x: p.location.x, y: p.location.y + 1.2, z: p.location.z }, "'+AURA[s.habilidad]+'");',
+    '    }',
+    '  } catch (e) {}',
+    '}, 10);',
+    '',
     '// Al golpear: efecto extra',
     'world.afterEvents.entityHitEntity.subscribe((ev) => {',
     '  try {',
@@ -1581,7 +1619,7 @@ function construirAddonItem(s,version){
   const patron={espada:[" C "," D "," S "],hacha:["DC "," SD"," S "],pico:["DCD"," S "," S "],vara:["  C"," S ","S  "]}[s.tipo];
   const receta={format_version:"1.20.10","minecraft:recipe_shaped":{description:{identifier:"ego:"+s.id+"_receta"},tags:["crafting_table"],pattern:patron,key:{C:{item:nucleo},D:{item:"minecraft:diamond"},S:{item:"minecraft:stick"}},result:{item:id}}};
   const lang=(n)=>"item."+id+"="+n+"\nitem."+id+".name="+n+"\n";
-  const readme="# "+s.nombre+"\n\nAdd-on para Minecraft Bedrock creado por EGO AI.\n\n## Instalar\n1. Abre este archivo .mcaddon (Minecraft lo importa solo).\n2. Crea o edita un mundo > Add-ons > activa el Behavior Pack y el Resource Pack de \""+s.nombre+"\".\n3. En el mundo escribe: /give @s "+id+"\n\n## Qué hace\n- Textura propia (PNG) y nombre en español e inglés.\n- Clic derecho: habilidad "+s.habilidad+" (espera de 3 s).\n- Al golpear: efecto extra de "+s.habilidad+".\n- Receta de crafteo incluida (mesa de trabajo).\n\n## Si algo falla\n- Si el script no corre, abre BP/manifest.json y cambia la version de @minecraft/server ("+verSrv+") por una que tu juego soporte.\n- Para cambiar el ícono, reemplaza RP/textures/items/ego_"+s.id+".png (16x16).\n";
+  const readme="# "+s.nombre+"\n\nAdd-on para Minecraft Bedrock creado por EGO AI.\n\n## Instalar\n1. Abre este archivo .mcaddon (Minecraft lo importa solo).\n2. Crea o edita un mundo > Add-ons > activa el Behavior Pack y el Resource Pack de \""+s.nombre+"\".\n3. En el mundo escribe: /give @s "+id+"\n\n## Qué hace\n- Textura propia (PNG) y nombre en español e inglés.\n- Clic derecho: habilidad "+s.habilidad+" (espera de 3 s).\n- Al golpear: efecto extra de "+s.habilidad+".\n- Aura de partículas mientras lo sostienes"+(s.velocidad?" y velocidad extra al correr":"")+".\n- No incluye animación 3D propia del modelo (eso requiere un modelo con geometría); el ícono, los efectos y las partículas sí.\n- Receta de crafteo incluida (mesa de trabajo).\n\n## Si algo falla\n- Si el script no corre, abre BP/manifest.json y cambia la version de @minecraft/server ("+verSrv+") por una que tu juego soporte.\n- Para cambiar el ícono, reemplaza RP/textures/items/ego_"+s.id+".png (16x16).\n";
   return [
     {path:"BP/manifest.json",content:pack(s.nombre+" BP","Behavior pack: "+s.nombre,pId,[{type:"data",uuid:crypto.randomUUID(),version:[1,0,0]},{type:"script",language:"javascript",entry:"scripts/main.js",uuid:crypto.randomUUID(),version:[1,0,0]}],[{uuid:rId,version:[1,0,0]},{module_name:"@minecraft/server",version:verSrv}])},
     {path:"BP/items/"+s.id+".json",content:JSON.stringify(item,null,2)+"\n"},
@@ -1747,7 +1785,7 @@ async function manejar(request, env) {
   const correoUsuario = obtenerCorreo(request, null);
 
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.0.0", aiConfigured: !!env.AI,
+    ok: true, version: "14.1.0", aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -1772,7 +1810,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.0.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.1.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -1842,7 +1880,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.0.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.1.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
