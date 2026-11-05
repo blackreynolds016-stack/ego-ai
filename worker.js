@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.4.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.4.1 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -28,7 +28,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.4.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.4.1, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -886,9 +886,10 @@ let _venCache = { t: 0, lista: null };
 async function veniceCatalogo(env) {
   if (_venCache.lista && Date.now() - _venCache.t < 600000) return _venCache.lista;
   try {
-    const r = await fetch("https://api.venice.ai/api/v1/models", { headers: { "Authorization": `Bearer ${veniceKey(env)}` } });
-    const j = await r.json().catch(() => ({}));
-    const data = Array.isArray(j && j.data) ? j.data : [];
+    const pedir = async (t) => { try { const r = await fetch("https://api.venice.ai/api/v1/models?type=" + t, { headers: { "Authorization": `Bearer ${veniceKey(env)}` } }); const j = await r.json().catch(() => ({})); return Array.isArray(j && j.data) ? j.data : []; } catch (e) { return []; } };
+    const [texto, imagen] = await Promise.all([pedir("text"), pedir("image")]);
+    const vistos = new Set(), data = [];
+    for (const m of texto.concat(imagen)) { const id = m && m.id; if (id && !vistos.has(id)) { vistos.add(id); data.push(m); } }
     if (data.length) _venCache = { t: Date.now(), lista: data };
     return data.length ? data : (_venCache.lista || []);
   } catch (e) { return _venCache.lista || []; }
@@ -921,6 +922,7 @@ function veniceRanking(catalogo, task) {
     if (task === "reasoning" && i.razona) score += 15;
     if (task === "vision" && i.vision) score += 20;
     score += Math.min(8, Math.floor(i.ctx / 32000));
+    if (/^e2ee-/i.test(i.id)) score -= 5;
     out.push({ id: i.id, score });
   }
   return out.sort((a, b) => b.score - a.score).map(x => x.id);
@@ -1576,7 +1578,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.4.0",
+    version: "14.4.1",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2399,7 +2401,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.4.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.4.1", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -2424,7 +2426,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.4.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.4.1 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -2494,7 +2496,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.4.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.4.1", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
