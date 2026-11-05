@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.4.1 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.5.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -28,7 +28,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.4.1, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.5.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -1106,6 +1106,7 @@ El aspecto visual lo resuelve el sistema reutilizando un modelo del juego (zombi
  script:`SCRIPT (BP/scripts/main.js es el archivo de entrada; puedes crear otros en BP/scripts/ e importarlos con rutas relativas "./otro.js"). JavaScript moderno (módulos ES).
 Importa solo: import { world, system, ItemStack } from "@minecraft/server"; (y "@minecraft/server-ui" para formularios).
 APIs de @minecraft/server 1.17 que SÍ existen: world.afterEvents.{itemUse,itemUseOn,entityHitEntity,entityHurt,entityDie,entitySpawn,playerSpawn,playerJoin,playerLeave,playerBreakBlock,playerPlaceBlock,projectileHitEntity,projectileHitBlock,buttonPush,leverAction}, world.beforeEvents.{itemUse,playerBreakBlock,explosion}, system.run(fn), system.runTimeout(fn,ticks), system.runInterval(fn,ticks), system.currentTick, world.getAllPlayers(), world.getDimension("overworld"), world.sendMessage(txt), world.getDynamicProperty/setDynamicProperty. Entity/Player: id, typeId, location, dimension, nameTag, getComponent("minecraft:health"|"minecraft:inventory"|"minecraft:equippable"), addEffect("speed",ticks,{amplifier,showParticles}), removeEffect, setOnFire(seg,true), applyDamage(n), kill(), remove(), teleport(loc), getViewDirection(), addTag/hasTag/removeTag, getEntitiesFromViewDirection({maxDistance}), getBlockFromViewDirection({maxDistance}), Player.sendMessage, Player.playSound("id"), Player.onScreenDisplay.setActionBar(txt)/setTitle(txt), runCommand("comando"). Dimension: spawnEntity(typeId,loc), spawnItem(new ItemStack(id,n),loc), spawnParticle("minecraft:id",loc), createExplosion(loc,radio,{breaksBlocks,causesFire}), getEntities({location,maxDistance,type,excludeTypes}), getPlayers(), getBlock(loc), runCommand("cmd"). Block: typeId, location, setType("minecraft:id"). 
+IMPORTANTE: las habilidades especiales de armas y herramientas (rayos, fuego, hielo, explosión, veneno, viento, curación al usar o golpear) las programa EGO automáticamente según el campo "habilidad" del plan: NO las escribas tú. Escribe aquí solo lógica adicional (eventos del mundo, comandos, jefes, etc.).
 Reglas: no uses await en el nivel superior, ni setTimeout/Date.now (usa system.runTimeout y system.currentTick); envuelve la lógica de cada evento en try/catch; compara ítems con itemStack.typeId; usa Map con id del jugador para los tiempos de espera; sin dependencias externas.`,
  recipes:`RECETAS (BP/recipes/<nombre>.json): {"format_version":"1.20.10","minecraft:recipe_shaped":{"description":{"identifier":"ns:nombre_receta"},"tags":["crafting_table"],"pattern":["ABA"," C "," C "],"key":{"A":{"item":"minecraft:diamond"},"B":{"item":"ns:otro"},"C":{"item":"minecraft:stick"}},"result":{"item":"ns:resultado","count":1}}}. También "minecraft:recipe_shapeless" (ingredients:[{"item":"..."}]) y "minecraft:recipe_furnace" (input, output, tags:["furnace"]).`,
  loot:`TABLAS DE BOTÍN (BP/loot_tables/entities/<nombre>.json o BP/loot_tables/blocks/<nombre>.json): {"pools":[{"rolls":1,"entries":[{"type":"item","name":"minecraft:diamond","weight":1,"functions":[{"function":"set_count","count":{"min":1,"max":3}}]}]}]}.`,
@@ -1126,7 +1127,7 @@ function limpiarPlan(j,prompt){
   for(const o of (Array.isArray(j.objetos)?j.objetos:[]).slice(0,60)){
     const id=mcId(base.ns,o&&o.id); const tipo=["item","block","entity"].includes(o&&o.tipo)?o.tipo:"item";
     if(!id||vistos.has(id)) continue; vistos.add(id);
-    base.objetos.push({id,tipo,nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300)});
+    base.objetos.push({id,tipo,nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0});
   }
   for(const p of (Array.isArray(j.partes)?j.partes:[]).slice(0,8)){
     const tipo=MC_TIPOS_PARTE.includes(p&&p.tipo)?p.tipo:"misc";
@@ -1180,7 +1181,7 @@ async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
-{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta"}],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
+{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)"}],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
 Reglas: máximo 8 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
     const r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}],6000,0);
@@ -1327,6 +1328,57 @@ function parseLang(t){const m=new Map();for(const l of String(t||"").split(/\r?\
 function nombreDeId(id,plan){const o=(plan.objetos||[]).find(x=>x.id===id);return o?o.nombre:tituloCaso(String(id).split(":").pop().replace(/_/g," "));}
 
 // Arma el paquete final: normaliza, genera lo que falta y devuelve {files, notas, resumen}
+
+// ---- Habilidades de armas: las programa el código (probado), no la IA ----
+const RX_ARMA=/(espada|sable|katana|hacha|pico|pala|vara|varita|baston|cetro|lanza|martillo|guadana|daga|arma|tridente|\bsword\b|\baxe\b|\bwand\b|\bstaff\b)/i;
+function habilidadDeObjeto(o){
+  if(o.habilidad==="ninguna")return null;
+  const t=normMc((o.nombre||"")+" "+(o.descripcion||"")+" "+(o.id||""));
+  if(o.habilidad)return o.habilidad;
+  if(!RX_ARMA.test(t))return null;
+  const h=detectarMc(t).hab;if(h)return h;
+  if(RX_ARMA.test(t)&&/(habilidad|poder|especial|magic|ataque|clic|click|usar)/.test(t))return "rayo";
+  return null;
+}
+function tipoArmaDe(o){const t=normMc((o.nombre||"")+" "+(o.id||""));const x=detectarMc(t);return x.tipo||"espada";}
+const LINT_MAL=[[/\bworld\.events\b/,"usa la API antigua world.events"],[/from\s+["']mojang-minecraft/,"importa mojang-minecraft (API antigua)"],[/\brequire\s*\(/,"usa require()"],[/\bsetTimeout\s*\(|\bsetInterval\s*\(/,"usa setTimeout/setInterval"],[/\bnew\s+(Location|BlockLocation)\s*\(/,"usa Location/BlockLocation (API antigua)"],[/\bawait\b(?![^\n]*=>)(?<![ \t]{2})/,""],[/from\s+["'](?!@minecraft\/(server|server-ui)["'])(?!\.\/)[^"']+["']/,"importa un módulo que no existe en Bedrock"],[/:\s*(string|number|boolean)\b\s*[=,)]|\binterface\s+\w+|\bas\s+(string|number|any)\b/,"contiene sintaxis de TypeScript"]];
+function lintScript(texto){for(const [rx,msg] of LINT_MAL){if(msg&&rx.test(texto))return msg;}return null;}
+function normalizarCriatura(e,plan,archivo,mapa){
+  const comps=e.components=e.components||{};
+  const obj=(plan.objetos||[]).find(x=>x.id===e.description.identifier)||{};
+  const t=normMc((obj.nombre||"")+" "+(obj.descripcion||"")+" "+archivo);
+  const hostil=/(jefe|boss|monstruo|enemigo|hostil|gigante|demonio|guardian|titan|golem|zombi|esqueleto|ataca|agresiv|invasor|bestia|dragon)/.test(t)&&!/(amigable|pasivo|mascota|aldean|manso|pacifico)/.test(t);
+  const poner=(k,v)=>{if(!(k in comps))comps[k]=v;};
+  poner("minecraft:type_family",{family:[plan.ns+"_"+archivo,hostil?"monster":"mob"]});
+  poner("minecraft:health",{value:hostil?60:20,max:hostil?60:20});
+  poner("minecraft:collision_box",{width:0.8,height:2});
+  poner("minecraft:movement",{value:0.25});
+  poner("minecraft:movement.basic",{});
+  poner("minecraft:navigation.walk",{can_path_over_water:true,avoid_water:true,can_break_doors:false});
+  poner("minecraft:jump.static",{});
+  poner("minecraft:physics",{});
+  poner("minecraft:pushable",{is_pushable:true,is_pushable_by_piston:true});
+  poner("minecraft:behavior.float",{priority:0});
+  poner("minecraft:behavior.random_stroll",{priority:6,speed_multiplier:1});
+  poner("minecraft:behavior.look_at_player",{priority:7,look_distance:8});
+  poner("minecraft:behavior.random_look_around",{priority:9});
+  if(hostil){
+    poner("minecraft:attack",{damage:8});
+    poner("minecraft:behavior.melee_attack",{priority:3,speed_multiplier:1.1,track_target:true});
+    poner("minecraft:behavior.hurt_by_target",{priority:1});
+    poner("minecraft:behavior.nearest_attackable_target",{priority:2,must_see:false,reselect_targets:true,entity_types:[{filters:{test:"is_family",subject:"other",value:"player"},max_dist:32}]});
+  }
+  const rutaLoot="loot_tables/entities/"+archivo+".json";
+  if(!("minecraft:loot" in comps)){
+    if(!mapa.has("BP/"+rutaLoot)&&hostil){
+      const drops=(plan.objetos||[]).filter(x=>x.tipo==="item"&&/(drop|bot[ií]n|suelta|dropea|recompensa|premio)/i.test(x.descripcion||"")&&normMc((obj.nombre||"")).split(" ").some(w=>w.length>3&&normMc(x.descripcion).includes(w)));
+      const ents=(drops.length?drops:[]).slice(0,3).map(x=>({type:"item",name:x.id,weight:1,functions:[{function:"set_count",count:{min:1,max:1}}]}));
+      if(ents.length)mapa.set("BP/"+rutaLoot,JSON.stringify({pools:[{rolls:1,entries:ents}]},null,2)+"\n");
+    }
+    if(mapa.has("BP/"+rutaLoot))comps["minecraft:loot"]={table:rutaLoot};
+  }
+  return hostil;
+}
 function postprocesarAddon(entrada,plan,verSrv){
   const notas=[],mapa=new Map(),ns=plan.ns||"ego";
   for(const f of entrada){ if(f&&typeof f.path==="string"&&typeof f.content==="string") mapa.set(f.path,f.content); }
@@ -1368,6 +1420,7 @@ function postprocesarAddon(entrada,plan,verSrv){
     const id=String(e.description.identifier||"");
     if(!/^[a-z0-9_]+:[a-z0-9_]+$/.test(id)){mapa.delete(p);continue;}
     e.description.is_spawnable=true;e.description.is_summonable=true;
+    try{normalizarCriatura(e,plan,p.split("/").pop().replace(/\.json$/,""),mapa);}catch(_){}
     o.format_version=o.format_version||"1.21.0";
     mapa.set(p,JSON.stringify(o,null,2)+"\n");
     entidades.push({id,archivo:p.split("/").pop().replace(/\.json$/,"")});
@@ -1414,7 +1467,24 @@ function postprocesarAddon(entrada,plan,verSrv){
   for(const e of entidades){const n=nombreDeId(e.id,plan);poner("entity."+e.id+".name",n);poner("item.spawn_egg.entity."+e.id+".name","Huevo de "+n);}
   const aTxt=(m)=>[...m.entries()].map(([k,v])=>k+"="+v).join("\n")+"\n";
   mapa.set("RP/texts/en_US.lang",aTxt(en));mapa.set("RP/texts/es_ES.lang",aTxt(es));mapa.set("RP/texts/languages.json",'["en_US","es_ES"]\n');
-  // --- scripts
+  // --- scripts: se descartan los que usan APIs que no existen; las habilidades las programa el código
+  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const mal=lintScript(String(mapa.get(k)));if(mal){mapa.delete(k);notas.push(k.replace("BP/","")+" se descartó porque "+mal+" y rompería todo el script.");}}
+  const habilidades=[];
+  for(const id of items){
+    const o=(plan.objetos||[]).find(x=>x.id===id)||{id,nombre:nombreDeId(id,plan),descripcion:""};
+    const hab=habilidadDeObjeto(o);if(!hab)continue;
+    const [pns,corto]=id.split(":");
+    const sp={id:corto,ns:pns,nombre:nombreDeId(id,plan),habilidad:hab,tipo:tipoArmaDe(o),rayos:o.rayos||(hab==="rayo"?3:1),espera:o.espera||60,buscar:true,proteger:true,velocidad:false};
+    // si el script de la IA ya maneja este ítem, se reemplaza por el probado
+    for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k)&&!/ego_hab_/.test(k))){
+      const t=String(mapa.get(k));
+      if(t.includes('"'+id+'"')||t.includes("'"+id+"'")){
+        if(/itemUse|entityHitEntity|itemStartUse|itemCompleteUse/.test(t)){mapa.delete(k);notas.push(k.replace("BP/","")+" se reemplazó por habilidades probadas de EGO para "+sp.nombre+" (si tenía otra lógica, pídemela aparte).");}
+      }
+    }
+    mapa.set("BP/scripts/ego_hab_"+corto+".js",scriptHabilidad(sp));
+    habilidades.push(sp.nombre+": "+({rayo:"rayos",fuego:"fuego",hielo:"hielo",explosion:"explosión",veneno:"veneno",viento:"viento",curacion:"curación"}[hab])+" (clic derecho y al golpear)");
+  }
   const scripts=[...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k));
   const mods=new Set();
   for(const s of scripts){
@@ -1449,7 +1519,7 @@ function postprocesarAddon(entrada,plan,verSrv){
   mapa.set("BP/README.md","# "+plan.nombre+"\n\nAdd-on para Minecraft Bedrock creado por EGO AI.\n\n"+(plan.resumen||"")+"\n\n## Instalar\n1. Abre el archivo .mcaddon (Minecraft lo importa solo).\n2. En el mundo: Add-ons > activa el Behavior Pack y el Resource Pack.\n3. Comandos para probarlo:\n"+(cmd.join("\n")||"- (sin objetos nuevos)")+"\n\n## Notas\n"+(notas.map(n=>"- "+n).join("\n")||"- Sin avisos.")+"\n- Las texturas de ítems y bloques son íconos generados automáticamente (16x16); puedes reemplazar los PNG de RP/textures.\n- Si el script no corre, cambia la versión de @minecraft/server en BP/manifest.json ("+verSrvOk+") por una que tu juego soporte.\n");
   // salida ordenada
   const salida=[...mapa.entries()].map(([path,content])=>({path,content})).sort((a,b)=>a.path.localeCompare(b.path));
-  return {files:salida,notas,conteo:{items:items.length,bloques:bloques.length,criaturas:entidades.length,scripts:scripts.length,texturas:png.length+bloques.length}};
+  return {files:salida,notas,conteo:{habilidades,items:items.length,bloques:bloques.length,criaturas:entidades.length,scripts:scripts.length,texturas:png.length+bloques.length}};
 }
 async function mcBuild(body,env,request){
   const prompt=String(body.prompt||"").slice(0,2000);
@@ -1467,7 +1537,7 @@ async function mcBuild(body,env,request){
     const zip=await createZip(r.files);
     const nombre="ego-"+slugAscii(plan.nombre);
     const c=r.conteo;
-    const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`;
+    const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"");
     return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ")),"X-EGO-Resumen":encodeURIComponent(resumen),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
@@ -1578,7 +1648,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.4.1",
+    version: "14.5.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2108,7 +2178,7 @@ function scriptHabilidad(s){
   return [
     'import { world, system } from "@minecraft/server";',
     '',
-    'const ITEM = "ego:'+s.id+'";',
+    'const ITEM = "'+(s.ns||"ego")+':'+s.id+'";',
     'const ESPERA_USO = '+espera+'; // ticks (20 ticks = 1 s)',
     'const ESPERA_GOLPE = 15;',
     'const RAYOS = '+rayos+'; // cuántos rayos caen cada vez',
@@ -2401,7 +2471,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.4.1", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.5.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -2426,7 +2496,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.4.1 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.5.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -2496,7 +2566,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.4.1", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.5.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
