@@ -339,13 +339,9 @@ function bubble(role){const d=document.createElement("div");d.className="msg "+r
 function finish(d,text,last){d.dataset.raw=text;d.innerHTML=md(text)+'<div class="act"><button data-a="copy" type="button">Copiar</button>'+(/!\[imagen\]\(/.test(text)?'<button data-a="saveimg" type="button">Guardar</button><button data-a="shareimg" type="button">Compartir</button>':"")+(last&&!/^(Imagen (generada|editada)|\u2705 Versi\u00f3n mejorada|No pude)/.test(text)?'<button data-a="regen" type="button">Regenerar</button>':"")+"</div>"}
 function renderChat(){chat.innerHTML="";const c=cur();
 if(!c||!c.msgs.length){chat.innerHTML='<div class="empty"><b>¿En qué te ayudo?</b>'+
-'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c.8 5.2 2.6 7.6 9.8 9.8-7.2 2.2-9 4.6-9.8 9.8-.8-5.2-2.6-7.6-9.8-9.8 7.2-2.2 9-4.6 9.8-9.8Z"/></svg></span><span class="tx"><b>Resuélveme este problema de matemáticas:</b><small>escríbelo o sube una foto</small></span></button>'+
 '<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.6 4.8l-3.2 14.4"/></svg></span><span class="tx"><b>Escribe un código para...</b><small>o lo que necesites</small></span></button>'+
-'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10.6-6.8c.6-.4.6-1.4 0-1.8L9.6 4.3C8.9 3.9 8 4.4 8 5.2Z"/></svg></span><span class="tx"><b>Crea un juego para el móvil que</b><small>completo y jugable</small></span></button>'+
 '<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></span><span class="tx"><b>Crea un add-on de Minecraft que</b><small>listo para importar</small></span></button>'+
-'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span><span class="tx"><b>Créame una imagen de</b><small>en alta calidad</small></span></button>'+
-'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.2 8.2-7 10-3.8-1.8-7-5-7-10V6l7-3z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg></span><span class="tx"><b>Ayúdame con ciberseguridad:</b><small>protege tus cuentas y apps</small></span></button>'+
-'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.4A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span><span class="tx"><b>Ayúdame a ligar con respeto:</b><small>mensajes y consejos con respeto</small></span></button>'+'</div>';return}
+'<button class="chip"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span><span class="tx"><b>Créame una imagen de</b><small>en alta calidad</small></span></button>'+'</div>';return}
 c.msgs.forEach((m,i)=>{const d=bubble(m.role==="user"?"user":"bot");
 if(m.role==="user"){
 if(Array.isArray(m.content)){
@@ -766,7 +762,7 @@ const RX_MCW=/\bminecraft|bedrock\b/i;
 const RX_PROJ=/\b(?:proyecto\s+completo|app\s+nativa|aplicaci[oó]n\s+nativa|app\s+(?:de\s+)?android|aplicaci[oó]n\s+(?:de\s+)?android|apk|en\s+(?:un\s+)?zip|archivo\s+zip|con\s+todos\s+los\s+archivos|en\s+archivos)\b/i;
 function proyectoIntent(t){t=String(t||"");if(IM_ASKQ.test(t))return null;
 {const c0=cur();const la=ultAsist(c0);
-if(la&&!/\?\s*$/.test(t)&&t.length<400&&/(?:c[aá]mbi|ponle|p[oó]nle|hazle|h[aá]zlo|h[aá]zla|agr[eé]ga|a[nñ]ade|quita|qu[ií]tale|m[aá]s\s|menos\s|mejor|otra vez|de nuevo|versi[oó]n|otro color|textura|animaci|efecto|part[ií]cula|sonido|brill|no (?:trae|tiene|sale|se ve|funciona|aparece|hace|tira|lanza|dispara)|falta|faltan|arregl|corrig|rehaz|repite|otra\b|nuev[oa]\b|da[ñn]o|velocidad|r[aá]pid|mortal|nombre|color|de (?:fuego|hielo|rayo|veneno|viento|explosi))/i.test(t))return"mc"}
+if(la&&!/\?\s*$/.test(t)&&t.length<400&&/(?:avanzad|por partes|c[aá]mbi|ponle|p[oó]nle|hazle|h[aá]zlo|h[aá]zla|agr[eé]ga|a[nñ]ade|quita|qu[ií]tale|m[aá]s\s|menos\s|mejor|otra vez|de nuevo|versi[oó]n|otro color|textura|animaci|efecto|part[ií]cula|sonido|brill|no (?:trae|tiene|sale|se ve|funciona|aparece|hace|tira|lanza|dispara)|falta|faltan|arregl|corrig|rehaz|repite|otra\b|nuev[oa]\b|da[ñn]o|velocidad|r[aá]pid|mortal|nombre|color|de (?:fuego|hielo|rayo|veneno|viento|explosi))/i.test(t))return"mc"}
 if(!RX_VERBO.test(t))return null;
 if(RX_MCW.test(t)&&RX_MC.test(t))return"mc";
 if(/\b(?:mcaddon|mcpack|behaviou?r pack|resource pack)\b/i.test(t))return"mc";
@@ -794,24 +790,61 @@ if(share||(navigator.canShare&&navigator.canShare({files:[file]}))){if(navigator
 const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u;a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast("Descargando "+f.name+"… (si no aparece, usa Compartir)",5000)}catch(x){toast("No se pudo guardar el archivo",4000)}});
 function guardarArchivo(id,name,blob){try{if(blob.size>300000)return;const fr=new FileReader();fr.onload=()=>{try{const b64=String(fr.result).split(",")[1]||"";localStorage.setItem("ego_f_"+id,JSON.stringify({n:name,b:b64}));let ks=JSON.parse(localStorage.getItem("ego_fkeys")||"[]");ks.push(id);while(ks.length>6){try{localStorage.removeItem("ego_f_"+ks.shift())}catch(e){}}localStorage.setItem("ego_fkeys",JSON.stringify(ks))}catch(e){}};fr.readAsDataURL(blob)}catch(e){}}
 function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.parse(localStorage.getItem("ego_f_"+id)||"null");if(!o||!o.b)return false;const bin=atob(o.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);FILES.set(id,{name:o.n||name,blob:new Blob([u],{type:"application/octet-stream"}),mime:/\.zip$/i.test(o.n||name)?"application/zip":"application/octet-stream"});return true}catch(e){return false}}
+async function genAddonPro(c,d,text){
+const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="";
+const prog=t=>{d.removeAttribute("data-err");d.innerHTML='<span class="dots">'+t+'</span>';scroll()};
+async function pedir(o,ms){const ac=new AbortController();ctrl=ac;const tm=setTimeout(()=>ac.abort(),ms);try{const r=await wPost(Object.assign({usuario:usuario},o),ac.signal);return r}finally{clearTimeout(tm)}}
+try{
+prog("🧠 Planificando tu add-on…");
+let r=await pedir({action:"mc_plan",prompt:text},150000);let j=await r.json().catch(()=>null);
+if(!r.ok||!j||!j.ok)throw new Error((j&&j.error)||"no se pudo planificar ("+r.status+")");
+const plan=j.plan,files=[];
+for(let i=0;i<plan.partes.length;i++){
+if(stop)break;
+prog("🔨 Creando parte "+(i+1)+" de "+plan.partes.length+": "+plan.partes[i].titulo+"…<br><small>Los add-ons grandes tardan unos minutos. No cierres la app.</small>");
+let ok=false,err="";
+for(let t=0;t<2&&!ok&&!stop;t++){
+try{const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:i,previos:files.map(f=>f.path)},260000);const jj=await rr.json().catch(()=>null);
+if(rr.ok&&jj&&jj.files&&jj.files.length){files.push(...jj.files);ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
+catch(e){err=(e&&e.name==="AbortError")?"tiempo agotado":"sin conexión"}}
+if(!ok&&!stop)fallos.push(plan.partes[i].titulo+" ("+err+")")}
+if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";ctrl=null;return}
+if(!files.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+fallos[0]:""));
+prog("📦 Armando el paquete, texturas y manifests…");
+r=await pedir({action:"mc_build",prompt:text,plan:plan,files:files},90000);
+if(r.ok&&/zip|octet-stream/.test(r.headers.get("content-type")||"")){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
+try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}
+const m=(r.headers.get("content-disposition")||"").match(/filename="?([^";]+)"?/i);if(m)name=m[1]}
+else{const jb=await r.json().catch(()=>null);throw new Error((jb&&jb.error)||"no se pudo armar el paquete")}
+}catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":String((e&&e.message)||"error")}
+ctrl=null;let reply,id=null;
+if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:"application/octet-stream"});
+reply="✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\nPulsa el botón de descarga y abre el archivo **.mcaddon** con Minecraft. Activa el Behavior Pack y el Resource Pack en el mundo; en el README (dentro del paquete) están los comandos para probar cada objeto. Si quieres cambios, dímelo y lo rehago.\n\n"+
+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+". Pídelas de nuevo y las rehago.\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":"")+
+"_Las texturas de ítems y bloques son íconos generados automáticamente y las criaturas usan modelos del juego. Lo escribió una IA: pruébalo y dime qué falla._"}
+else reply="No pude crear el add-on.\n\nMotivo: "+why;
+const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp="mc";am.pro=true;am.pp=text;guardarArchivo(id,name,blob)}
+c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);
+busy=false;stop=false;send.textContent="➤";scroll()}
 async function genProject(c,d,text,kind){
-busy=true;stop=false;send.textContent="■";let blob=null,name="",why="",nfiles=0,modelo="",resumen="";
+busy=true;stop=false;send.textContent="■";let blob=null,name="",why="",nfiles=0,modelo="",resumen="",spec=null,noap="",notas="",pro=false;const la0=kind==="mc"?ultAsist(c):null;const specPrev=(la0&&la0.sp&&/Cambios pedidos ahora:/.test(text))?la0.sp:undefined;const forzar=kind==="mc"&&(/avanzad|por partes|sin plantilla/i.test(text)||!!(la0&&la0.pro&&/Cambios pedidos ahora:/.test(text)));
 try{ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},290000);
-try{const r=await wPost({action:kind==="mc"?"minecraft_generate":"project_generate",prompt:text,usuario:usuarioId()},ctrl.signal);
+try{const r=await wPost({action:kind==="mc"?"minecraft_generate":"project_generate",prompt:text,usuario:usuarioId(),spec:specPrev,avanzado:forzar||undefined},ctrl.signal);
 const ct=r.headers.get("content-type")||"";
-if(r.ok&&/zip|octet-stream/.test(ct)){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;modelo=(r.headers.get("X-EGO-Model")||"").split("/").pop();try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){resumen=""}
+if(r.ok&&/zip|octet-stream/.test(ct)){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;modelo=(r.headers.get("X-EGO-Model")||"").split("/").pop();try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){resumen=""}try{spec=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Spec")||"null"))}catch(e){spec=null}try{noap=decodeURIComponent(r.headers.get("X-EGO-NoAplicado")||"")}catch(e){noap=""}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){notas=""}
 const cd=r.headers.get("content-disposition")||"";const m=cd.match(/filename="?([^";]+)"?/i);name=m?m[1]:(kind==="mc"?"ego-addon.mcaddon":"ego-proyecto.zip")}
-else{let j=null;try{j=await r.json()}catch(x){}why=(j&&j.error)?String(j.error):"el Worker respondió con error "+r.status}}finally{clearTimeout(tm)}}
+else{let j=null;try{j=await r.json()}catch(x){}if(j&&j.avanzado)pro=true;else why=(j&&j.error)?String(j.error):"el Worker respondió con error "+r.status}}finally{clearTimeout(tm)}}
 catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":"sin conexión con el Worker"}
 ctrl=null;
+if(pro&&!why){return genAddonPro(c,d,text)}
 if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";return}
 let reply,id=null;
 if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:/\.zip$/i.test(name)?"application/zip":"application/octet-stream"});
 reply="✅ Listo, creé tu "+(kind==="mc"?"add-on de Minecraft":"proyecto")+" con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n"+
-(kind==="mc"?(resumen?"**Qué incluye:** "+resumen+"\n\n":"")+"Pulsa el botón de descarga y abre el archivo **.mcaddon** con Minecraft (si tu teléfono lo guardó como .zip, renómbralo a .mcaddon). Activa el Behavior Pack y el Resource Pack en el mundo y usa `/give @s` con el id del objeto. Si quieres cambios, dímelo (por ejemplo: \"hazlo de fuego\" o \"más daño\") y lo rehago.\n\n":"Pulsa el botón de descarga y descomprime el .zip; dentro hay un README.md con las instrucciones.\n\n")+
+(kind==="mc"?(resumen?"**Qué incluye:** "+resumen+"\n\n":"")+"Pulsa el botón de descarga y abre el archivo **.mcaddon** con Minecraft (si tu teléfono lo guardó como .zip, renómbralo a .mcaddon). Activa el Behavior Pack y el Resource Pack en el mundo y usa `/give @s` con el id del objeto. Si quieres cambios, dímelo (por ejemplo: \"hazlo de fuego\" o \"más daño\") y lo rehago.\n\n"+(noap?"⚠️ **No pude aplicar esto:** "+noap+". Para pedidos más complejos escribe **«hazlo avanzado»** y lo intento con el generador por partes.\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""):"Pulsa el botón de descarga y descomprime el .zip; dentro hay un README.md con las instrucciones.\n\n")+
 "_Revisa y prueba el resultado: lo escribió una IA"+(modelo?" ("+modelo+")":"")+" y puede tener errores. El archivo se guarda solo mientras la app esté abierta._"}
 else reply="No pude crear el archivo."+(why?"\n\nMotivo: "+why:"");
-const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp=kind;am.pp=text;guardarArchivo(id,name,blob)}
+const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp=kind;am.pp=text;if(spec)am.sp=spec;guardarArchivo(id,name,blob)}
 c.msgs.push(am);saveChats();renderList();
 finish(d,reply,true);if(id)fileBtn(d,id);
 busy=false;stop=false;send.textContent="➤";scroll()}
