@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.5.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.10.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -28,7 +28,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.5.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.10.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -1082,6 +1082,169 @@ async function visionOpenRouter(messages, env) {
   if (!content) throw new Error("OpenRouter devolvió una respuesta vacía");
   return { content, model: `openrouter:${model}` };
 }
+// ---- Comprobación contra la API OFICIAL de Mojang (@minecraft/server 2.11.0 y server-ui 2.3.0, de bedrock-samples; juego 1.26.60) ----
+const MC_API={"act":{"members":["AddRider","Admin","Adventure","Ageable","AirBubbles","AlreadyRegistered","Angle","Any","AnyItem","ApplyWaterlogging","Armor","ArmorFeet","ArmorHead","ArmorLegs","ArmorTorso","Ascending","Attack","Axe","Back","BannedItem","BelowName","BirchFoliage","Black","Block","BlockDynamicProperties","BlockType","Blocks","Blue","Body","Book","Boolean","Born","Bow","Breathable","BreathingPoint","Brown","Build","Camera","CameraRelative","CameraRelativeStrafe","CanClimb","CanFly","CanPowerJump","CarrotStick","Chest","Circle","Clear","Color","Color2","CommandBlockOutput","CommandBlocksEnabled","Compostable","Console","Contains","Cooldown","Copy","CosmeticHead","Creative","Crossbow","Crosshair","CursorInventory","Custom","Cyan","Day","DefaultCategoryId","DefaultFoliage","DefaultPresetId","Deferred","Descending","Desktop","DisallowedNamespace","Disjoint","Dismount","Distance","DoDayLightCycle","DoEntityDrops","DoFireTick","DoImmediateRespawn","DoInsomnia","DoLimitedCrafting","DoMobLoot","DoMobSpawning","DoTileDrops","DoWeatherCycle","Down","DropAttachPoint","DropItem","DrowningDamage","DryFoliage","Durability","Dyeable","DynamicProperties","East","Easy","Elytra","Enchantable","EnderInventory","Entity","EntitySelector","EntityType","Enum","EnumDependencyMissing","Equippable","Event","EvergreenFoliage","ExceedsMaxPageLength","ExceedsMaxPages","ExceedsTitleLength","Exhaustion","Expanded","Expanding","ExplosionPoint","Eyes","Failure","FakePlayer","FallDamage","Fancy","Feet","FireDamage","FireImmune","First","FirstQuarter","FishingRod","Flintsteel","Float","FloatsInLiquid","FluidContainer","FlyingSpeed","Food","ForceCopy","Fourth","FreezeDamage","FrictionModifier","Front","FullMoon","FunctionCommandLimit","GameDirectors","Gamepad","Grass","Gray","Green","Hard","Head","Heal","Healable","Health","Hide","High","Hoe","HorseHealth","Host","Hotbar","Hunger","IdentifierAlreadyExists","IgnoreWaterlogging","Immovable","InBack","InBounce","InCirc","InCubic","InElastic","InExpo","InOutBack","InOutBounce","InOutCirc","InOutCubic","InOutElastic","InOutExpo","InOutQuad","InOutQuart","InOutQuint","InOutSine","InQuad","InQuart","InQuint","InSine","Instrument","Integer","Interact","Intersects","Inventory","IsBaby","IsCharged","IsChested","IsDyeable","IsHiddenWhenInvisible","IsIgnited","IsIllagerCaptain","IsSaddled","IsShaking","IsSheared","IsStackable","IsStunned","IsTamed","Item","ItemText","ItemType","Jump","KeepInventory","KeyboardAndMouse","LastQuarter","LateralMovement","Lava","LavaMovement","Layers","Leashable","Legs","LightBlue","Lime","Linear","List","Loaded","Location","LockedPlayerRelativeStrafe","Low","Magenta","Mainhand","MapColor","MarkVariant","MaxCommandChainLength","MeleeSpear","Member","Memory","Mid","Midnight","Mine","MobGriefing","Mobile","MotionController","Mount","Mouth","Movable","Move","MoveBackward","MoveForward","MoveLeft","MoveRight","Movement","MovementAmphibious","MovementBasic","MovementFly","MovementGeneric","MovementGlide","MovementHover","MovementJump","MovementSkip","MovementSway","NPCDialogue","NamespaceMismatch","NaturalRegeneration","NavigationClimb","NavigationFloat","NavigationFly","NavigationGeneric","NavigationHover","NavigationWalk","NestedStorageItem","NewMoon","Night","NoItem","NoNamespace","None","Noon","Normal","North","NotAllowedItem","Offhand","OnFire","Operator","Orange","OutBack","OutBounce","OutCirc","OutCubic","OutElastic","OutExpo","OutQuad","OutQuart","OutQuint","OutSine","OverChunkLimit","OverWeightLimit","Owner","PaperDoll","ParameterLimit","Peaceful","Pickaxe","Pink","Piston","Player","PlayerRelative","PlayerRelativeStrafe","PlayerSelector","PlayersSleepingPercentage","Popped","Positional","Potion","PowderSnow","PrecipitationInteractions","Pressed","ProgressBar","Projectile","ProjectilesCanBreakBlocks","Purple","Push","PushPull","PushThrough","Pvp","Rain","RandomTickSpeed","RayTraced","RecipesUnlock","RecordPlayer","Red","RedstoneProducer","Regeneration","RegistryInvalid","RegistryReadOnly","Released","Reset","RespawnBlocksExplode","Retracted","Retracting","Rideable","Riding","Rotate180","Rotate270","Rotate90","Rotational","Same","Saturation","Scale","Second","SelfHeal","SendCommandFeedback","Server","Shears","Shield","Shovel","ShowBorderEffect","ShowCoordinates","ShowDaysPlayed","ShowDeathMessages","ShowRecipeMessages","ShowTags","SideLengthExceeded","Sidebar","Sign","Silver","Simple","SkinId","SmallSquare","SmallStar","Sneak","South","SpawnRadius","Spawned","Spear","Spectator","Spring","Square","StatusEffects","Strength","String","Success","Sunrise","Sunset","SuperHigh","SuperLow","Survival","Sword","TameMount","Tameable","Third","ThrowItem","Thunder","TntExplodes","TntExplosionDropDecay","ToolTips","TotemOfUndying","Touch","TouchControls","Transformed","TypeFamily","UnderwaterMovement","UnknownIdentifier","Up","UseItem","Variant","Visitor","WaningCrescent","WaningGibbous","WantsJockey","Water","WaxingCrescent","WaxingGibbous","WaypointAlreadyExists","WaypointLimitExceeded","WaypointNotFound","WeaponAttachPoint","West","White","World","X","XZ","Yellow","Z","ZeroWeightItem","above","accessSourceFilter","accumulatesSnow","add","addCategory","addDye","addEffect","addEnchantment","addEnchantments","addExperience","addItem","addLevels","addObjective","addPreset","addRider","addScore","addShake","addTag","addText","addTimeMarker","addWaypoint","addedComponentGroups","additionalSlotsPerStrength","afterEvents","airInertia","allowNestedStorageItems","allowUnderwater","allowedDamageCauses","allowedHealCauses","allowedItems","allowedSlots","alpha","amount","amplifier","animation","animationMode","animationSeconds","anvil","applyDamage","applyImpulse","applyKnockback","artist","artists","attachToEntity","attachedTo","attackingEntity","author","avoidDamageBlocks","avoidPortals","avoidSun","avoidWater","backfaceVisible","backgroundColorOverride","bannedItems","beforeEvents","beforeItemStack","beforeOnPlayerPlace","below","blendOutTime","block","blockComponentRegistry","blockContainerClosed","blockContainerOpened","blockDestructionSource","blockExplode","blockExplosion","blockFace","blockFilter","blockPermutation","blockState","blockTypes","blue","bonusChance","bonusRolls","bottomCenter","boundingBox","boundingSize","breakProgress","breaksBlocks","breathesAir","breathesLava","breathesSolids","breathesWater","brokenBlockPermutation","button","buttonPush","buttons","calculateClosestBiomeFromSeed","camera","campfire","canAddEnchantment","canAlwaysEat","canBeDestroyedByLiquidSpread","canBeSiphonedFrom","canBeStolen","canBreach","canBreakDoors","canContainLiquid","canFloat","canJump","canOpenDoors","canOpenIronDoors","canPassDoors","canPathFromAir","canPathOverLava","canPathOverWater","canSink","canSwim","canWalk","canWalkInLava","cancel","catchFireOnHurt","category","cause","causesFire","center","chance","chances","charging","cheatsRequired","checkForBlocks","chunkCount","clear","clearAll","clearDynamicProperties","clearJob","clearObjectiveAtDisplaySlot","clearPropertyOverridesForEntity","clearRun","clearVelocity","clientSystemInfo","clock","clone","cloneBlocks","closeSource","closest","color","commandBlockOutput","commandBlocksEnabled","commandPermissionLevel","componentId","compostingChance","conditions","constructor","contact","container","containerRules","containerType","contains","containsBiomes","containsBlock","contents","controlPoints","controller","controllingSeat","cooldownCategory","cooldownTicks","count","createEmpty","createExplosion","createFromWorld","createTickingArea","critParticlesOnProjectileHurt","crouchingSkipInteract","currentTick","currentValue","customCommandRegistry","customComponentParameters","damage","damageSource","damagingEntity","damagingProjectile","data","dataDrivenEntityTrigger","deadEntity","defaultBlockPriority","defaultColor","defaultEntityPriority","defaultItemSettings","defaultValue","delete","depthTest","description","destination","destroyOnProjectileHurt","dimension","dimensionRegistry","displayName","distance","doDayLightCycle","doEntityDrops","doFireTick","doImmediateRespawn","doInsomnia","doLimitedCrafting","doMobLoot","doMobSpawning","doTileDrops","doWeatherCycle","doesLocationTouchFaces","doesVolumeTouchFaces","drowning","drowningDamage","durability","durabilityDamage","duration","durationInfo","durationTicks","easeOptions","easeTime","easeType","easingFunc","east","effect","effectAdd","effectType","effectiveMax","effectiveMin","effects","ejectRecord","ejectRider","ejectRiders","emptySlotsCount","enabled","enchantment","enchantments","entities","entity","entityAttack","entityContainerClosed","entityContainerOpened","entityDie","entityExplosion","entityFilter","entityHeal","entityHealthChanged","entityHitBlock","entityHitEntity","entityHurt","entityItemDrop","entityItemPickup","entityLoad","entityOffset","entityRemove","entityRidingOn","entityRules","entitySource","entitySpawn","entityStartSneaking","entityStopSneaking","entityTamed","entityType","entityTypes","entityUpgrade","entries","equals","eventId","eventName","eventTypes","exclude","excludeBiomes","excludeFamilies","excludeGameModes","excludeItems","excludeNames","excludePermutations","excludeTags","excludeTypes","explodedBlockPermutation","explosion","extent","extinguishFire","face","faceLocation","facingEntity","facingLocation","fade","fadeColor","fadeInDuration","fadeInTime","fadeOutDuration","fadeOutTime","fadeTime","fall","fallDamage","fallDistance","fallingBlock","families","farthest","fillBlocks","fillLevel","find","findLast","fire","fireDamage","fireTick","fireworks","firstEmptySlot","firstItem","fluidColor","flyIntoWall","fogSettings","forceProvidedPositionOnDimensionChange","forceUse","fov","freezeDamage","freezing","from","fromDimension","fromGameMode","fromLocation","functionCommandLimit","functions","gameMode","gameRuleChange","gameRules","generateLootFromBlock","generateLootFromBlockPermutation","generateLootFromBlockType","generateLootFromEntity","generateLootFromEntityType","generateLootFromTable","generatesBubbles","genres","get","getAABB","getAbsoluteTime","getAimAssist","getAll","getAllBlocksStandingOn","getAllDeliveryTypes","getAllEffectTypes","getAllPlayers","getAllStates","getAllTickingAreas","getAllWaypoints","getAttachedBlocks","getAttachedBlocksLocations","getBiome","getBlock","getBlockAbove","getBlockBelow","getBlockFromRay","getBlockFromViewDirection","getBlockHit","getBlockLocationIterator","getBlockPermutation","getBlockPriorities","getBlockStandingOn","getBlockTagPriorities","getBlocks","getBreatheBlocks","getButtonState","getCanDestroy","getCanPlaceOn","getCapacity","getCategories","getCategory","getClock","getClosest","getComponent","getComponents","getConnectedFaces","getControlScheme","getCooldownTicksRemaining","getDamageChance","getDamageChanceRange","getDay","getDefaultSpawnLocation","getDefinitions","getDeliveryType","getDifficulty","getDimension","getDimensionLocation","getDropItems","getDynamicProperty","getDynamicPropertyIds","getDynamicPropertyTotalByteCount","getEffect","getEffectType","getEffects","getEnchantment","getEnchantments","getEntities","getEntitiesAtBlockLocation","getEntitiesFromRay","getEntitiesFromViewDirection","getEntity","getEntityHit","getEntityPriorities","getEntityTypeFamilyPriorities","getEquipment","getEquipmentSlot","getExcludedBlockTagTargets","getExcludedBlockTargets","getExcludedEntityTargets","getExcludedEntityTypeFamilyTargets","getFamilyTypes","getFarthest","getFeedItems","getFluidType","getGameMode","getHeadLocation","getHiddenHudElements","getImpactedBlocks","getInstrumentName","getIsWaterlogged","getItem","getItemCooldown","getItemSettings","getItemStack","getLightLevel","getLiquidTargetingItems","getLootTable","getLootTableManager","getLore","getMax","getMin","getModifiers","getMoonPhase","getMovementVector","getName","getNonBreatheBlocks","getObjective","getObjectiveAtDisplaySlot","getObjectives","getPackSettings","getPackStructureIds","getPageContent","getParticipants","getParts","getPlaybackPosition","getPlayers","getPreset","getPresets","getProperty","getRawLore","getRawPageContent","getRawText","getRecord","getRedstonePower","getRiders","getRotation","getScore","getScores","getSeats","getShapes","getSkyLightLevel","getSlot","getSpan","getSpawnPoint","getStack","getState","getStronglyPoweredFace","getTags","getTameItems","getText","getTextDyeColor","getTickingArea","getTimeOfDay","getTopmostBlock","getTotalXp","getTypeFamilies","getVelocity","getViewDirection","getWorldStructureIds","graphicsMode","gravity","greaterThan","greaterThanOrEquals","green","growUp","growth","hadEffect","handSettings","hardDistance","hasCapacity","hasComponent","hasDuration","hasEnchantment","hasItem","hasParticipant","hasTag","hasTags","hasTickingArea","hasTypeFamily","hasWaypoint","healAmount","healSource","healedEntity","healing","heightRange","heldItemOption","heldItemStack","hideAllExcept","hitBlock","hitBlockPermutation","hitEntity","hitEntitySound","hitGroundSound","hitParticle","hitVector","holdTime","hurtEntity","iconHeight","iconWidth","id","identifier","ignoreBlockCollision","ignoreChunkBoundErrors","ignoreQuantityChange","ignoreStartHeight","ignoreThinBlocks","includeBiomes","includeBlocks","includeEntities","includeItems","includeLiquidBlocks","includePassableBlocks","includePermutations","includeTags","includeTypes","inhaleTime","initialPersistence","initialRange","initialRotation","initialSpawn","initiator","inputInfo","inputPermissions","insertPage","integrity","integritySeed","intensity","interactText","intersects","inventory","inventorySize","inventoryType","isActive","isAir","isAmphibious","isBroadcast","isChunkLoaded","isClimbing","isCooldownCategory","isEditorWorld","isEmoting","isEnabled","isExpanding","isFalling","isFirstEvent","isFlying","isForcedHidden","isFullyLoaded","isGliding","isHardcore","isInWater","isInside","isJumping","isLeashed","isLiquid","isLiquidBlocking","isMoving","isOnGround","isPaused","isPermissionCategoryEnabled","isPlaying","isPowered","isSigned","isSleeping","isSneaking","isSnowLoggable","isSprinting","isStackable","isStackableWith","isSwimming","isTamed","isTamedToPlayer","isValid","isWaterlogged","isWaxed","item","itemCompleteUse","itemComponentRegistry","itemFilter","itemName","itemReleaseUse","itemStack","itemStackAfterBreak","itemStackBeforeBreak","itemStartUse","itemStartUseOn","itemStopUse","itemStopUseOn","itemTagsAll","itemTagsAny","itemTagsNone","itemUse","items","keepInventory","keepJigsaws","keepOnDeath","keepVelocity","kill","lastInputModeUsed","lava","leashHolder","leashHolderEntityId","leashTo","lessThan","lessThanOrEquals","level","levels","leverAction","lightning","lightningStrikeOnHit","lineGapHeight","liquidCanFlowFromDirection","liquidInertia","liquidSettings","liquidSpreadCausesSpawn","locale","localizationKey","location","locator","locatorBar","lockMode","lockRiderRotation","lookAt","loop","loopCount","lootTable","lootingMultiplier","lore","lowerBound","maceSmash","magic","magma","mandatoryParameters","matches","material","max","maxAmount","maxChance","maxChunkCount","maxCommandChainLength","maxCount","maxDistance","maxDurability","maxDuration","maxFillLevel","maxHorizontalRotation","maxLevel","maxRenderDistance","maxRiderCount","maxScore","maxShapes","maxTurn","maxVerticalRotation","maximumRenderDistance","memoryTier","message","min","minDistance","minDuration","minFillLevel","minHorizontalRotation","minLevel","minRiderCount","minScore","minVerticalRotation","minedBlockPermutation","mirror","mobGriefing","moods","moveItem","movementType","musicInfo","name","nameTag","nameplateDepthTested","nameplateRenderDistance","namespaces","naturalRegeneration","newButtonState","newInputModeUsed","newSlotSelected","newTime","newValue","newWeather","nextState","none","north","notEquals","nutrition","objective","obstructsRain","offset","offsetFromTargetCenter","oldValue","onBeforeDurabilityDamage","onBlockStateChange","onBreak","onCompleteUse","onConsume","onEntity","onEntityFallOn","onFireTicksRemaining","onFireTime","onHitEntity","onMineBlock","onPlace","onPlayerBreak","onPlayerInteract","onRandomTick","onRedstoneUpdate","onScreenDisplay","onStepOff","onStepOn","onTick","onUse","onUseOn","openSource","optionalParameters","override","owner","pageCount","pages","params","participant","passengerMaxWidth","path","pattern","pause","pauseRecord","period","permissionLevel","permutation","permutationToPlace","permutations","personaPieceId","piston","pistonActivate","pitch","place","placeFeature","placeFeatureRule","placeJigsaw","placeJigsawStructure","platformType","playAnimation","playInstrumentSound","playMusic","playRecord","playSound","player","playerBreakBlock","playerButtonInput","playerCancelBreakingBlock","playerDimensionChange","playerEmote","playerFilter","playerGameModeChange","playerHotbarSelectedSlotChange","playerId","playerInputModeChange","playerInputPermissionCategoryChange","playerInteractWithBlock","playerInteractWithEntity","playerInventoryItemChange","playerJoin","playerLeave","playerName","playerPermissionLevel","playerPlaceBlock","playerRules","playerSpawn","playerStartBreakingBlock","playerSwingStart","players","playersSleepingPercentage","pools","pop","position","potionDeliveryType","potionEffectType","power","powerLevel","presetId","pressurePlatePop","pressurePlatePush","previousBlock","previousInputModeUsed","previousPermutation","previousPowerLevel","previousRedstonePower","previousSlotSelected","previousWeather","primitiveShapesManager","private","probability","progressKeyFrames","projectile","projectileHitBlock","projectileHitEntity","projectilesCanBreakBlocks","propertyId","propertyOptions","pullInEntities","push","pvp","quality","queueMusic","ramAttack","randomTickSpeed","range","rawContents","rawtext","recipesUnlock","recipient","red","redstonePower","registerClock","registerCommand","registerCustomComponent","registerCustomDimension","registerEnum","remove","removeAll","removeAllEnchantments","removeAllTickingAreas","removeAllWaypoints","removeEffect","removeEnchantment","removeObjective","removePage","removeParticipant","removePropertyOverrideForEntity","removeTag","removeText","removeTickingArea","removeTimeMarker","removeWaypoint","removedComponentGroups","removedEntity","removedEntityId","resetHudElementsVisibility","resetLevel","resetProperty","resetToDefaultValue","resetToMaxValue","resetToMinValue","resolve","respawnBlocksExplode","restrictToOwner","resultItem","resume","rewindTo","riderCanInteract","rolls","rotation","rotationKeyFrames","rule","run","runCommand","runInterval","runJob","runTimeout","saturationModifier","saveAs","saveMode","saveToWorld","scale","score","scoreOptions","scoreboard","scoreboardIdentity","scriptEventReceive","seatCount","seatRotation","seed","seekTo","selectedSlotIndex","selfDestruct","sendCommandFeedback","sendMessage","sendScriptEvent","serverSystemInfo","set","setAbsoluteTime","setActionBar","setBlockPermutation","setBlockPriorities","setBlockTagPriorities","setBlockType","setCamera","setCanDestroy","setCanPlaceOn","setColorRGB","setColorRGBA","setContents","setControlScheme","setCurrentValue","setDefaultCamera","setDefaultSpawnLocation","setDifficulty","setDimensionLocation","setDynamicProperties","setDynamicProperty","setEntityPriorities","setEntityTypeFamilyPriorities","setEquipment","setExcludedBlockTagTargets","setExcludedBlockTargets","setExcludedEntityTargets","setExcludedEntityTypeFamilyTargets","setFloat","setFluidType","setFov","setGameMode","setHudVisibility","setImpactedBlocks","setItem","setItemSettings","setLiquidTargetingItems","setLocation","setLore","setObjectiveAtDisplaySlot","setOnFire","setPageContent","setPermissionCategory","setPermutation","setPitch","setPotion","setProperty","setPropertyOverrideForEntity","setRecord","setRotation","setScore","setSpawnPoint","setSpeedAndDirection","setStack","setText","setTextDyeColor","setTimeOfDay","setTitle","setType","setVector3","setVolume","setWaterlogged","setWaxed","setWeather","settings","shoot","shouldBounceOnHit","showBorderEffect","showCoordinates","showDaysPlayed","showDead","showDeathMessages","showHidden","showInvisible","showParticles","showRecipeMessages","showSneaking","showSpectator","showSpectatorToSpectator","showTags","shutdown","signBook","size","skipTo","slot","slots","softDistance","sonicBoom","sortOrder","soulCampfire","soundCompleted","soundDefinitionRegistry","soundEventId","soundInstanceId","source","sourceBlock","sourceEntity","sourceType","sources","south","spawnEntity","spawnEvent","spawnItem","spawnParticle","spawnRadius","spawnXp","speedWhenTurning","stalactite","stalagmite","startCooldown","startItemCooldown","startSpeed","startup","starve","state","status","stayDuration","stickyType","stop","stopExpression","stopMusic","stopOnHit","stopShaking","structureManager","subTable","subscribe","subtitle","successCount","suffocateTime","suffocation","swapItems","swayAmplitude","swayFrequency","swingSource","tags","tame","tameToPlayer","tamedToPlayer","tamedToPlayerId","tamingEntity","tamingEntityFilter","target","targetBlockHit","targetEntity","targetMode","teleport","temperature","text","textBackfaceVisible","texture","textureBoundsList","textureSelector","thorns","tickingAreaManager","tiers","time","timeLeft","timeMarker","timeMarkers","timeSeconds","tintMethod","tintedColor","title","titles","tntExplodes","tntExplosionDropDecay","to","toDimension","toGameMode","toLocation","totalArmor","totalByteCount","totalSupply","totalTimeLeft","totalTimeSeconds","totalToughness","totalXpNeededForNextLevel","touchOnlyAffectsHotbar","transferItem","transformToItem","translate","treasure","triggerEvent","tripWireTrip","tryTeleport","type","typeId","unbreakable","uncertainty","unleash","unsubscribe","updateSubtitle","upgradeId","upperBound","useDuration","useRotation","usedOnBlockPermutation","usingConvertsTo","validValues","value","values","viewAngle","viewOffset","visibleTo","void","volume","waitTicks","waterlogged","weatherChange","weight","weightLimit","west","with","withState","wither","worldClockOnPaused","worldClockOnRestart","worldClockOnResumed","worldClockOnTimeMarker","worldClockOnTimeModified","worldClockRegistry","worldLoad","x","xpEarnedAtCurrentLevel","y","z"],"exports":["AABB","AimAssistCategory","AimAssistCategorySettings","AimAssistPreset","AimAssistPresetSettings","AimAssistRegistry","AimAssistTargetMode","AnimationOptions","BiomeFilter","BiomeSearchOptions","BiomeType","BiomeTypes","Block","BlockBoundingBox","BlockComponent","BlockComponentBlockBreakEvent","BlockComponentBlockStateChangeEvent","BlockComponentEntityEvent","BlockComponentEntityFallOnEvent","BlockComponentOnPlaceEvent","BlockComponentPlayerBreakEvent","BlockComponentPlayerInteractEvent","BlockComponentPlayerPlaceBeforeEvent","BlockComponentRandomTickEvent","BlockComponentRedstoneUpdateEvent","BlockComponentRegistry","BlockComponentReturnType","BlockComponentStepOffEvent","BlockComponentStepOnEvent","BlockComponentTickEvent","BlockComponentTypeMap","BlockComponentTypes","BlockContainerAccessEventOptions","BlockContainerClosedAfterEvent","BlockContainerClosedAfterEventSignal","BlockContainerOpenedAfterEvent","BlockContainerOpenedAfterEventSignal","BlockCustomComponent","BlockCustomComponentAlreadyRegisteredError","BlockCustomComponentInstance","BlockCustomComponentReloadNewComponentError","BlockCustomComponentReloadNewEventError","BlockCustomComponentReloadVersionError","BlockDynamicPropertiesComponent","BlockEvent","BlockEventOptions","BlockExplodeAfterEvent","BlockExplodeAfterEventSignal","BlockFillOptions","BlockFilter","BlockFluidContainerComponent","BlockHitInformation","BlockInstrumentComponent","BlockInventoryComponent","BlockLocationIterator","BlockMapColorComponent","BlockMovableComponent","BlockPermutation","BlockPistonComponent","BlockPistonState","BlockPrecipitationInteractionsComponent","BlockQueryOptions","BlockRaycastHit","BlockRaycastOptions","BlockRecordPlayerComponent","BlockRedstoneProducerComponent","BlockSignComponent","BlockStateArg","BlockStateType","BlockStates","BlockType","BlockTypes","BlockVolume","BlockVolumeBase","BlockVolumeIntersection","BookError","BookErrorReason","BookPageContentError","ButtonPushAfterEvent","ButtonPushAfterEventSignal","ButtonState","Camera","CameraAttachOptions","CameraFadeOptions","CameraFadeTimeOptions","CameraFixedBoomOptions","CameraFovOptions","CameraSetFacingOptions","CameraSetLocationOptions","CameraSetPosOptions","CameraSetRotOptions","CameraShakeOptions","CameraShakeType","CameraTargetOptions","CatmullRomSpline","ClientSystemInfo","CloneMode","CommandError","CommandPermissionLevel","CommandResult","Component","Container","ContainerAccessSource","ContainerAccessSourceFilter","ContainerRules","ContainerRulesError","ContainerRulesErrorReason","ContainerSlot","ControlScheme","CustomCommand","CustomCommandError","CustomCommandErrorReason","CustomCommandOrigin","CustomCommandParamType","CustomCommandParameter","CustomCommandRegistry","CustomCommandResult","CustomCommandSource","CustomCommandStatus","CustomComponentInvalidRegistryError","CustomComponentNameError","CustomComponentNameErrorReason","CustomComponentParameters","CustomDimensionAlreadyRegisteredError","CustomDimensionInvalidRegistryError","CustomDimensionNameError","CustomDimensionReloadNewDimensionError","CustomTexture","DamagedByEntityCondition","DataDrivenEntityTriggerAfterEvent","DataDrivenEntityTriggerAfterEventSignal","DefinitionModifier","Difficulty","Dimension","DimensionLocation","DimensionRegistry","DimensionType","DimensionTypes","Direction","DisplaySlotId","DyeColor","EaseOptions","EasingType","Effect","EffectAddAfterEvent","EffectAddAfterEventSignal","EffectAddBeforeEvent","EffectAddBeforeEventSignal","EffectType","EffectTypes","EmptyLootItem","EnchantInfo","EnchantRandomEquipmentFunction","EnchantRandomlyFunction","EnchantWithLevelsFunction","Enchantment","EnchantmentLevelOutOfBoundsError","EnchantmentSlot","EnchantmentType","EnchantmentTypeNotCompatibleError","EnchantmentTypeUnknownIdError","EnchantmentTypes","Entity","EntityAddRiderComponent","EntityAgeableComponent","EntityApplyDamageByProjectileOptions","EntityApplyDamageOptions","EntityAttachPoint","EntityAttributeComponent","EntityBaseMovementComponent","EntityBreathableComponent","EntityCanClimbComponent","EntityCanFlyComponent","EntityCanPowerJumpComponent","EntityColor2Component","EntityColorComponent","EntityComponent","EntityComponentReturnType","EntityComponentTypeMap","EntityComponentTypes","EntityContainerAccessEventOptions","EntityContainerClosedAfterEvent","EntityContainerClosedAfterEventSignal","EntityContainerOpenedAfterEvent","EntityContainerOpenedAfterEventSignal","EntityDamageCause","EntityDamageSource","EntityDataDrivenTriggerEventOptions","EntityDefinitionFeedItem","EntityDieAfterEvent","EntityDieAfterEventSignal","EntityEffectOptions","EntityEnderInventoryComponent","EntityEquippableComponent","EntityEventOptions","EntityExhaustionComponent","EntityFilter","EntityFireImmuneComponent","EntityFloatsInLiquidComponent","EntityFlyingSpeedComponent","EntityFrictionModifierComponent","EntityHasMarkVariantCondition","EntityHasVariantCondition","EntityHealAfterEvent","EntityHealAfterEventSignal","EntityHealBeforeEvent","EntityHealBeforeEventSignal","EntityHealCause","EntityHealEventOptions","EntityHealSource","EntityHealableComponent","EntityHealthChangedAfterEvent","EntityHealthChangedAfterEventSignal","EntityHealthComponent","EntityHitBlockAfterEvent","EntityHitBlockAfterEventSignal","EntityHitEntityAfterEvent","EntityHitEntityAfterEventSignal","EntityHitInformation","EntityHungerComponent","EntityHurtAfterEvent","EntityHurtAfterEventOptions","EntityHurtAfterEventSignal","EntityHurtBeforeEvent","EntityHurtBeforeEventOptions","EntityHurtBeforeEventSignal","EntityInitializationCause","EntityInventoryComponent","EntityIsBabyComponent","EntityIsChargedComponent","EntityIsChestedComponent","EntityIsDyeableComponent","EntityIsHiddenWhenInvisibleComponent","EntityIsIgnitedComponent","EntityIsIllagerCaptainComponent","EntityIsSaddledComponent","EntityIsShakingComponent","EntityIsShearedComponent","EntityIsStackableComponent","EntityIsStunnedComponent","EntityIsTamedComponent","EntityItemComponent","EntityItemDropAfterEvent","EntityItemDropAfterEventSignal","EntityItemDropEventOptions","EntityItemPickupAfterEvent","EntityItemPickupAfterEventSignal","EntityItemPickupBeforeEvent","EntityItemPickupBeforeEventSignal","EntityItemPickupEventOptions","EntityKilledCondition","EntityLavaMovementComponent","EntityLeashableComponent","EntityLoadAfterEvent","EntityLoadAfterEventSignal","EntityMarkVariantComponent","EntityMovementAmphibiousComponent","EntityMovementBasicComponent","EntityMovementComponent","EntityMovementFlyComponent","EntityMovementGenericComponent","EntityMovementGlideComponent","EntityMovementHoverComponent","EntityMovementJumpComponent","EntityMovementSkipComponent","EntityMovementSwayComponent","EntityNavigationClimbComponent","EntityNavigationComponent","EntityNavigationFloatComponent","EntityNavigationFlyComponent","EntityNavigationGenericComponent","EntityNavigationHoverComponent","EntityNavigationWalkComponent","EntityOnFireComponent","EntityProjectileComponent","EntityPushThroughComponent","EntityQueryOptions","EntityQueryPropertyOptions","EntityQueryScoreOptions","EntityRaycastHit","EntityRaycastOptions","EntityRemoveAfterEvent","EntityRemoveAfterEventSignal","EntityRemoveBeforeEvent","EntityRemoveBeforeEventSignal","EntityRideableComponent","EntityRidingComponent","EntitySaturationComponent","EntityScaleComponent","EntitySkinIdComponent","EntitySneakingChangedEventOptions","EntitySpawnAfterEvent","EntitySpawnAfterEventSignal","EntitySpawnError","EntityStartSneakingAfterEvent","EntityStartSneakingAfterEventSignal","EntityStopSneakingAfterEvent","EntityStopSneakingAfterEventSignal","EntityStrengthComponent","EntitySwingSource","EntityTameMountComponent","EntityTameableComponent","EntityTamedAfterEvent","EntityTamedAfterEventSignal","EntityTamedBeforeEvent","EntityTamedBeforeEventSignal","EntityTamedEventOptions","EntityType","EntityTypeFamilyComponent","EntityTypes","EntityUnderwaterMovementComponent","EntityUpgradeAfterEvent","EntityUpgradeAfterEventSignal","EntityVariantComponent","EntityVisibilityRules","EntityWantsJockeyComponent","EntityWaypoint","EqualsComparison","EquipmentSlot","ExplorationMapFunction","ExplosionAfterEvent","ExplosionAfterEventSignal","ExplosionBeforeEvent","ExplosionBeforeEventSignal","ExplosionDecayFunction","ExplosionOptions","FeedItem","FeedItemEffect","FillContainerFunction","FluidContainer","FluidType","FogSettings","FogSettingsError","GameMode","GameRule","GameRuleChangeAfterEvent","GameRuleChangeAfterEventSignal","GameRules","GetBlocksStandingOnOptions","GraphicsMode","GreaterThanComparison","GreaterThanOrEqualsComparison","HeldItemOption","HotbarEventOptions","HudElement","HudElementsCount","HudVisibility","HudVisibilityCount","ISerializable","InputButton","InputEventOptions","InputInfo","InputMode","InputPermissionCategory","InvalidBlockComponentError","InvalidContainerError","InvalidContainerSlotError","InvalidEntityComponentError","InvalidEntityError","InvalidItemStackError","InvalidIteratorError","InvalidPotionDeliveryTypeError","InvalidPotionEffectTypeError","InvalidStructureError","InvalidWaypointError","InvalidWaypointTextureSelectorError","InventoryItemEventOptions","IsBabyCondition","ItemBlockDynamicPropertiesComponent","ItemBookComponent","ItemCompleteUseAfterEvent","ItemCompleteUseAfterEventSignal","ItemCompleteUseEvent","ItemComponent","ItemComponentBeforeDurabilityDamageEvent","ItemComponentCompleteUseEvent","ItemComponentConsumeEvent","ItemComponentHitEntityEvent","ItemComponentMineBlockEvent","ItemComponentRegistry","ItemComponentReturnType","ItemComponentTypeMap","ItemComponentTypes","ItemComponentUseEvent","ItemComponentUseOnEvent","ItemCompostableComponent","ItemCooldownComponent","ItemCustomComponent","ItemCustomComponentAlreadyRegisteredError","ItemCustomComponentInstance","ItemCustomComponentReloadNewComponentError","ItemCustomComponentReloadNewEventError","ItemCustomComponentReloadVersionError","ItemDurabilityComponent","ItemDyeableComponent","ItemEnchantableComponent","ItemFilter","ItemFoodComponent","ItemInventoryComponent","ItemLockMode","ItemPotionComponent","ItemReleaseUseAfterEvent","ItemReleaseUseAfterEventSignal","ItemStack","ItemStartUseAfterEvent","ItemStartUseAfterEventSignal","ItemStartUseOnAfterEvent","ItemStartUseOnAfterEventSignal","ItemStopUseAfterEvent","ItemStopUseAfterEventSignal","ItemStopUseOnAfterEvent","ItemStopUseOnAfterEventSignal","ItemType","ItemTypes","ItemUseAfterEvent","ItemUseAfterEventSignal","ItemUseBeforeEvent","ItemUseBeforeEventSignal","ItemUseOnEvent","JigsawPlaceOptions","JigsawStructurePlaceOptions","KilledByEntityCondition","KilledByPlayerCondition","KilledByPlayerOrPetsCondition","LessThanComparison","LessThanOrEqualsComparison","LeverActionAfterEvent","LeverActionAfterEventSignal","LinearSpline","LiquidSettings","LiquidType","ListBlockVolume","LocationInUnloadedChunkError","LocationOutOfWorldBoundariesError","LocationWaypoint","LocatorBar","LocatorBarError","LocatorBarErrorReason","LootItem","LootItemCondition","LootItemFunction","LootPool","LootPoolEntry","LootPoolTiers","LootTable","LootTableEntry","LootTableManager","LootTableReference","LootingEnchantFunction","MatchToolCondition","MemoryTier","MolangVariableMap","MoonPhase","MoonPhaseCount","MovementType","MusicOptions","NamespaceNameError","NamespaceNameErrorReason","NotEqualsComparison","ObjectiveSortOrder","PaletteColor","PassengerOfEntityCondition","PistonActivateAfterEvent","PistonActivateAfterEventSignal","PlaceJigsawError","PlatformType","PlayAnimationOptions","Player","PlayerAimAssist","PlayerAimAssistSettings","PlayerBreakBlockAfterEvent","PlayerBreakBlockAfterEventSignal","PlayerBreakBlockBeforeEvent","PlayerBreakBlockBeforeEventSignal","PlayerBreakingBlockEventOptions","PlayerButtonInputAfterEvent","PlayerButtonInputAfterEventSignal","PlayerCancelBreakingBlockAfterEvent","PlayerCancelBreakingBlockAfterEventSignal","PlayerCursorInventoryComponent","PlayerDimensionChangeAfterEvent","PlayerDimensionChangeAfterEventSignal","PlayerEmoteAfterEvent","PlayerEmoteAfterEventSignal","PlayerGameModeChangeAfterEvent","PlayerGameModeChangeAfterEventSignal","PlayerGameModeChangeBeforeEvent","PlayerGameModeChangeBeforeEventSignal","PlayerHotbarSelectedSlotChangeAfterEvent","PlayerHotbarSelectedSlotChangeAfterEventSignal","PlayerInputModeChangeAfterEvent","PlayerInputModeChangeAfterEventSignal","PlayerInputPermissionCategoryChangeAfterEvent","PlayerInputPermissionCategoryChangeAfterEventSignal","PlayerInputPermissions","PlayerInteractWithBlockAfterEvent","PlayerInteractWithBlockAfterEventSignal","PlayerInteractWithBlockBeforeEvent","PlayerInteractWithBlockBeforeEventSignal","PlayerInteractWithEntityAfterEvent","PlayerInteractWithEntityAfterEventSignal","PlayerInteractWithEntityBeforeEvent","PlayerInteractWithEntityBeforeEventSignal","PlayerInventoryItemChangeAfterEvent","PlayerInventoryItemChangeAfterEventSignal","PlayerInventoryType","PlayerJoinAfterEvent","PlayerJoinAfterEventSignal","PlayerLeaveAfterEvent","PlayerLeaveAfterEventSignal","PlayerLeaveBeforeEvent","PlayerLeaveBeforeEventSignal","PlayerPermissionLevel","PlayerPlaceBlockAfterEvent","PlayerPlaceBlockAfterEventSignal","PlayerSoundOptions","PlayerSpawnAfterEvent","PlayerSpawnAfterEventSignal","PlayerSplitScreenSlot","PlayerStartBreakingBlockAfterEvent","PlayerStartBreakingBlockAfterEventSignal","PlayerSwingEventOptions","PlayerSwingStartAfterEvent","PlayerSwingStartAfterEventSignal","PlayerVisibilityRules","PlayerWaypoint","PotionDeliveryType","PotionEffectType","Potions","PressurePlatePopAfterEvent","PressurePlatePopAfterEventSignal","PressurePlatePushAfterEvent","PressurePlatePushAfterEventSignal","PrimitiveShape","PrimitiveShapeError","PrimitiveShapeQueryOptions","PrimitiveShapesManager","ProgressKeyFrame","ProjectileHitBlockAfterEvent","ProjectileHitBlockAfterEventSignal","ProjectileHitEntityAfterEvent","ProjectileHitEntityAfterEventSignal","ProjectileShootOptions","RGB","RGBA","RandomAuxValueFunction","RandomBlockStateFunction","RandomChanceCondition","RandomChanceWithLootingCondition","RandomDifficultyChanceCondition","RandomDyeFunction","RandomRegionalDifficultyChanceCondition","RangeComparison","RawMessage","RawMessageError","RawMessageScore","RawText","RotationKeyFrame","Scoreboard","ScoreboardIdentity","ScoreboardIdentityType","ScoreboardObjective","ScoreboardObjectiveDisplayOptions","ScoreboardScoreInfo","ScreenDisplay","ScriptEventCommandMessageAfterEvent","ScriptEventCommandMessageAfterEventSignal","ScriptEventMessageFilterOptions","ScriptEventSource","Seat","SetArmorTrimFunction","SetBannerDetailsFunction","SetBookContentsFunction","SetDataFromColorIndexFunction","SetItemCountFunction","SetItemDamageFunction","SetItemDataFunction","SetItemLoreFunction","SetItemNameFunction","SetOminousBottleFunction","SetPotionFunction","SetSpawnEggFunction","SetStewEffectFunction","ShutdownBeforeEventSignal","ShutdownEvent","SignSide","SmeltItemFunction","SoundCompletedAfterEvent","SoundCompletedAfterEventSignal","SoundDefinition","SoundDefinitionDurationInfo","SoundDefinitionFilter","SoundDefinitionMusicInfo","SoundDefinitionRegistry","SoundDurationInfo","SoundInstance","SpawnEntityOptions","SpecificEnchantFunction","SplineAnimation","StartupBeforeEventSignal","StartupEvent","StickyType","Structure","StructureAnimationMode","StructureCreateOptions","StructureManager","StructureMirrorAxis","StructurePlaceOptions","StructureRotation","StructureSaveMode","System","SystemAfterEvents","SystemBeforeEvents","SystemInfo","TargetBlockHitAfterEvent","TargetBlockHitAfterEventSignal","TeleportOptions","TextPrimitive","TickingArea","TickingAreaError","TickingAreaErrorReason","TickingAreaManager","TickingAreaOptions","TicksPerDay","TicksPerSecond","TimeMarker","TimeMarkerOptions","TimeOfDay","TintMethod","TitleDisplayOptions","Trigger","TripWireTripAfterEvent","TripWireTripAfterEventSignal","UnloadedChunksError","Vector2","Vector3","VectorXZ","Waypoint","WaypointTexture","WaypointTextureBounds","WaypointTextureSelector","WeatherChangeAfterEvent","WeatherChangeAfterEventSignal","WeatherChangeBeforeEvent","WeatherChangeBeforeEventSignal","WeatherType","World","WorldAfterEvents","WorldBeforeEvents","WorldClock","WorldClockAddTimeMarkerError","WorldClockEventOptions","WorldClockInvalidRegistryError","WorldClockInvalidTimeMarkerError","WorldClockNotFoundError","WorldClockOnPausedAfterEvent","WorldClockOnPausedAfterEventSignal","WorldClockOnRestartBeforeEvent","WorldClockOnRestartBeforeEventSignal","WorldClockOnResumedAfterEvent","WorldClockOnResumedAfterEventSignal","WorldClockOnTimeMarkerAfterEvent","WorldClockOnTimeMarkerAfterEventSignal","WorldClockOnTimeModifiedAfterEvent","WorldClockOnTimeModifiedAfterEventSignal","WorldClockRegistrationError","WorldClockRegistrationOptions","WorldClockRegistry","WorldClockReloadNewWorldClockError","WorldClockReloadTimeMarkerError","WorldClockRemoveMinecraftTimeMarkerError","WorldClockRewindError","WorldClockTimeMarkerEventOptions","WorldClockTimeMarkerNotFoundError","WorldLoadAfterEvent","WorldLoadAfterEventSignal","WorldSoundOptions","system","world"],"events":{"after":["blockContainerClosed","blockContainerOpened","blockExplode","buttonPush","dataDrivenEntityTrigger","effectAdd","entityContainerClosed","entityContainerOpened","entityDie","entityHeal","entityHealthChanged","entityHitBlock","entityHitEntity","entityHurt","entityItemDrop","entityItemPickup","entityLoad","entityRemove","entitySpawn","entityStartSneaking","entityStopSneaking","entityTamed","entityUpgrade","explosion","gameRuleChange","itemCompleteUse","itemReleaseUse","itemStartUse","itemStartUseOn","itemStopUse","itemStopUseOn","itemUse","leverAction","pistonActivate","playerBreakBlock","playerButtonInput","playerCancelBreakingBlock","playerDimensionChange","playerEmote","playerGameModeChange","playerHotbarSelectedSlotChange","playerInputModeChange","playerInputPermissionCategoryChange","playerInteractWithBlock","playerInteractWithEntity","playerInventoryItemChange","playerJoin","playerLeave","playerPlaceBlock","playerSpawn","playerStartBreakingBlock","playerSwingStart","pressurePlatePop","pressurePlatePush","projectileHitBlock","projectileHitEntity","soundCompleted","targetBlockHit","tripWireTrip","weatherChange","worldClockOnPaused","worldClockOnResumed","worldClockOnTimeMarker","worldClockOnTimeModified","worldLoad"],"before":["effectAdd","entityHeal","entityHurt","entityItemPickup","entityRemove","entityTamed","explosion","itemUse","playerBreakBlock","playerGameModeChange","playerInteractWithBlock","playerInteractWithEntity","playerLeave","weatherChange","worldClockOnRestart"]},"ui_exports":["ActionFormData","ActionFormResponse","ButtonOptions","CustomForm","DataDrivenScreenClosedReason","DividerOptions","DropdownItemData","DropdownOptions","FormCancelationReason","FormRejectError","FormRejectReason","FormResponse","FormVisibilityError","FormVisibilityErrorReason","ImageDetails","ImageOptions","InvalidFormError","InvalidFormModificationError","InvalidObservableError","MessageBox","MessageBoxButtonOptions","MessageBoxResult","MessageFormData","MessageFormResponse","ModalFormData","ModalFormDataDropdownOptions","ModalFormDataSliderOptions","ModalFormDataTextFieldOptions","ModalFormDataToggleOptions","ModalFormResponse","ObservableBoolean","ObservableNumber","ObservableOptions","ObservableString","ObservableUIRawMessage","PlayerLeftError","SliderOptions","SpacingOptions","TextFieldOptions","TextFilteringError","TextOptions","ToggleOptions","UIManager","UIRawMessage","uiManager"],"ui_members":["AlreadyShowing","ClientClosed","DisabledByPlayer","MalformedResponse","NotShowing","PlayerQuit","ServerClosed","ServerShutdown","TextProcessorServiceUnreachable","Unknown","UserBusy","UserClosed","body","button","button1","button1WithOptions","button2","button2WithOptions","cancelationReason","canceled","clientWritable","close","closeAllForms","closeButton","closeReason","constructor","defaultValue","defaultValueIndex","description","disabled","divider","dropdown","formValues","getData","getFilteredText","header","image","imageDetails","imagePackId","imageSrc","isShowing","label","onClick","rawtext","selection","setData","show","slider","spacer","step","submitButton","subscribe","text","textField","title","toggle","tooltip","translate","unsubscribe","value","valueStep","visible","width","with"]}};
+const MC_JS_CONOCIDOS=new Set(("length push pop shift unshift slice splice concat join reverse sort map filter forEach reduce reduceRight find findIndex findLast findLastIndex some every includes indexOf lastIndexOf flat flatMap fill keys values entries at copyWithin "+
+ "toString toFixed toPrecision toUpperCase toLowerCase trim trimStart trimEnd split replace replaceAll match matchAll startsWith endsWith padStart padEnd repeat charAt charCodeAt codePointAt substring substr localeCompare normalize test exec "+
+ "get set has add delete clear size then catch finally resolve reject all race "+
+ "floor ceil round abs min max sqrt pow random sin cos tan atan atan2 hypot sign trunc log exp PI "+
+ "assign freeze fromEntries getPrototypeOf hasOwnProperty isArray isInteger isFinite isNaN parseInt parseFloat stringify parse from of now call apply bind "+
+ "toISOString getTime error warn log info constructor prototype name message stack").split(" "));
+function lintScriptApi(texto){
+  const prob=[];const api=MC_API.act;
+  const sin=String(texto).replace(/\/\*[\s\S]*?\*\//g,"").replace(/\/\/[^\n]*/g,"").replace(/`(?:\\.|[^`\\])*`/g,'""').replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g,'""');
+  const conocidos=new Set([...api.members,...api.ui_members,...api.exports,...api.ui_exports,...MC_JS_CONOCIDOS]);
+  const locales=new Set();
+  for(const m of sin.matchAll(/(?:function\s+|class\s+|const\s+|let\s+|var\s+)([A-Za-z_$][\w$]*)/g))locales.add(m[1]);
+  for(const m of sin.matchAll(/([A-Za-z_$][\w$]*)\s*(?::|\()\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/g))locales.add(m[1]);
+  for(const m of sin.matchAll(/^\s*(?:async\s+|static\s+|get\s+|set\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/gm))locales.add(m[1]);
+  for(const m of sin.matchAll(/[{,]\s*([A-Za-z_$][\w$]*)\s*(?=[:,}])/g))locales.add(m[1]);
+  // 1) importaciones
+  const ok1=new Set(api.exports),ok2=new Set(api.ui_exports);
+  for(const m of sin.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']?@minecraft\/(server-ui|server)["']?/g)){}
+  for(const m of String(texto).matchAll(/import\s*\{([^}]*)\}\s*from\s*["']@minecraft\/(server-ui|server)["']/g)){
+    const ok=m[2]==="server"?ok1:ok2;
+    for(const n of m[1].split(",").map(x=>x.trim().split(/\s+as\s+/)[0]).filter(Boolean))if(!ok.has(n))prob.push("importa «"+n+"» de @minecraft/"+m[2]+" y no existe en esa versión");
+  }
+  // 2) eventos
+  for(const m of sin.matchAll(/\.\s*(afterEvents|beforeEvents)\s*\.\s*([A-Za-z_$][\w$]*)/g)){
+    const lista=api.events[m[1]==="afterEvents"?"after":"before"];
+    if(!lista.includes(m[2]))prob.push("el evento "+m[1]+"."+m[2]+" no existe"+(m[1]==="beforeEvents"&&api.events.after.includes(m[2])?" (existe en afterEvents)":""));
+  }
+  // 3) métodos llamados que no existen en la API ni en JavaScript ni en el propio script
+  const vistos=new Set();
+  for(const m of sin.matchAll(/\.\s*([A-Za-z_$][\w$]*)\s*\(/g)){
+    const n=m[1];if(vistos.has(n))continue;vistos.add(n);
+    if(!conocidos.has(n)&&!locales.has(n))prob.push("llama a .{n}() que no existe en la API de Minecraft".replace("{n}",n));
+  }
+  // 4) clases creadas con new
+  for(const m of sin.matchAll(/\bnew\s+([A-Z][\w$]*)\s*\(/g)){
+    if(!["Map","Set","Date","Error","Array","Object","Promise","WeakMap","WeakSet","RegExp"].includes(m[1])&&!ok1.has(m[1])&&!ok2.has(m[1])&&!locales.has(m[1]))prob.push("usa new "+m[1]+"() y esa clase no existe");
+  }
+  return prob.slice(0,8);
+}
+// ============================================================
+// 🌐 BÚSQUEDA EN INTERNET (varias fuentes a la vez, sin clave obligatoria)
+//   Opcionales: TAVILY_API_KEY, BRAVE_API_KEY (más calidad). Con VENICE_API_KEY también usa la búsqueda web de Venice.
+//   Siempre: DuckDuckGo, Wikipedia, Microsoft Learn (documentación de Minecraft), GitHub y Stack Overflow.
+// ============================================================
+const WEB_UA = "Mozilla/5.0 (compatible; EGO-AI/1.0)";
+async function webFetch(url, opts, ms) {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms || 6000);
+  try { return await fetch(url, { ...(opts || {}), signal: c.signal, headers: { "User-Agent": WEB_UA, "Accept": "*/*", ...((opts && opts.headers) || {}) } }); }
+  finally { clearTimeout(t); }
+}
+function webLimpiar(s) {
+  return String(s || "").replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>/gi, " ").replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/\s+/g, " ").trim();
+}
+async function webTavily(q, env) {
+  const r = await webFetch("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + env.TAVILY_API_KEY }, body: JSON.stringify({ query: q, max_results: 6, search_depth: "basic" }) }, 9000);
+  const d = await r.json();
+  return (d.results || []).map(x => ({ titulo: x.title, url: x.url, resumen: String(x.content || "").slice(0, 400), fuente: "Tavily" }));
+}
+async function webBrave(q, env) {
+  const r = await webFetch("https://api.search.brave.com/res/v1/web/search?count=6&q=" + encodeURIComponent(q), { headers: { "X-Subscription-Token": env.BRAVE_API_KEY, "Accept": "application/json" } }, 8000);
+  const d = await r.json();
+  return ((d.web && d.web.results) || []).map(x => ({ titulo: x.title, url: x.url, resumen: webLimpiar(x.description).slice(0, 400), fuente: "Brave" }));
+}
+async function webDuck(q) {
+  const r = await webFetch("https://html.duckduckgo.com/html/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "q=" + encodeURIComponent(q) }, 7000);
+  const h = await r.text(); const out = [];
+  const rx = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
+  let m; while ((m = rx.exec(h)) && out.length < 6) {
+    let u = m[1].replace(/&amp;/g, "&"); const g = u.match(/[?&]uddg=([^&]+)/); if (g) u = decodeURIComponent(g[1]); if (u.startsWith("//")) u = "https:" + u;
+    if (!/^https?:/.test(u)) continue;
+    out.push({ titulo: webLimpiar(m[2]), url: u, resumen: webLimpiar(m[3]).slice(0, 400), fuente: "DuckDuckGo" });
+  }
+  return out;
+}
+async function webWiki(q) {
+  const res = [];
+  for (const lg of ["es", "en"]) {
+    try {
+      const r = await webFetch(`https://${lg}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&format=json&srlimit=2&origin=*`, {}, 5000);
+      const d = await r.json();
+      for (const x of ((d.query && d.query.search) || [])) res.push({ titulo: x.title, url: `https://${lg}.wikipedia.org/wiki/${encodeURIComponent(x.title.replace(/ /g, "_"))}`, resumen: webLimpiar(x.snippet), fuente: "Wikipedia" });
+    } catch (e) {}
+  }
+  return res;
+}
+async function webLearn(q) {
+  const r = await webFetch("https://learn.microsoft.com/api/search?locale=en-us&$top=5&search=" + encodeURIComponent(q), {}, 6000);
+  const d = await r.json();
+  return (d.results || []).map(x => ({ titulo: x.title, url: x.url, resumen: webLimpiar(x.description).slice(0, 400), fuente: "Microsoft Learn" }));
+}
+async function webGithub(q) {
+  const r = await webFetch("https://api.github.com/search/repositories?per_page=3&q=" + encodeURIComponent(q), { headers: { "Accept": "application/vnd.github+json" } }, 6000);
+  const d = await r.json();
+  return (d.items || []).map(x => ({ titulo: x.full_name, url: x.html_url, resumen: String(x.description || "").slice(0, 300) + " (★" + x.stargazers_count + ")", fuente: "GitHub" }));
+}
+async function webStack(q) {
+  const r = await webFetch("https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&pagesize=3&site=stackoverflow&q=" + encodeURIComponent(q), {}, 6000);
+  const d = await r.json();
+  return (d.items || []).map(x => ({ titulo: webLimpiar(x.title), url: x.link, resumen: "Respondida: " + (x.is_answered ? "sí" : "no") + ", votos " + x.score, fuente: "Stack Overflow" }));
+}
+async function veniceBuscar(q, env) {
+  if (!veniceKey(env)) return null;
+  const modelo = (await veniceModelos(env, "chat"))[0];
+  const r = await webFetch("https://api.venice.ai/api/v1/chat/completions", { method: "POST", headers: { "Authorization": "Bearer " + veniceKey(env), "Content-Type": "application/json" },
+    body: JSON.stringify({ model: modelo, max_tokens: 1200, temperature: 0.1,
+      messages: [{ role: "system", content: "Busca en internet y responde con datos actuales y verificables en español. Cita la fuente de cada dato y la fecha si la ves. Si no lo encuentras, dilo." }, { role: "user", content: q }],
+      venice_parameters: { enable_web_search: "on", enable_web_citations: true, include_venice_system_prompt: false } }) }, 40000);
+  const d = await r.json(); if (!r.ok) return null;
+  const texto = salida(d); if (!texto) return null;
+  const citas = (((d.venice_parameters || {}).web_search_citations) || []).filter(c => c && c.url).slice(0, 6).map(c => ({ titulo: c.title || c.url, url: c.url, resumen: String(c.content || "").slice(0, 300), fuente: "Venice web" }));
+  return { texto: texto.slice(0, 3500), citas };
+}
+async function webBuscar(q, env) {
+  q = String(q || "").trim().slice(0, 300); if (!q) return { resultados: [], fuentes: [] };
+  const mc = /(minecraft|bedrock|add-?on|@minecraft|script api)/i.test(q);
+  const tareas = [];
+  if (env.TAVILY_API_KEY) tareas.push(["Tavily", webTavily(q, env)]);
+  if (env.BRAVE_API_KEY) tareas.push(["Brave", webBrave(q, env)]);
+  tareas.push(["DuckDuckGo", webDuck(q)], ["Wikipedia", webWiki(q)], ["Stack Overflow", webStack(q)]);
+  if (mc || /(api|javascript|python|docs|documentaci)/i.test(q)) tareas.push(["Microsoft Learn", webLearn(q)], ["GitHub", webGithub(q)]);
+  const rs = await Promise.allSettled(tareas.map(t => t[1]));
+  const res = [], usadas = [], vistos = new Set();
+  rs.forEach((r, i) => { if (r.status === "fulfilled" && r.value && r.value.length) { usadas.push(tareas[i][0]); for (const x of r.value) { if (x.url && !vistos.has(x.url)) { vistos.add(x.url); res.push(x); } } } });
+  // Prioridad: fuentes de calidad primero
+  const peso = { "Tavily": 0, "Brave": 0, "Microsoft Learn": 1, "GitHub": 2, "DuckDuckGo": 2, "Stack Overflow": 3, "Wikipedia": 3 };
+  res.sort((a, b) => (peso[a.fuente] ?? 5) - (peso[b.fuente] ?? 5));
+  return { resultados: res.slice(0, 10), fuentes: usadas };
+}
+function webUrlSegura(u) {
+  try { const x = new URL(u); if (!/^https?:$/.test(x.protocol)) return false; const h = x.hostname; return !(/^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[)/.test(h) || !h.includes(".")); } catch (e) { return false; }
+}
+async function webLeer(url, max) {
+  if (!webUrlSegura(url)) return "";
+  try {
+    const r = await webFetch(url, {}, 7000); if (!r.ok) return "";
+    const ct = r.headers.get("content-type") || ""; if (!/text|json|xml/.test(ct)) return "";
+    const t = (await r.text()).slice(0, 400000);
+    return (/html/.test(ct) ? webLimpiar(t) : t.replace(/\s+/g, " ")).slice(0, max || 3500);
+  } catch (e) { return ""; }
+}
+// Reglas para decidir cuándo conviene buscar solos (o siempre que el usuario lo pida)
+const RX_WEB = /(busca(?:r|me)?\s+(?:en\s+)?(?:internet|la web|google)|b[uú]sca(?:lo)?\s+en\s+(?:internet|la web)|investiga|en internet|en la web|[uú]ltim[ao]s?\s+(?:versi[oó]n|noticias|novedades)|versi[oó]n\s+(?:actual|m[aá]s reciente|estable)|changelog|novedades|noticias|cu[aá]nto cuesta|qui[eé]n es el actual|esta semana|compatible con|ya sali[oó]|sali[oó] la|lanzamiento|documentaci[oó]n oficial)/i;
+async function contextoWeb(texto, env, forzar) {
+  const q = String(texto || "").replace(/\s+/g, " ").slice(0, 300);
+  const [b, v] = await Promise.all([webBuscar(q, env), veniceBuscar(q, env).catch(() => null)]);
+  const todos = [...(v ? v.citas : []), ...b.resultados];
+  const vistos = new Set(), lista = [];
+  for (const x of todos) { if (!vistos.has(x.url)) { vistos.add(x.url); lista.push(x); } }
+  if (!lista.length && !(v && v.texto)) return { texto: "", fuentes: [] };
+  // Lee las 2 mejores páginas (documentación) para tener datos y no solo títulos
+  const leer = lista.filter(x => /learn\.microsoft|github\.com|wiki\.bedrock|minecraft\.net|docs\.|developer\./.test(x.url)).slice(0, 2);
+  const paginas = await Promise.all(leer.map(x => webLeer(x.url, 2500)));
+  let c = "\n\n=== INFORMACIÓN ACTUAL DE INTERNET (consultada ahora, " + new Date().toISOString().slice(0, 10) + ") ===\nUsa estos datos como fuente principal para versiones, fechas, precios y noticias; si algo no aparece aquí, dilo en vez de inventarlo, y cita las fuentes.\n";
+  if (v && v.texto) c += "\n[Búsqueda de Venice]\n" + v.texto + "\n";
+  lista.slice(0, 8).forEach((x, i) => { c += `\n[${i + 1}] ${x.titulo} — ${x.url} (${x.fuente})\n${x.resumen || ""}\n`; });
+  paginas.forEach((p, i) => { if (p) c += `\n--- Contenido de ${leer[i].url} ---\n${p}\n`; });
+  c += "=== FIN INTERNET ===\n";
+  return { texto: c, fuentes: lista.slice(0, 6).map(x => ({ titulo: x.titulo, url: x.url })), usadas: [...new Set([...(v ? ["Venice web"] : []), ...b.fuentes])] };
+}
+const RX_WEB_PEDIDA = /(internet|busca(?:r|me)?\b|investiga|la web|google)/i;
 // ============================================================
 // 🏗️ GENERADOR POR PARTES DE ADD-ONS GRANDES (Minecraft Bedrock)
 //   mc_plan  → el modelo planifica (objetos, ids y partes)
@@ -1091,9 +1254,10 @@ async function visionOpenRouter(messages, env) {
 // ============================================================
 const MC_GUIA_BASE=`Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA Java, Forge ni Fabric. Trabajas con packs: BP/ (behavior pack) y RP/ (resource pack).
 REGLAS GENERALES:
-- Todos los identificadores llevan el prefijo del add-on (ej. ego:espada_trueno) y se escriben EXACTAMENTE como en el plan.
+- Todos los identificadores llevan el prefijo del add-on (ej. ns:nombre_del_objeto) y se escriben EXACTAMENTE como en el plan.
 - NO escribas manifest.json, pack_icon.png, imágenes PNG ni archivos binarios: el sistema los genera solo (manifests, texturas, íconos y archivos de idioma).
 - JSON estricto: sin comentarios, sin comas finales. Contenido completo, sin placeholders ni "...".
+- Haz EXACTAMENTE lo que pidió el usuario: no agregues objetos, armas, jefes ni funciones que no pidió (los ejemplos de estas guías son solo de formato, nunca los copies).
 - No inventes componentes ni APIs. Si no estás seguro de algo, usa la opción más simple y segura que sí exista.`;
 const MC_GUIAS={
  items:`ÍTEMS (BP/items/<nombre>.json): {"format_version":"1.21.0","minecraft:item":{"description":{"identifier":"ns:nombre","menu_category":{"category":"equipment|items|nature|construction","group":"itemGroup.name.sword (opcional)"}},"components":{...}}}.
@@ -1123,11 +1287,12 @@ function limpiarPlan(j,prompt){
   base.nombre=tituloCaso(String(j.nombre||"Add-on EGO").replace(/[^\p{L}\p{N} '’-]/gu,""))||"Add-on EGO";
   base.ns=mcNs(j.ns);
   base.resumen=String(j.resumen||prompt||"").slice(0,400);
+  if(j.kit&&typeof j.kit==="object"){const K=j.kit;base.kit={armadura:!!K.armadura,herramientas:!!K.herramientas,recursos:!!K.recursos,encantar:!!K.encantar,material:/diam/i.test(String(K.material))?"diamond":"netherite"};}
   const vistos=new Set();
   for(const o of (Array.isArray(j.objetos)?j.objetos:[]).slice(0,60)){
     const id=mcId(base.ns,o&&o.id); const tipo=["item","block","entity"].includes(o&&o.tipo)?o.tipo:"item";
     if(!id||vistos.has(id)) continue; vistos.add(id);
-    base.objetos.push({id,tipo,nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0});
+    base.objetos.push({id,tipo,nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0,poderes:(Array.isArray(o.poderes)?o.poderes:[]).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES[x]).slice(0,8)});
   }
   for(const p of (Array.isArray(j.partes)?j.partes:[]).slice(0,8)){
     const tipo=MC_TIPOS_PARTE.includes(p&&p.tipo)?p.tipo:"misc";
@@ -1181,7 +1346,8 @@ async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
-{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)"}],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
+{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
+REGLA CLAVE: incluye SOLO lo que el usuario pidió, nada más (cero extras de ejemplo). EGO programa por su cuenta, sin que tú lo escribas: (a) las habilidades de armas (campo habilidad), (b) los poderes de un ítem (campo poderes: vuelo, visión nocturna, etc.), (c) el KIT INICIAL: si el usuario pide recibir al crear/entrar al mundo un cofre con armadura, herramientas o recursos, pon en el JSON "kit":{"armadura":true|false,"herramientas":true|false,"recursos":true|false,"encantar":true|false,"material":"netherite|diamond"} (si no lo pidió, "kit":null) y NO crees bloques, ítems ni scripts para eso. Solo crea los objetos personalizados que el usuario nombró (ej. el reloj o el amuleto).
 Reglas: máximo 8 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
     const r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}],6000,0);
@@ -1207,7 +1373,7 @@ async function mcPart(body,env){
     (previos.length?`Archivos que ya existen en otras partes (no los repitas): ${previos.join(", ")}\n`:"")+
     `\nPedido original del usuario (para mantener fidelidad):\n${prompt}`;
   let desde=0,errores=[],mejor=null,modelo="";
-  for(let intento=0;intento<2;intento++){
+  for(let intento=0;intento<3;intento++){
     let r;
     try{r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],12000,desde);}
     catch(e){ if(mejor) break; return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+String(e&&e.message||e).slice(0,200)},502); }
@@ -1221,11 +1387,11 @@ async function mcPart(body,env){
       if(!path||!/^(BP|RP)\//.test(path)||/manifest\.json$|\.(png|jpg|ogg|zip|mcaddon)$/i.test(path)||vistos.has(path)||typeof f.content!=="string") continue;
       vistos.add(path);
       if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path+": JSON inválido ("+t.error+")");continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
-      else if(/\.js$/i.test(path)){const bal=balanceJs(f.content);if(bal){errores.push(path+": "+bal);}files.push({path,content:f.content});}
+      else if(/\.js$/i.test(path)){const bal=balanceJs(f.content);if(bal){errores.push(path+": "+bal);}for(const pr of lintScriptApi(f.content))errores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server.");files.push({path,content:f.content});}
       else files.push({path,content:f.content.slice(0,300000)});
     }
     if(!files.length&&!errores.length)errores.push("No devolviste archivos BP/ o RP/ válidos.");
-    if(!mejor||files.length>=mejor.files.length)mejor={files,errores:errores.slice()};
+    if(!mejor||errores.length<mejor.errores.length||(errores.length===mejor.errores.length&&files.length>=mejor.files.length))mejor={files,errores:errores.slice()};
     if(!errores.length) break;
   }
   if(!mejor||!mejor.files.length) return json({error:"La parte «"+parte.titulo+"» no produjo archivos válidos.",detalle:errores.slice(0,4)},502);
@@ -1330,16 +1496,8 @@ function nombreDeId(id,plan){const o=(plan.objetos||[]).find(x=>x.id===id);retur
 // Arma el paquete final: normaliza, genera lo que falta y devuelve {files, notas, resumen}
 
 // ---- Habilidades de armas: las programa el código (probado), no la IA ----
-const RX_ARMA=/(espada|sable|katana|hacha|pico|pala|vara|varita|baston|cetro|lanza|martillo|guadana|daga|arma|tridente|\bsword\b|\baxe\b|\bwand\b|\bstaff\b)/i;
-function habilidadDeObjeto(o){
-  if(o.habilidad==="ninguna")return null;
-  const t=normMc((o.nombre||"")+" "+(o.descripcion||"")+" "+(o.id||""));
-  if(o.habilidad)return o.habilidad;
-  if(!RX_ARMA.test(t))return null;
-  const h=detectarMc(t).hab;if(h)return h;
-  if(RX_ARMA.test(t)&&/(habilidad|poder|especial|magic|ataque|clic|click|usar)/.test(t))return "rayo";
-  return null;
-}
+const RX_ARMA=/(\bespada|\bsable|\bkatana|\bhacha|\bpico\b|\bpala\b|\bvara\b|\bvarita|\bbaston|\bcetro|\blanza\b|\bmartillo|\bguadana|\bdaga|\barma\b|\btridente|\bsword\b|\baxe\b|\bwand\b|\bstaff\b)/i;
+function habilidadDeObjeto(o){return (o.habilidad&&o.habilidad!=="ninguna")?o.habilidad:null;}
 function tipoArmaDe(o){const t=normMc((o.nombre||"")+" "+(o.id||""));const x=detectarMc(t);return x.tipo||"espada";}
 const LINT_MAL=[[/\bworld\.events\b/,"usa la API antigua world.events"],[/from\s+["']mojang-minecraft/,"importa mojang-minecraft (API antigua)"],[/\brequire\s*\(/,"usa require()"],[/\bsetTimeout\s*\(|\bsetInterval\s*\(/,"usa setTimeout/setInterval"],[/\bnew\s+(Location|BlockLocation)\s*\(/,"usa Location/BlockLocation (API antigua)"],[/\bawait\b(?![^\n]*=>)(?<![ \t]{2})/,""],[/from\s+["'](?!@minecraft\/(server|server-ui)["'])(?!\.\/)[^"']+["']/,"importa un módulo que no existe en Bedrock"],[/:\s*(string|number|boolean)\b\s*[=,)]|\binterface\s+\w+|\bas\s+(string|number|any)\b/,"contiene sintaxis de TypeScript"]];
 function lintScript(texto){for(const [rx,msg] of LINT_MAL){if(msg&&rx.test(texto))return msg;}return null;}
@@ -1379,12 +1537,97 @@ function normalizarCriatura(e,plan,archivo,mapa){
   }
   return hostil;
 }
+
+// ---- Poderes pasivos / vuelo y kit inicial: scripts probados escritos por el código ----
+const MC_PODERES={vuelo:1,vision_nocturna:1,velocidad:1,fuerza:1,regeneracion:1,resistencia:1,salto:1,respirar_agua:1,sin_hambre:1,resistencia_fuego:1};
+const MC_EFECTO_PODER={vision_nocturna:"night_vision",velocidad:"speed",fuerza:"strength",regeneracion:"regeneration",resistencia:"resistance",salto:"jump_boost",respirar_agua:"water_breathing",sin_hambre:"saturation",resistencia_fuego:"fire_resistance"};
+function poderesDeObjeto(o){return Array.isArray(o.poderes)?o.poderes:[];}
+function scriptPoderes(s){
+  const efectos=s.poderes.filter(p=>MC_EFECTO_PODER[p]);const vuelo=s.poderes.includes("vuelo");
+  const lineas=efectos.map(p=>'    p.addEffect("'+MC_EFECTO_PODER[p]+'", '+(p==="vision_nocturna"?420:(p==="sin_hambre"?40:260))+', { amplifier: '+(p==="velocidad"?1:(p==="fuerza"?1:(p==="salto"?1:(p==="resistencia"?1:0))))+', showParticles: false });');
+  return ['import { world, system } from "@minecraft/server";','',
+  'const ITEM = "'+s.id+'"; // se activa mientras lo llevas en el inventario',
+  'function lo_tiene(p) {','  try {','    const inv = p.getComponent("minecraft:inventory")?.container;','    if (!inv) return false;','    for (let i = 0; i < inv.size; i++) { if (inv.getItem(i)?.typeId === ITEM) return true; }','  } catch (e) {}','  return false;','}',
+  'const volando = new Set();',
+  'system.runInterval(() => {','  for (const p of world.getAllPlayers()) {','    try {','      if (!lo_tiene(p)) { volando.delete(p.id); continue; }',
+  ...efectos.length?['      aplicar(p);']:[],'    } catch (e) {}','  }','}, 20);',
+  ...efectos.length?['function aplicar(p) {',...lineas,'}']:[],
+  ...vuelo?[
+  '// VUELO: clic derecho con el objeto activa/desactiva. Saltar = subir, agacharse = bajar, si no, planeas.',
+  '// (Es vuelo simulado con efectos: en supervivencia Minecraft no permite el vuelo creativo real.)',
+  'world.afterEvents.itemUse.subscribe((ev) => {','  try {','    if (ev.itemStack.typeId !== ITEM) return;','    const p = ev.source;',
+  '    if (volando.has(p.id)) { volando.delete(p.id); p.removeEffect("levitation"); p.removeEffect("slow_falling"); p.onScreenDisplay.setActionBar("Vuelo desactivado"); try { p.runCommand("ability @s mayfly false"); } catch (e) {} }',
+  '    else { volando.add(p.id); p.onScreenDisplay.setActionBar("Vuelo activado: salta para subir, agáchate para bajar"); try { p.runCommand("ability @s mayfly true"); } catch (e) {} }',
+  '  } catch (e) {}','});',
+  'system.runInterval(() => {','  for (const p of world.getAllPlayers()) {','    try {','      if (!volando.has(p.id)) continue;','      if (!lo_tiene(p)) { volando.delete(p.id); continue; }',
+  '      if (p.isSneaking) { p.removeEffect("levitation"); p.removeEffect("slow_falling"); }',
+  '      else if (p.isJumping) { p.addEffect("levitation", 8, { amplifier: 5, showParticles: false }); p.addEffect("slow_falling", 40, { amplifier: 0, showParticles: false }); }',
+  '      else { p.removeEffect("levitation"); p.addEffect("slow_falling", 40, { amplifier: 0, showParticles: false }); }',
+  '    } catch (e) {}','  }','}, 2);']:[],
+  ''].join("\n");
+}
+function scriptKit(k){
+  const mat=k.material;
+  const piezas=[];
+  if(k.armadura)piezas.push(["helmet","h"],["chestplate","c"],["leggings","l"],["boots","b"]);
+  const lista=[];
+  const E={h:[["protection",4],["unbreaking",3],["mending",1],["respiration",3],["aqua_affinity",1],["thorns",3]],c:[["protection",4],["unbreaking",3],["mending",1],["thorns",3]],l:[["protection",4],["unbreaking",3],["mending",1],["swift_sneak",3],["thorns",3]],b:[["protection",4],["unbreaking",3],["mending",1],["feather_falling",4],["depth_strider",3],["thorns",3]]};
+  for(const [n,k2] of piezas)lista.push({id:"minecraft:"+mat+"_"+n,enc:E[k2]});
+  if(k.herramientas){
+    lista.push({id:"minecraft:"+mat+"_sword",enc:[["sharpness",5],["looting",3],["fire_aspect",2],["knockback",2],["sweeping_edge",3],["unbreaking",3],["mending",1]]});
+    lista.push({id:"minecraft:"+mat+"_pickaxe",enc:[["efficiency",5],["fortune",3],["unbreaking",3],["mending",1]]});
+    lista.push({id:"minecraft:"+mat+"_axe",enc:[["efficiency",5],["sharpness",5],["fortune",3],["unbreaking",3],["mending",1]]});
+    lista.push({id:"minecraft:"+mat+"_shovel",enc:[["efficiency",5],["fortune",3],["unbreaking",3],["mending",1]]});
+    lista.push({id:"minecraft:"+mat+"_hoe",enc:[["efficiency",5],["fortune",3],["unbreaking",3],["mending",1]]});
+    lista.push({id:"minecraft:bow",enc:[["power",5],["punch",2],["flame",1],["infinity",1],["unbreaking",3]]});
+    lista.push({id:"minecraft:shield",enc:[["unbreaking",3],["mending",1]]});
+    lista.push({id:"minecraft:fishing_rod",enc:[["luck_of_the_sea",3],["lure",3],["unbreaking",3],["mending",1]]});
+  }
+  const extras=k.recursos?[["minecraft:enchanted_golden_apple",16],["minecraft:cooked_beef",64],["minecraft:arrow",64],["minecraft:torch",64],["minecraft:diamond",64],["minecraft:iron_ingot",64],["minecraft:gold_ingot",64],["minecraft:oak_log",64],["minecraft:cobblestone",64],["minecraft:ender_pearl",16],["minecraft:water_bucket",1],["minecraft:lava_bucket",1],["minecraft:experience_bottle",64]]:[];
+  return ['import * as mc from "@minecraft/server";','const { world, system, ItemStack } = mc;','',
+  '// Kit inicial: se entrega una sola vez a cada jugador al entrar por primera vez al mundo.',
+  'const ENCANTAR = '+(k.encantar?"true":"false")+';',
+  'const PIEZAS = '+JSON.stringify(lista)+';',
+  'const EXTRAS = '+JSON.stringify(extras)+';',
+  '',
+  'function encantar(item, lista) {','  const c = item.getComponent("minecraft:enchantable");','  if (!c) return;','  for (const [id, nivel] of lista) {',
+  '    for (const tipo of [() => id, () => new mc.EnchantmentType(id)]) {','      try { c.addEnchantment({ type: tipo(), level: nivel }); break; } catch (e) {}','    }','  }','}',
+  'function armar() {','  const items = [];','  for (const p of PIEZAS) {','    try { const it = new ItemStack(p.id, 1); if (ENCANTAR) encantar(it, p.enc); items.push(it); } catch (e) {}','  }',
+  '  for (const [id, n] of EXTRAS) { try { items.push(new ItemStack(id, n)); } catch (e) {} }','  return items;','}',
+  'function colocarCofres(p, items) {',
+  '  const base = { x: Math.floor(p.location.x) + 2, y: Math.floor(p.location.y), z: Math.floor(p.location.z) };',
+  '  const dim = p.dimension; let i = 0; let cofres = 0; const sobran = [];',
+  '  while (i < items.length && cofres < 4) {',
+  '    const pos = { x: base.x + cofres, y: base.y, z: base.z };',
+  '    try {',
+  '      const b = dim.getBlock(pos); if (!b) break;',
+  '      b.setType("minecraft:chest");',
+  '      const cont = dim.getBlock(pos).getComponent("minecraft:inventory")?.container;',
+  '      if (!cont) break;',
+  '      while (i < items.length && cont.emptySlotsCount > 0) { cont.addItem(items[i]); i++; }',
+  '      cofres++;',
+  '    } catch (e) { break; }',
+  '  }',
+  '  for (; i < items.length; i++) sobran.push(items[i]);',
+  '  if (sobran.length) { const inv = p.getComponent("minecraft:inventory")?.container; for (const it of sobran) { try { inv.addItem(it); } catch (e) {} } }',
+  '  p.sendMessage("§aKit de recursos listo: busca los cofres a tu lado.");',
+  '}',
+  'world.afterEvents.playerSpawn.subscribe((ev) => {','  if (!ev.initialSpawn) return;','  const p = ev.player;',
+  '  system.runTimeout(() => {','    try {','      if (p.getDynamicProperty("ego_kit_entregado")) return;','      p.setDynamicProperty("ego_kit_entregado", true);','      colocarCofres(p, armar());','    } catch (e) {}','  }, 60);','});',''].join("\n");
+}
+function detectarKit(plan){return plan.kit||null;}
 function postprocesarAddon(entrada,plan,verSrv){
   const notas=[],mapa=new Map(),ns=plan.ns||"ego";
   for(const f of entrada){ if(f&&typeof f.path==="string"&&typeof f.content==="string") mapa.set(f.path,f.content); }
   const leer=(p)=>{const t=jsonTolerante(mapa.get(p));return t.ok?t.obj:null;};
+  // --- limpieza previa: nada de extras que el usuario no pidió + kit inicial
+  const kit=detectarKit(plan);
+  if(kit){
+    for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const t=String(mapa.get(k));if(/initialSpawn|playerSpawn|minecraft:chest/.test(t)){mapa.delete(k);notas.push(k.replace("BP/","")+" se reemplazó por el kit inicial de EGO.");}}
+    mapa.set("BP/scripts/ego_kit.js",scriptKit(kit));
+  }
   const iconos=[],bloques=[],entidades=[],items=[];
-  const verUI="1.3.0",verSrvOk=String(verSrv||"1.17.0");
+  const verSrvOk=String(verSrv||"2.11.0"),verUI=/^2\./.test(verSrvOk)?"2.3.0":"1.3.0";
   // --- ítems
   for(const p of [...mapa.keys()].filter(k=>/^BP\/items\/[^/]+\.json$/.test(k))){
     const o=leer(p); const it=o&&o["minecraft:item"]; if(!it||!it.description){notas.push(p+" no es un ítem válido; se omitió.");mapa.delete(p);continue;}
@@ -1468,7 +1711,7 @@ function postprocesarAddon(entrada,plan,verSrv){
   const aTxt=(m)=>[...m.entries()].map(([k,v])=>k+"="+v).join("\n")+"\n";
   mapa.set("RP/texts/en_US.lang",aTxt(en));mapa.set("RP/texts/es_ES.lang",aTxt(es));mapa.set("RP/texts/languages.json",'["en_US","es_ES"]\n');
   // --- scripts: se descartan los que usan APIs que no existen; las habilidades las programa el código
-  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const mal=lintScript(String(mapa.get(k)));if(mal){mapa.delete(k);notas.push(k.replace("BP/","")+" se descartó porque "+mal+" y rompería todo el script.");}}
+  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const tx=String(mapa.get(k));const mal=lintScript(tx);const prs=lintScriptApi(tx);if(mal||prs.length){mapa.delete(k);notas.push(k.replace("BP/","")+" se descartó porque "+(mal||prs.slice(0,3).join("; "))+" (no existe en la API oficial de Minecraft y rompería todo el script).");}}
   const habilidades=[];
   for(const id of items){
     const o=(plan.objetos||[]).find(x=>x.id===id)||{id,nombre:nombreDeId(id,plan),descripcion:""};
@@ -1485,6 +1728,16 @@ function postprocesarAddon(entrada,plan,verSrv){
     mapa.set("BP/scripts/ego_hab_"+corto+".js",scriptHabilidad(sp));
     habilidades.push(sp.nombre+": "+({rayo:"rayos",fuego:"fuego",hielo:"hielo",explosion:"explosión",veneno:"veneno",viento:"viento",curacion:"curación"}[hab])+" (clic derecho y al golpear)");
   }
+  for(const id of items){
+    const o=(plan.objetos||[]).find(x=>x.id===id)||{id,nombre:nombreDeId(id,plan),descripcion:""};
+    const pod=poderesDeObjeto(o);if(!pod.length)continue;
+    for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k)&&!/ego_(hab|pod|kit)/.test(k))){
+      const t=String(mapa.get(k));if((t.includes('"'+id+'"')||t.includes("'"+id+"'"))&&/itemUse|runInterval|inventory/.test(t)){mapa.delete(k);notas.push(k.replace("BP/","")+" se reemplazó por poderes probados de EGO para "+nombreDeId(id,plan)+".");}
+    }
+    mapa.set("BP/scripts/ego_pod_"+id.split(":")[1]+".js",scriptPoderes({id,poderes:pod}));
+    habilidades.push(nombreDeId(id,plan)+": "+pod.map(p=>({vuelo:"vuelo",vision_nocturna:"visión nocturna",velocidad:"velocidad",fuerza:"fuerza",regeneracion:"regeneración",resistencia:"resistencia",salto:"super salto",respirar_agua:"respirar bajo el agua",sin_hambre:"sin hambre",resistencia_fuego:"resistencia al fuego"}[p])).join(", ")+" (mientras lo llevas en el inventario"+(pod.includes("vuelo")?"; clic derecho activa el vuelo":"")+")");
+  }
+  if(kit)habilidades.push("Kit inicial: "+(kit.armadura?"armadura ":"")+(kit.herramientas?"herramientas ":"")+(kit.recursos?"recursos ":"")+"de "+(kit.material==="diamond"?"diamante":"netherite")+(kit.encantar?" encantados al máximo":"")+" en cofres junto a ti la primera vez que entras al mundo");
   const scripts=[...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k));
   const mods=new Set();
   for(const s of scripts){
@@ -1502,7 +1755,7 @@ function postprocesarAddon(entrada,plan,verSrv){
   if(scripts.length){modBP.push({type:"script",language:"javascript",entry:"scripts/main.js",uuid:crypto.randomUUID(),version:[1,0,0]});
     deps.push({module_name:"@minecraft/server",version:verSrvOk});if(mods.has("@minecraft/server-ui"))deps.push({module_name:"@minecraft/server-ui",version:verUI});
     for(const m of mods)if(!["@minecraft/server","@minecraft/server-ui"].includes(m))notas.push("El script usa "+m+", que puede no estar disponible en tu versión.");}
-  const man=(n,d,u,m,dp)=>JSON.stringify({format_version:2,header:{name:n,description:d,uuid:u,version:[1,0,0],min_engine_version:[1,21,0]},modules:m,...(dp?{dependencies:dp}:{})},null,2)+"\n";
+  const man=(n,d,u,m,dp)=>JSON.stringify({format_version:2,metadata:{authors:["EGO AI"]},header:{name:n,description:d,uuid:u,version:[1,0,0],min_engine_version:[1,26,60]},modules:m,...(dp?{dependencies:dp}:{})},null,2)+"\n";
   mapa.set("BP/manifest.json",man(plan.nombre+" BP","Behavior pack: "+plan.nombre,pId,modBP,deps));
   mapa.set("RP/manifest.json",man(plan.nombre+" RP","Resource pack: "+plan.nombre,rId,[{type:"resources",uuid:crypto.randomUUID(),version:[1,0,0]}],null));
   // --- íconos de los packs
@@ -1533,6 +1786,7 @@ async function mcBuild(body,env,request){
   }
   if(!entrada.length) return json({error:"No hay archivos para armar el add-on."},400);
   try{
+    plan._prompt=prompt;
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
     const zip=await createZip(r.files);
     const nombre="ego-"+slugAscii(plan.nombre);
@@ -1648,7 +1902,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.5.0",
+    version: "14.10.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2283,8 +2537,8 @@ function objetivo_(H,objetivo){return objetivo+H.uso;}
 function construirAddonItem(s,version){
   if(!s.id)s.id=slugAscii(s.nombre);
   const id="ego:"+s.id, pId=crypto.randomUUID(), rId=crypto.randomUUID();
-  const verSrv=String(version||"1.17.0");
-  const pack=(nombre,desc,uuid,modulos,deps)=>JSON.stringify({format_version:2,header:{name:nombre,description:desc,uuid,version:[1,0,0],min_engine_version:[1,21,0]},modules:modulos,...(deps?{dependencies:deps}:{})},null,2)+"\n";
+  const verSrv=String(version||"2.11.0");
+  const pack=(nombre,desc,uuid,modulos,deps)=>JSON.stringify({format_version:2,metadata:{authors:["EGO AI"]},header:{name:nombre,description:desc,uuid,version:[1,0,0],min_engine_version:[1,26,60]},modules:modulos,...(deps?{dependencies:deps}:{})},null,2)+"\n";
   const px=dibujarIcono(s.tipo,s.principal,s.acento);
   const grupo={espada:"itemGroup.name.sword",hacha:"itemGroup.name.axe",pico:"itemGroup.name.pickaxe"}[s.tipo];
   const comp={
@@ -2374,7 +2628,7 @@ function repararAddon(files,verSrv){
     avisos.push("El Behavior Pack ahora depende del Resource Pack.");
   }
   if(bp&&(bp.o.modules||[]).some(m=>m&&m.type==="script")&&!(bp.o.dependencies||[]).some(d=>d&&d.module_name==="@minecraft/server")){
-    bp.o.dependencies=(bp.o.dependencies||[]).concat([{module_name:"@minecraft/server",version:String(verSrv||"1.17.0")}]);
+    bp.o.dependencies=(bp.o.dependencies||[]).concat([{module_name:"@minecraft/server",version:String(verSrv||"2.11.0")}]);
     avisos.push("Se añadió la dependencia @minecraft/server que faltaba.");
   }
   for(const x of objs) x.f.content=JSON.stringify(x.o,null,2)+"\n";
@@ -2465,13 +2719,14 @@ async function manejar(request, env) {
   const url = new URL(request.url);
   const correoUsuario = obtenerCorreo(request, null);
 
+  if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("venice")) {
     if (!veniceKey(env)) return json({ configurado: false, aviso: "Falta el secreto VENICE_API_KEY." });
     const cat = await veniceCatalogo(env);
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.5.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.10.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -2496,7 +2751,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.5.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.10.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -2566,7 +2821,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.5.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.10.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
@@ -2607,6 +2862,7 @@ async function manejar(request, env) {
   if (body.action === "image_edit") return await editarImagen(body, env);
   if (body.action === "texture_generate") return await generarTextura(body, env);
   if (body.action === "tts" || body.action === "voice_generate" || body.action === "addon_voice") return await generarVoz(body, env, request);
+  if (body.action === "web_search") { const q = String(body.query || "").slice(0, 300); if (!q) return json({ error: "Falta query" }, 400); const c = await contextoWeb(q, env, true); return json({ ok: true, fuentes: c.fuentes, usadas: c.usadas, contexto: c.texto }); }
   if (body.action === "mc_plan") return await mcPlan(body, env);
   if (body.action === "mc_part") return await mcPart(body, env);
   if (body.action === "mc_build") return await mcBuild(body, env, request);
@@ -2695,6 +2951,11 @@ async function manejar(request, env) {
 
   // ⏱️ Medimos el tiempo para no encadenar una revisión si la respuesta ya tardó mucho
   const t0 = Date.now();
+  // 🌐 Internet: si lo pides ("busca en internet…") o es algo que cambia (versiones, noticias, precios), consulta varias fuentes antes de responder
+  let webFuentes = [];
+  if (!hasImage && (body.web === true || (body.web !== false && (RX_WEB_PEDIDA.test(text) || (RX_WEB.test(text) && !RX_CONSTRUIR.test(text))) && RX_WEB.test(text) && text.length < 1500))) {
+    try { const cw = await contextoWeb(text, env, body.web === true); if (cw.texto) { sys.content += cw.texto; webFuentes = cw.fuentes; } } catch (e) {}
+  }
   const msgsL = limpiarImagenes(msgs);
   const conImagen = tieneImagen(msgsL[msgsL.length - 1]);
   const tipo = tipoTarea(text);
@@ -2740,7 +3001,8 @@ async function manejar(request, env) {
       } catch {}
     }
     return json({
-      reply: r.content + confirmacion,
+      reply: r.content + confirmacion + (webFuentes.length ? "\n\n🌐 Fuentes consultadas:\n" + webFuentes.map(f => "- " + f.titulo + " — " + f.url).join("\n") : ""),
+      fuentes: webFuentes,
       revisado,
       modelo: r.model,
       tipoTarea: tipo,
