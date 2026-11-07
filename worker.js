@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.10.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.12.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -22,18 +22,25 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, X-Usuario-Correo, Authorization",
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas"
+  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas"
 };
 
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.10.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.12.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
 2. Si la petición es de otro tema cotidiano (consejos, redacción, estudio, ideas), ayuda igualmente de forma útil y breve. Rechaza con amabilidad solo lo dañino: malware, ataques o espionaje a terceros, acoso, engaños, contenido sexual explícito o cualquier cosa ilegal; ofrece siempre una alternativa segura.
 3. La aplicación puede generar imágenes mediante action=image_generate, editar imágenes originales mediante action=image_edit, crear texturas 2D para modelos 3D mediante action=texture_generate y generar voz mediante action=tts o action=addon_voice. No afirmes que ejecutaste una generación si no se invocó esa acción. Minecraft: SIEMPRE Bedrock (Android, Windows, consolas), nunca Java ni Forge/Fabric. Las texturas PNG de los add-ons y las imágenes SÍ las genera la app: nunca digas que no puedes. Si piden un add-on, di que la app lo crea como archivo .mcaddon cuando el usuario escribe algo como «crea un add-on para Minecraft con …»; no pegues código Java. Puedes analizar imágenes y videos enviados en el chat.
+
+=== ESTILO DE RESPUESTA (profesional) ===
+- Primero entiende el pedido: descompónlo en sus partes (qué, dónde, cuándo, cuánto, para quién) y cubre CADA una; al final comprueba que ninguna quedó sin responder. Si algo es ambiguo y cambia mucho el resultado, reformula en una línea ("Entiendo que quieres…") antes de seguir.
+- Empieza con la respuesta o el resultado en 1-2 frases, sin saludos largos ni repetir la pregunta.
+- Después organiza con títulos cortos en negrita, listas numeradas para pasos y viñetas para opciones; tablas pequeñas solo para comparar. El código va en bloques con su lenguaje.
+- Sé concreta y verificable: cifras, nombres y comandos exactos; marca con claridad lo que NO pudiste comprobar.
+- Cierra con una línea de siguiente paso solo si de verdad ayuda. Sin relleno y con pocos emojis (como mucho uno por sección).
 
 === CÓMO PIENSAS Y TRABAJAS ===
 4. Antes de responder entiende qué quiere de verdad la persona (objetivo, nivel, formato). Si falta un dato que cambia mucho el resultado, haz UNA pregunta corta; si no, hazlo.
@@ -1185,6 +1192,19 @@ async function webStack(q) {
   const d = await r.json();
   return (d.items || []).map(x => ({ titulo: webLimpiar(x.title), url: x.link, resumen: "Respondida: " + (x.is_answered ? "sí" : "no") + ", votos " + x.score, fuente: "Stack Overflow" }));
 }
+async function webNpm(q) {
+  const out = [];
+  const nombres = [...new Set((q.match(/@[a-z0-9_.-]+\/[a-z0-9_.-]+/gi) || []).map(x => x.toLowerCase()))].slice(0, 2);
+  for (const n of nombres) {
+    try {
+      const r = await webFetch("https://registry.npmjs.org/" + n.replace("/", "%2f"), { headers: { "Accept": "application/vnd.npm.install-v1+json" } }, 7000);
+      const d = await r.json(); const tags = d["dist-tags"] || {};
+      const vs = Object.keys(d.versions || {}).filter(v => !/-/.test(v)).slice(-6);
+      out.push({ titulo: "npm " + n + " (registro oficial)", url: "https://www.npmjs.com/package/" + n, resumen: "Etiquetas: " + Object.entries(tags).map(([k, v]) => k + "=" + v).join(", ") + ". Últimas versiones estables: " + vs.join(", "), fuente: "npm" });
+    } catch (e) {}
+  }
+  return out;
+}
 async function veniceBuscar(q, env) {
   if (!veniceKey(env)) return null;
   const modelo = (await veniceModelos(env, "chat"))[0];
@@ -1203,13 +1223,16 @@ async function webBuscar(q, env) {
   const tareas = [];
   if (env.TAVILY_API_KEY) tareas.push(["Tavily", webTavily(q, env)]);
   if (env.BRAVE_API_KEY) tareas.push(["Brave", webBrave(q, env)]);
-  tareas.push(["DuckDuckGo", webDuck(q)], ["Wikipedia", webWiki(q)], ["Stack Overflow", webStack(q)]);
+  const tecnico = mc || /@[a-z0-9_.-]+\/|\b(api|npm|javascript|python|versi[oó]n|sdk|framework|librer[ií]a)\b/i.test(q);
+  tareas.push(["DuckDuckGo", webDuck(q)], ["Stack Overflow", webStack(q)]);
+  if (/@[a-z0-9_.-]+\//i.test(q)) tareas.unshift(["npm", webNpm(q)]);
+  if (!tecnico) tareas.push(["Wikipedia", webWiki(q)]);
   if (mc || /(api|javascript|python|docs|documentaci)/i.test(q)) tareas.push(["Microsoft Learn", webLearn(q)], ["GitHub", webGithub(q)]);
   const rs = await Promise.allSettled(tareas.map(t => t[1]));
   const res = [], usadas = [], vistos = new Set();
   rs.forEach((r, i) => { if (r.status === "fulfilled" && r.value && r.value.length) { usadas.push(tareas[i][0]); for (const x of r.value) { if (x.url && !vistos.has(x.url)) { vistos.add(x.url); res.push(x); } } } });
   // Prioridad: fuentes de calidad primero
-  const peso = { "Tavily": 0, "Brave": 0, "Microsoft Learn": 1, "GitHub": 2, "DuckDuckGo": 2, "Stack Overflow": 3, "Wikipedia": 3 };
+  const peso = { "npm": -1, "Tavily": 0, "Brave": 0, "Microsoft Learn": 1, "GitHub": 2, "DuckDuckGo": 2, "Stack Overflow": 3, "Wikipedia": 3 };
   res.sort((a, b) => (peso[a.fuente] ?? 5) - (peso[b.fuente] ?? 5));
   return { resultados: res.slice(0, 10), fuentes: usadas };
 }
@@ -1287,12 +1310,13 @@ function limpiarPlan(j,prompt){
   base.nombre=tituloCaso(String(j.nombre||"Add-on EGO").replace(/[^\p{L}\p{N} '’-]/gu,""))||"Add-on EGO";
   base.ns=mcNs(j.ns);
   base.resumen=String(j.resumen||prompt||"").slice(0,400);
+  base.requisitos=(Array.isArray(j.requisitos)?j.requisitos:[]).map(x=>String(x||"").trim().slice(0,160)).filter(Boolean).slice(0,14);
   if(j.kit&&typeof j.kit==="object"){const K=j.kit;base.kit={armadura:!!K.armadura,herramientas:!!K.herramientas,recursos:!!K.recursos,encantar:!!K.encantar,material:/diam/i.test(String(K.material))?"diamond":"netherite"};}
   const vistos=new Set();
   for(const o of (Array.isArray(j.objetos)?j.objetos:[]).slice(0,60)){
     const id=mcId(base.ns,o&&o.id); const tipo=["item","block","entity"].includes(o&&o.tipo)?o.tipo:"item";
     if(!id||vistos.has(id)) continue; vistos.add(id);
-    base.objetos.push({id,tipo,nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0,poderes:(Array.isArray(o.poderes)?o.poderes:[]).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES[x]).slice(0,8)});
+    base.objetos.push({id,tipo,nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",entrega:["kit","crafteo","creativo","botin","aparece"].includes(normMc(o.entrega))?normMc(o.entrega):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0,poderes:(Array.isArray(o.poderes)?o.poderes:[]).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES[x]).slice(0,8)});
   }
   for(const p of (Array.isArray(j.partes)?j.partes:[]).slice(0,8)){
     const tipo=MC_TIPOS_PARTE.includes(p&&p.tipo)?p.tipo:"misc";
@@ -1346,7 +1370,8 @@ async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
-{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
+{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
+ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enumera en "requisitos" TODO lo que pidió (nada más, nada menos). Cada objeto, habilidad y parte del plan debe servir a un requisito. No interpretes a tu gusto: si el usuario no lo dijo, no lo agregues.
 REGLA CLAVE: incluye SOLO lo que el usuario pidió, nada más (cero extras de ejemplo). EGO programa por su cuenta, sin que tú lo escribas: (a) las habilidades de armas (campo habilidad), (b) los poderes de un ítem (campo poderes: vuelo, visión nocturna, etc.), (c) el KIT INICIAL: si el usuario pide recibir al crear/entrar al mundo un cofre con armadura, herramientas o recursos, pon en el JSON "kit":{"armadura":true|false,"herramientas":true|false,"recursos":true|false,"encantar":true|false,"material":"netherite|diamond"} (si no lo pidió, "kit":null) y NO crees bloques, ítems ni scripts para eso. Solo crea los objetos personalizados que el usuario nombró (ej. el reloj o el amuleto).
 Reglas: máximo 8 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
@@ -1566,7 +1591,7 @@ function scriptPoderes(s){
   '    } catch (e) {}','  }','}, 2);']:[],
   ''].join("\n");
 }
-function scriptKit(k){
+function scriptKit(k,propios){
   const mat=k.material;
   const piezas=[];
   if(k.armadura)piezas.push(["helmet","h"],["chestplate","c"],["leggings","l"],["boots","b"]);
@@ -1583,8 +1608,10 @@ function scriptKit(k){
     lista.push({id:"minecraft:shield",enc:[["unbreaking",3],["mending",1]]});
     lista.push({id:"minecraft:fishing_rod",enc:[["luck_of_the_sea",3],["lure",3],["unbreaking",3],["mending",1]]});
   }
+  propios=propios||[];
   const extras=k.recursos?[["minecraft:enchanted_golden_apple",16],["minecraft:cooked_beef",64],["minecraft:arrow",64],["minecraft:torch",64],["minecraft:diamond",64],["minecraft:iron_ingot",64],["minecraft:gold_ingot",64],["minecraft:oak_log",64],["minecraft:cobblestone",64],["minecraft:ender_pearl",16],["minecraft:water_bucket",1],["minecraft:lava_bucket",1],["minecraft:experience_bottle",64]]:[];
   return ['import * as mc from "@minecraft/server";','const { world, system, ItemStack } = mc;','',
+  'const PROPIOS = '+JSON.stringify(propios)+'; // objetos propios de este add-on que van en el kit',
   '// Kit inicial: se entrega una sola vez a cada jugador al entrar por primera vez al mundo.',
   'const ENCANTAR = '+(k.encantar?"true":"false")+';',
   'const PIEZAS = '+JSON.stringify(lista)+';',
@@ -1593,6 +1620,7 @@ function scriptKit(k){
   'function encantar(item, lista) {','  const c = item.getComponent("minecraft:enchantable");','  if (!c) return;','  for (const [id, nivel] of lista) {',
   '    for (const tipo of [() => id, () => new mc.EnchantmentType(id)]) {','      try { c.addEnchantment({ type: tipo(), level: nivel }); break; } catch (e) {}','    }','  }','}',
   'function armar() {','  const items = [];','  for (const p of PIEZAS) {','    try { const it = new ItemStack(p.id, 1); if (ENCANTAR) encantar(it, p.enc); items.push(it); } catch (e) {}','  }',
+  '  for (const id of PROPIOS) { try { items.unshift(new ItemStack(id, 1)); } catch (e) {} }',
   '  for (const [id, n] of EXTRAS) { try { items.push(new ItemStack(id, n)); } catch (e) {} }','  return items;','}',
   'function colocarCofres(p, items) {',
   '  const base = { x: Math.floor(p.location.x) + 2, y: Math.floor(p.location.y), z: Math.floor(p.location.z) };',
@@ -1624,7 +1652,9 @@ function postprocesarAddon(entrada,plan,verSrv){
   const kit=detectarKit(plan);
   if(kit){
     for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const t=String(mapa.get(k));if(/initialSpawn|playerSpawn|minecraft:chest/.test(t)){mapa.delete(k);notas.push(k.replace("BP/","")+" se reemplazó por el kit inicial de EGO.");}}
-    mapa.set("BP/scripts/ego_kit.js",scriptKit(kit));
+    const propios=[...mapa.keys()].filter(k=>/^BP\/items\/.+\.json$/.test(k)).map(k=>{try{return JSON.parse(mapa.get(k))["minecraft:item"].description.identifier;}catch(_){return null;}}).filter(id=>id&&id.startsWith(plan.ns+":")).filter(id=>{const o=(plan.objetos||[]).find(x=>x.id===id);return !o||!o.entrega||o.entrega==="kit";});
+    kit.propios=propios;
+    mapa.set("BP/scripts/ego_kit.js",scriptKit(kit,propios));
   }
   const iconos=[],bloques=[],entidades=[],items=[];
   const verSrvOk=String(verSrv||"2.11.0"),verUI=/^2\./.test(verSrvOk)?"2.3.0":"1.3.0";
@@ -1737,7 +1767,7 @@ function postprocesarAddon(entrada,plan,verSrv){
     mapa.set("BP/scripts/ego_pod_"+id.split(":")[1]+".js",scriptPoderes({id,poderes:pod}));
     habilidades.push(nombreDeId(id,plan)+": "+pod.map(p=>({vuelo:"vuelo",vision_nocturna:"visión nocturna",velocidad:"velocidad",fuerza:"fuerza",regeneracion:"regeneración",resistencia:"resistencia",salto:"super salto",respirar_agua:"respirar bajo el agua",sin_hambre:"sin hambre",resistencia_fuego:"resistencia al fuego"}[p])).join(", ")+" (mientras lo llevas en el inventario"+(pod.includes("vuelo")?"; clic derecho activa el vuelo":"")+")");
   }
-  if(kit)habilidades.push("Kit inicial: "+(kit.armadura?"armadura ":"")+(kit.herramientas?"herramientas ":"")+(kit.recursos?"recursos ":"")+"de "+(kit.material==="diamond"?"diamante":"netherite")+(kit.encantar?" encantados al máximo":"")+" en cofres junto a ti la primera vez que entras al mundo");
+  if(kit)habilidades.push("Kit inicial"+(kit.propios&&kit.propios.length?" (incluye tus ítems propios: "+kit.propios.map(id=>nombreDeId(id,plan)).join(", ")+")":"")+": "+(kit.armadura?"armadura ":"")+(kit.herramientas?"herramientas ":"")+(kit.recursos?"recursos ":"")+"de "+(kit.material==="diamond"?"diamante":"netherite")+(kit.encantar?" encantados al máximo":"")+" en cofres junto a ti la primera vez que entras al mundo");
   const scripts=[...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k));
   const mods=new Set();
   for(const s of scripts){
@@ -1774,6 +1804,62 @@ function postprocesarAddon(entrada,plan,verSrv){
   const salida=[...mapa.entries()].map(([path,content])=>({path,content})).sort((a,b)=>a.path.localeCompare(b.path));
   return {files:salida,notas,conteo:{habilidades,items:items.length,bloques:bloques.length,criaturas:entidades.length,scripts:scripts.length,texturas:png.length+bloques.length}};
 }
+
+// ---- Auditoría final: compara lo pedido con lo que de verdad quedó dentro del archivo ----
+function inventarioAddon(files,habilidades){
+  const L=[];
+  for(const f of files){
+    const p=f.path;let t=typeof f.content==="string"?f.content:"";
+    try{
+      if(/^BP\/items\/.+\.json$/.test(p)){const j=JSON.parse(t)["minecraft:item"];L.push("ITEM "+j.description.identifier+": "+Object.keys(j.components||{}).map(x=>x.replace("minecraft:","")).join(","));}
+      else if(/^BP\/blocks\/.+\.json$/.test(p)){const j=JSON.parse(t)["minecraft:block"];L.push("BLOQUE "+j.description.identifier+": "+Object.keys(j.components||{}).map(x=>x.replace("minecraft:","")).join(","));}
+      else if(/^BP\/entities\/.+\.json$/.test(p)){const j=JSON.parse(t)["minecraft:entity"];L.push("CRIATURA "+j.description.identifier+": "+Object.keys(j.components||{}).map(x=>x.replace("minecraft:","")).join(","));}
+      else if(/^BP\/recipes\//.test(p))L.push("RECETA "+p.split("/").pop());
+      else if(/^BP\/loot_tables\//.test(p))L.push("BOTÍN "+p.replace("BP/loot_tables/",""));
+      else if(/^BP\/spawn_rules\//.test(p))L.push("APARICIÓN "+p.split("/").pop());
+      else if(/^BP\/scripts\/.+\.js$/.test(p)){
+        const ev=[...new Set([...t.matchAll(/(?:after|before)Events\.(\w+)/g)].map(x=>x[1]))];
+        const efx=[...new Set([...t.matchAll(/addEffect\(\s*["']([\w:]+)/g)].map(x=>x[1]))];
+        const ids=[...new Set([...t.matchAll(/["']([a-z0-9_]+:[a-z0-9_]+)["']/g)].map(x=>x[1]))].slice(0,12);
+        L.push("SCRIPT "+p.replace("BP/scripts/","")+" ("+t.length+" caracteres) eventos="+ev.join(",")+" efectos="+efx.join(",")+" ids="+ids.join(","));
+      }
+    }catch(_){}
+  }
+  if(habilidades&&habilidades.length)L.push("HABILIDADES PROGRAMADAS POR EGO: "+habilidades.join(" | "));
+  return L.join("\n").slice(0,6500);
+}
+async function auditarAddon(plan,files,habilidades,env){
+  const req=plan.requisitos||[];
+  if(!req.length)return null;
+  try{
+    const sys="Eres un auditor estricto de add-ons de Minecraft Bedrock. Recibes los REQUISITOS que pidió el usuario y el INVENTARIO real de lo que quedó dentro del add-on. Para cada requisito decide si el inventario lo cumple de verdad (existe el archivo/script/componente que lo implementa). Sé honesto: si solo hay un archivo pero no la lógica, NO está cumplido. Si el requisito empieza con IMPOSIBLE:, márcalo como cumplido solo si el sustituto existe. Responde SOLO JSON: {\"cumplidos\":[números base 1],\"faltan\":[{\"n\":número,\"motivo\":\"en español, corto, qué falta\"}]}";
+    const user="REQUISITOS:\n"+req.map((x,i)=>(i+1)+". "+x).join("\n")+"\n\nINVENTARIO:\n"+inventarioAddon(files,habilidades);
+    const r=await Promise.race([llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user}],1500,0),new Promise((_,rej)=>setTimeout(()=>rej(new Error("tiempo")),25000))]);
+    const j=extractJson(r.raw);if(!j)return null;
+    const faltan=(Array.isArray(j.faltan)?j.faltan:[]).map(x=>({n:Number(x&&x.n),motivo:String(x&&x.motivo||"").slice(0,140)})).filter(x=>x.n>=1&&x.n<=req.length);
+    const cumplidos=req.length-new Set(faltan.map(x=>x.n)).size;
+    return {total:req.length,cumplidos,faltan:faltan.map(x=>"«"+req[x.n-1].replace(/^IMPOSIBLE:\s*/i,"").slice(0,70)+"»: "+x.motivo)};
+  }catch(e){return null;}
+}
+
+function fichaAddon(plan,r,au){
+  const ids={item:[],block:[],entity:[]};
+  for(const f of r.files){let mm;
+    if(/^BP\/items\/.+\.json$/.test(f.path)&&(mm=String(f.content).match(/"identifier"\s*:\s*"([^"]+)"/)))ids.item.push(mm[1]);
+    else if(/^BP\/blocks\/.+\.json$/.test(f.path)&&(mm=String(f.content).match(/"identifier"\s*:\s*"([^"]+)"/)))ids.block.push(mm[1]);
+    else if(/^BP\/entities\/.+\.json$/.test(f.path)&&(mm=String(f.content).match(/"identifier"\s*:\s*"([^"]+)"/)))ids.entity.push(mm[1]);}
+  const nom=id=>nombreDeId(id,plan);
+  const incluye=[];
+  ids.item.forEach(id=>{if(!(r.conteo.habilidades||[]).some(h=>h.startsWith(nom(id)+":")))incluye.push("Ítem «"+nom(id)+"»");});ids.block.forEach(id=>incluye.push("Bloque «"+nom(id)+"»"));ids.entity.forEach(id=>incluye.push("Criatura «"+nom(id)+"»"));
+  (r.conteo.habilidades||[]).forEach(h=>incluye.push(h));
+  const prueba=["Abre el archivo .mcaddon con Minecraft: se importa solo.","Crea un mundo nuevo (o edita uno), entra a «Add-ons» y activa el Behavior Pack y el Resource Pack de este add-on."];
+  if(plan.kit)prueba.push("Entra al mundo: la primera vez aparecen cofres a tu lado con el kit.");
+  ids.item.forEach(id=>prueba.push("Para tener «"+nom(id)+"»: `/give @s "+id+"`"));
+  ids.block.forEach(id=>prueba.push("Para tener «"+nom(id)+"»: `/give @s "+id+"`"));
+  ids.entity.forEach(id=>prueba.push("Para invocar «"+nom(id)+"»: `/summon "+id+"`"));
+  if(r.files.some(f=>/ego_pod_/.test(f.path)&&/volando/.test(String(f.content))))prueba.push("Para volar: lleva el objeto en el inventario y haz clic derecho con él en la mano; salta para subir y agáchate para bajar.");
+  return {nombre:plan.nombre,incluye:incluye.slice(0,16),prueba:prueba.slice(0,12),revision:au?{cumplidos:au.cumplidos,total:au.total,faltan:au.faltan}:null,avisos:r.notas.filter(x=>!/^Revisión final/.test(x)).slice(0,6)};
+}
 async function mcBuild(body,env,request){
   const prompt=String(body.prompt||"").slice(0,2000);
   const plan=limpiarPlan(body.plan,prompt);
@@ -1788,11 +1874,13 @@ async function mcBuild(body,env,request){
   try{
     plan._prompt=prompt;
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
+    const au=await auditarAddon(plan,r.files,r.conteo.habilidades,env);
+    if(au&&au.faltan.length)r.notas.unshift("Revisión final: no pude confirmar "+au.faltan.length+" de "+au.total+" cosas que pediste → "+au.faltan.slice(0,3).join(" · "));
     const zip=await createZip(r.files);
     const nombre="ego-"+slugAscii(plan.nombre);
     const c=r.conteo;
-    const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ")),"X-EGO-Resumen":encodeURIComponent(resumen),"Cache-Control":"no-store"}});
+    const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
@@ -1902,7 +1990,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.10.0",
+    version: "14.12.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2726,7 +2814,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.10.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.12.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -2751,7 +2839,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.10.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.12.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -2821,7 +2909,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.10.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.12.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
