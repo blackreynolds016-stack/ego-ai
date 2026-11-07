@@ -800,14 +800,14 @@ const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u
 function guardarArchivo(id,name,blob){try{if(blob.size>300000)return;const fr=new FileReader();fr.onload=()=>{try{const b64=String(fr.result).split(",")[1]||"";localStorage.setItem("ego_f_"+id,JSON.stringify({n:name,b:b64}));let ks=JSON.parse(localStorage.getItem("ego_fkeys")||"[]");ks.push(id);while(ks.length>6){try{localStorage.removeItem("ego_f_"+ks.shift())}catch(e){}}localStorage.setItem("ego_fkeys",JSON.stringify(ks))}catch(e){}};fr.readAsDataURL(blob)}catch(e){}}
 function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.parse(localStorage.getItem("ego_f_"+id)||"null");if(!o||!o.b)return false;const bin=atob(o.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);FILES.set(id,{name:o.n||name,blob:new Blob([u],{type:"application/octet-stream"}),mime:/\.zip$/i.test(o.n||name)?"application/zip":"application/octet-stream"});return true}catch(e){return false}}
 async function genAddonPro(c,d,text){
-const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null;const modelos=new Set();
+const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null;const modelos=new Set(),fm=new Set();
 const prog=t=>{d.removeAttribute("data-err");d.innerHTML='<span class="dots">'+t+'</span>';scroll()};
 async function pedir(o,ms){const ac=new AbortController();ctrl=ac;const tm=setTimeout(()=>ac.abort(),ms);try{const r=await wPost(Object.assign({usuario:usuario},o),ac.signal);return r}finally{clearTimeout(tm)}}
 try{
 prog("🧠 Planificando tu add-on…");
 let r=await pedir({action:"mc_plan",prompt:text},150000);let j=await r.json().catch(()=>null);
 if(!r.ok||!j||!j.ok)throw new Error((j&&j.error)||"no se pudo planificar ("+r.status+")");
-const plan=j.plan,files=[],res=new Array(plan.partes.length);let hechas=0,sig=0;
+const plan=j.plan,files=[];(j.fallosModelos||[]).forEach(function(x){fm.add(String(x))});const res=new Array(plan.partes.length);let hechas=0,sig=0;
 const pintar=()=>prog("🔨 Creando tu add-on: "+hechas+" de "+plan.partes.length+" partes listas…<br><small>"+plan.partes.map(function(p,x){return (res[x]?"✓ ":"· ")+p.titulo}).join("<br>")+"<br>Trabajo en varias partes a la vez. No cierres la app.</small>");
 pintar();
 async function trabajador(){
@@ -815,23 +815,33 @@ while(!stop){const i=sig++;if(i>=plan.partes.length)return;
 let ok=false,err="";
 for(let t=0;t<2&&!ok&&!stop;t++){
 try{const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:i,previos:[]},170000);const jj=await rr.json().catch(()=>null);
-if(rr.ok&&jj&&jj.files&&jj.files.length){res[i]=jj.files;if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
+if(rr.ok&&jj&&jj.files&&jj.files.length){res[i]=jj.files;(jj&&jj.fallosModelos||[]).forEach(function(x){fm.add(String(x))});if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
 catch(e){err=(e&&e.name==="AbortError")?"tiempo agotado":"sin conexión"}}
 if(!ok&&!stop)fallos.push(plan.partes[i].titulo+" ("+err+")");hechas++;pintar()}}
 await Promise.all([trabajador(),trabajador(),trabajador()]);
 res.forEach(function(a){if(a)files.push(...a)});
 if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";ctrl=null;return}
-if(!files.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+fallos[0]:""));
+if(!files.length&&plan.partes.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+fallos[0]:""));
 prog("📦 Armando el paquete, texturas y manifests…");
 r=await pedir({action:"mc_build",prompt:text,plan:plan,files:files},90000);
 if(r.ok&&/zip|octet-stream/.test(r.headers.get("content-type")||"")){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
 try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}try{ficha=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Ficha")||"null"))}catch(e){ficha=null}
 const m=(r.headers.get("content-disposition")||"").match(/filename="?([^";]+)"?/i);if(m)name=m[1]}
 else{const jb=await r.json().catch(()=>null);throw new Error((jb&&jb.error)||"no se pudo armar el paquete")}
+if(ficha&&ficha.revision&&ficha.revision.faltan&&ficha.revision.faltan.length&&!stop){
+try{prog("🔧 Revisión final: completando lo que faltó…");
+const ex=files.filter(function(f){return /\.(js|json)$/.test(f.path)&&!/manifest/.test(f.path)}).map(function(f){return "=== "+f.path+" ===\n"+f.content}).join("\n").slice(0,14000);
+const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:0,previos:[],existentes:ex,parteExtra:{titulo:"Completar lo que faltó",tipo:"script",detalle:"Faltan estos requisitos del usuario; impleméntalos de verdad:\n- "+ficha.revision.faltan.join("\n- ")}},170000);
+const jj=await rr.json().catch(()=>null);
+if(rr.ok&&jj&&jj.files&&jj.files.length){const nf=files.filter(function(f){return !jj.files.some(function(g){return g.path===f.path})}).concat(jj.files);
+const r2=await pedir({action:"mc_build",prompt:text,plan:plan,files:nf},90000);
+if(r2.ok&&/zip|octet-stream/.test(r2.headers.get("content-type")||"")){const b2=await r2.blob();let f2=null;try{f2=JSON.parse(decodeURIComponent(r2.headers.get("X-EGO-Ficha")||"null"))}catch(e){}
+const antes=ficha.revision.faltan.length,desp=f2&&f2.revision?f2.revision.faltan.length:antes;
+if(f2&&desp<=antes){blob=b2;ficha=f2;nfiles=Number(r2.headers.get("X-EGO-Files"))||nfiles;if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop())}}}}catch(e){}}
 }catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":String((e&&e.message)||"error")}
 ctrl=null;let reply,id=null;
 if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:"application/octet-stream"});
-reply=ficha?fichaMc(ficha,name,nfiles,fallos,modelos.size?"**Generado con:** "+[...modelos].slice(0,3).join(", "):""):("✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\n"+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+".\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""))}
+reply=ficha?fichaMc(ficha,name,nfiles,fallos,(modelos.size?"**Generado con:** "+[...modelos].slice(0,3).join(", "):"")+([...fm].filter(function(x){return /venice/i.test(x)}).length?"\n\n⚠️ **Venice no respondió:** "+[...fm].filter(function(x){return /venice/i.test(x)})[0]:"")):("✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\n"+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+".\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""))}
 else reply="No pude crear el add-on.\n\nMotivo: "+why;
 const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp="mc";am.pro=true;am.pp=text;guardarArchivo(id,name,blob)}
 c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);
