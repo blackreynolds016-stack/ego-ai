@@ -760,7 +760,16 @@ const RX_VERBO=/\b(?:cre(?:a|ar|ame|es|arme)|cr[eé]ame|haz(?:me)?|hacer|hagas|g
 const RX_MC=/\b(?:add-?on|addon|mcaddon|mcpack|behaviou?r pack|resource pack|pack de (?:comportamiento|recursos)|mod)\b/i;
 const RX_MCW=/\bminecraft|bedrock\b/i;
 const RX_PROJ=/\b(?:proyecto\s+completo|app\s+nativa|aplicaci[oó]n\s+nativa|app\s+(?:de\s+)?android|aplicaci[oó]n\s+(?:de\s+)?android|apk|en\s+(?:un\s+)?zip|archivo\s+zip|con\s+todos\s+los\s+archivos|en\s+archivos)\b/i;
-function proyectoIntent(t){t=String(t||"");if(IM_ASKQ.test(t))return null;
+function seguirMc(c0,t){const la=ultAsist(c0);if(!la)return false;if(t.length>600||t.trim().split(/\s+/).length<3)return false;
+if(/^\s*(?:nuevo tema|otra cosa|cambiando de tema|olvida (?:el|este) add-?on)/i.test(t))return false;
+if(/(?:imagen|foto|dibuj|v[ií]deo|traduc|resum|ecuaci|matem[aá]tic|tarea|poema|receta de)/i.test(t)&&!/add-?on|minecraft|espada|reloj|cofre|bloque|criatura|mob|jefe/i.test(t))return false;
+const ms=(c0&&c0.msgs)||[];const ult=ms[ms.length-1];const inm=!!(ult&&ult.role==="assistant"&&ult.kp==="mc");
+const preg=/^\s*[¡!]*¿/.test(t)||(/\?\s*$/.test(t)&&/^[\s¡!¿]*(?:qu[eé]|cu[aá]l|c[oó]mo|por qu[eé]|d[oó]nde|qui[eé]n|cu[aá]nt|cu[aá]ndo|para qu[eé]|sirve|se puede|existe)/i.test(t));
+const grac=/^[\s¡!]*(?:gracias|ok\b|vale\b|listo\b|perfecto|genial|excelente|buen[ií]simo)[\s\S]{0,25}$/i.test(t);
+if(preg||grac)return false;
+const cambio=/(?:avanzad|por partes|c[aá]mbi|ponle|p[oó]nle|hazle|h[aá]zlo|h[aá]zla|agr[eé]ga|a[nñ]ade|quita|qu[ií]tale|m[aá]s\s|menos\s|mejor|otra vez|de nuevo|versi[oó]n|otro color|textura|animaci|efecto|part[ií]cula|sonido|brill|no (?:trae|tiene|sale|se ve|funciona|aparece|hace|tira|lanza|dispara|carga|sirve|est[aá])|falta|faltan|arregl|corrig|rehaz|repite|otra\b|nuev[oa]\b|da[ñn]o|velocidad|r[aá]pid|mortal|nombre|color|de (?:fuego|hielo|rayo|veneno|viento|explosi)|quiero|necesito|tambi[eé]n|adem[aá]s|que (?:el|la|los|las|tenga|aparezca|salga|venga|haga|sea|use)|revisa|ayuda|complet)/i.test(t);
+return inm||cambio}
+function proyectoIntent(t){t=String(t||"");if(seguirMc(cur(),t))return"mc";if(IM_ASKQ.test(t))return null;
 {const c0=cur();const la=ultAsist(c0);
 if(la&&!/\?\s*$/.test(t)&&t.length<400&&/(?:avanzad|por partes|c[aá]mbi|ponle|p[oó]nle|hazle|h[aá]zlo|h[aá]zla|agr[eé]ga|a[nñ]ade|quita|qu[ií]tale|m[aá]s\s|menos\s|mejor|otra vez|de nuevo|versi[oó]n|otro color|textura|animaci|efecto|part[ií]cula|sonido|brill|no (?:trae|tiene|sale|se ve|funciona|aparece|hace|tira|lanza|dispara)|falta|faltan|arregl|corrig|rehaz|repite|otra\b|nuev[oa]\b|da[ñn]o|velocidad|r[aá]pid|mortal|nombre|color|de (?:fuego|hielo|rayo|veneno|viento|explosi))/i.test(t))return"mc"}
 if(!RX_VERBO.test(t))return null;
@@ -771,7 +780,7 @@ if(/(?:archivo|descarg|ejecut|instal)/i.test(t)){const c=cur();const prev=c&&c.m
 return null}
 function ultAsist(c){const todo=(c&&c.msgs?c.msgs:[]).slice(-8);const as=todo.filter(x=>x.role==="assistant");const l=as[as.length-1];if(!l||l.imgPrompt||/!\[imagen\]\(/.test(String(l.content||"")))return null;const ms=as.filter(x=>x.kp==="mc"&&x.pp);return ms.length?ms[ms.length-1]:null}
 function mcPrompt(c,text){const la=ultAsist(c);
-if(la&&la.role==="assistant"&&la.kp==="mc"&&la.pp&&!/^\s*(?:dame|p[aá]same)\s+el\s+archivo/i.test(text))return la.pp+". Cambios pedidos ahora: "+text;
+if(la&&la.role==="assistant"&&la.kp==="mc"&&la.pp&&!/^\s*(?:dame|p[aá]same)\s+el\s+archivo/i.test(text))return la.pp+(/Cambios pedidos ahora:/.test(la.pp)?" | Y además, sin quitar lo anterior: ":". Cambios pedidos ahora: ")+text;
 if(la&&la.role==="assistant"&&la.kp==="mc"&&la.pp)return la.pp;if(/espada|hacha|pico|vara|var[ií]ta|bast[oó]n|cetro|arma|herramienta/i.test(text))return text;
 const prev=(c&&c.msgs?c.msgs:[]).filter(m=>m.role==="user"&&m.content!==text&&/add-?on|minecraft|espada|hacha|pico|vara|bast[oó]n|arma/i.test(m.content||"")).pop();
 return prev?prev.content+". "+text:text}
@@ -791,7 +800,7 @@ const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u
 function guardarArchivo(id,name,blob){try{if(blob.size>300000)return;const fr=new FileReader();fr.onload=()=>{try{const b64=String(fr.result).split(",")[1]||"";localStorage.setItem("ego_f_"+id,JSON.stringify({n:name,b:b64}));let ks=JSON.parse(localStorage.getItem("ego_fkeys")||"[]");ks.push(id);while(ks.length>6){try{localStorage.removeItem("ego_f_"+ks.shift())}catch(e){}}localStorage.setItem("ego_fkeys",JSON.stringify(ks))}catch(e){}};fr.readAsDataURL(blob)}catch(e){}}
 function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.parse(localStorage.getItem("ego_f_"+id)||"null");if(!o||!o.b)return false;const bin=atob(o.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);FILES.set(id,{name:o.n||name,blob:new Blob([u],{type:"application/octet-stream"}),mime:/\.zip$/i.test(o.n||name)?"application/zip":"application/octet-stream"});return true}catch(e){return false}}
 async function genAddonPro(c,d,text){
-const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="";
+const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null;
 const prog=t=>{d.removeAttribute("data-err");d.innerHTML='<span class="dots">'+t+'</span>';scroll()};
 async function pedir(o,ms){const ac=new AbortController();ctrl=ac;const tm=setTimeout(()=>ac.abort(),ms);try{const r=await wPost(Object.assign({usuario:usuario},o),ac.signal);return r}finally{clearTimeout(tm)}}
 try{
@@ -813,19 +822,27 @@ if(!files.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+
 prog("📦 Armando el paquete, texturas y manifests…");
 r=await pedir({action:"mc_build",prompt:text,plan:plan,files:files},90000);
 if(r.ok&&/zip|octet-stream/.test(r.headers.get("content-type")||"")){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
-try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}
+try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}try{ficha=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Ficha")||"null"))}catch(e){ficha=null}
 const m=(r.headers.get("content-disposition")||"").match(/filename="?([^";]+)"?/i);if(m)name=m[1]}
 else{const jb=await r.json().catch(()=>null);throw new Error((jb&&jb.error)||"no se pudo armar el paquete")}
 }catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":String((e&&e.message)||"error")}
 ctrl=null;let reply,id=null;
 if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:"application/octet-stream"});
-reply="✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\nPulsa el botón de descarga y abre el archivo **.mcaddon** con Minecraft. Activa el Behavior Pack y el Resource Pack en el mundo; en el README (dentro del paquete) están los comandos para probar cada objeto. Si quieres cambios, dímelo y lo rehago.\n\n"+
-(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+". Pídelas de nuevo y las rehago.\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":"")+
-"_Las texturas de ítems y bloques son íconos generados automáticamente y las criaturas usan modelos del juego. Lo escribió una IA: pruébalo y dime qué falla._"}
+reply=ficha?fichaMc(ficha,name,nfiles,fallos):("✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\n"+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+".\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""))}
 else reply="No pude crear el add-on.\n\nMotivo: "+why;
 const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp="mc";am.pro=true;am.pp=text;guardarArchivo(id,name,blob)}
 c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);
 busy=false;stop=false;send.textContent="➤";scroll()}
+function fichaMc(f,name,nfiles,fallos,extra){
+var L=["## ✅ "+((f&&f.nombre)||"Tu add-on")+" está listo","","**Archivo:** `"+name+"` · "+(nfiles||"varios")+" archivos",""];
+if(f&&f.incluye&&f.incluye.length){L.push("**Qué incluye**");f.incluye.forEach(function(x){L.push("- "+x)});L.push("")}
+if(f&&f.prueba&&f.prueba.length){L.push("**Cómo probarlo**");f.prueba.forEach(function(x,i){L.push((i+1)+". "+x)});L.push("")}
+if(f&&f.revision){var rv=f.revision;L.push("**Revisión final:** "+rv.cumplidos+" de "+rv.total+" cosas que pediste están verificadas dentro del archivo.");(rv.faltan||[]).forEach(function(x){L.push("- ⚠️ "+x)});L.push("")}
+if(fallos&&fallos.length){L.push("⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+". Pídelas de nuevo y las rehago.","")}
+if(f&&f.avisos&&f.avisos.length){L.push("**Avisos**");f.avisos.forEach(function(x){L.push("- "+x)});L.push("")}
+if(extra)L.push(extra,"");
+L.push("_Las texturas son íconos generados automáticamente y las criaturas usan modelos del juego. Lo escribió una IA: pruébalo y, si algo no funciona, dime qué pasó y lo corrijo. Para cambios, dímelo y lo rehago._");
+return L.join("\n")}
 async function genProject(c,d,text,kind){
 busy=true;stop=false;send.textContent="■";let blob=null,name="",why="",nfiles=0,modelo="",resumen="",spec=null,noap="",notas="",pro=false;const la0=kind==="mc"?ultAsist(c):null;const specPrev=(la0&&la0.sp&&/Cambios pedidos ahora:/.test(text))?la0.sp:undefined;const forzar=kind==="mc"&&(/avanzad|por partes|sin plantilla/i.test(text)||!!(la0&&la0.pro&&/Cambios pedidos ahora:/.test(text)));
 try{ctrl=new AbortController();const tm=setTimeout(()=>{if(ctrl)ctrl.abort()},290000);
