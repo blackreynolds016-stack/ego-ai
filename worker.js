@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.13.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.15.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -28,7 +28,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.13.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.15.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -1312,24 +1312,33 @@ function limpiarPlan(j,prompt){
   {const cnt={};for(const o of (Array.isArray(j.objetos)?j.objetos:[])){const mm=String(o&&o.id||"").match(/^([a-z][a-z0-9_]{1,12}):/i);if(mm){const k=mm[1].toLowerCase();cnt[k]=(cnt[k]||0)+1;}}const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];if(top&&(base.ns==="ego"||!cnt[base.ns]))base.ns=mcNs(top[0]);}
   base.resumen=String(j.resumen||prompt||"").slice(0,400);
   base.requisitos=(Array.isArray(j.requisitos)?j.requisitos:[]).map(x=>String(x||"").trim().slice(0,160)).filter(Boolean).slice(0,14);
-  if(j.kit&&typeof j.kit==="object"){const K=j.kit;base.kit={armadura:!!K.armadura,herramientas:!!K.herramientas,recursos:!!K.recursos,encantar:!!K.encantar,material:/diam/i.test(String(K.material))?"diamond":"netherite"};}
+  {const pj=new Set((Array.isArray(j.poderes_jugador)?j.poderes_jugador:(Array.isArray(j.poderesJugador)?j.poderesJugador:[])).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES_JUG[x]));for(const x of detectarPoderesJugador(prompt))pj.add(x);base.poderesJugador=[...pj];}
+  const sinObj=/(?:no quiero|sin|nada de|no necesito)\s+(?:ning[uú]n\s+)?(?:objetos?|[ií]tems?|criaturas?|mobs?|bloques?|armas?)/i.test(String(prompt||""));
+  if(j.kit&&typeof j.kit==="object"&&/\b(?:cofres?|kit|caja)\b/i.test(String(prompt||""))){const K=j.kit;base.kit={armadura:!!K.armadura,herramientas:!!K.herramientas,recursos:!!K.recursos,encantar:!!K.encantar,material:/diam/i.test(String(K.material))?"diamond":"netherite"};}
   const vistos=new Set();
-  for(const o of (Array.isArray(j.objetos)?j.objetos:[]).slice(0,60)){
+  for(const o of (sinObj&&base.poderesJugador.length?[]:(Array.isArray(j.objetos)?j.objetos:[]).slice(0,60))){
     const id=mcId(base.ns,o&&o.id); const tipo=["item","block","entity"].includes(o&&o.tipo)?o.tipo:"item";
     if(!id||vistos.has(id)) continue; vistos.add(id);
     base.objetos.push({id,tipo,nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",entrega:["kit","crafteo","creativo","botin","aparece"].includes(normMc(o.entrega))?normMc(o.entrega):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0,poderes:(Array.isArray(o.poderes)?o.poderes:[]).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES[x]).slice(0,8)});
   }
-  for(const p of (Array.isArray(j.partes)?j.partes:[]).slice(0,8)){
+  for(const p of (sinObj&&base.poderesJugador.length?[]:(Array.isArray(j.partes)?j.partes:[])).slice(0,8)){
     if(/^(?:textur|sonid|sound|audio|icon|imagen)/i.test(String(p&&p.titulo||"").trim())&&!/(?:script|logic|comport)/i.test(String(p&&p.titulo||"")))continue; // EGO crea las texturas solo; los sonidos no se pueden generar
     const tipo=MC_TIPOS_PARTE.includes(p&&p.tipo)?p.tipo:"misc";
     const arch=(Array.isArray(p&&p.archivos)?p.archivos:[]).map(x=>safeProjectPath(x)).filter(x=>x&&/^(BP|RP)\//.test(x)&&!/manifest\.json$|\.png$/i.test(x)).slice(0,12);
     base.partes.push({titulo:String((p&&p.titulo)||"Parte "+(base.partes.length+1)).slice(0,60),tipo,detalle:String((p&&p.detalle)||"").slice(0,1500),archivos:arch});
   }
-  if(!base.partes.length) base.partes.push({titulo:"Add-on completo",tipo:"misc",detalle:String(prompt||"").slice(0,1500),archivos:[]});
+  if(!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes.push({titulo:"Add-on completo",tipo:"misc",detalle:String(prompt||"").slice(0,1500),archivos:[]});
   return base;
 }
-async function candidatosCodigo(env){
+async function candidatosCodigo(env,rol){
   const c=[];
+  if(rol==="razonar"){
+    if(veniceKey(env)&&env.VENICE_FIRST!=="0")for(const x of await veniceModelos(env,"reasoning"))c.push({tipo:"venice",id:x});
+    if(env.AI)for(const x of CF_MODELS.razonar.slice(0,3))c.push({tipo:"cf",id:x});
+    if(veniceKey(env)&&env.VENICE_FIRST==="0")for(const x of await veniceModelos(env,"reasoning"))c.push({tipo:"venice",id:x});
+    if(routerApiKey(env))for(const x of openRouterCandidates(env,"reasoning").slice(0,2))c.push({tipo:"or",id:x});
+    if(c.length)return c;
+  }
   const ven=veniceKey(env)?(await veniceModelos(env,"code")).map(m=>({tipo:"venice",id:m})):[];
   if(ven.length&&env.VENICE_FIRST!=="0") c.push(...ven);
   if(env.AI){const cad=env.PROJECT_CF_MODEL?[String(env.PROJECT_CF_MODEL),...CF_MODELS.codigo.filter(m=>m!==String(env.PROJECT_CF_MODEL))]:CF_MODELS.codigo;
@@ -1338,8 +1347,8 @@ async function candidatosCodigo(env){
   if(routerApiKey(env)) for(const m of openRouterCandidates(env,"code").slice(0,2)) c.push({tipo:"or",id:m});
   return c;
 }
-async function llamarCodigo(env,mensajes,maxTok,desde){
-  const cands=await candidatosCodigo(env); const fallos=[];
+async function llamarCodigo(env,mensajes,maxTok,desde,rol){
+  const cands=await candidatosCodigo(env,rol); const fallos=[];
   if(!cands.length) throw new Error("Configura Workers AI, VENICE_API_KEY u OPENROUTER_API_KEY.");
   for(let i=Math.min(desde||0,cands.length-1);i<cands.length;i++){
     const c=cands[i];
@@ -1353,7 +1362,7 @@ async function llamarCodigo(env,mensajes,maxTok,desde){
         if(!r.ok) throw new Error(`HTTP ${r.status}`);
         raw=salida(data);
       }
-      if(raw&&String(raw).trim()) return {raw:String(raw),model:c.id,idx:i};
+      if(raw&&String(raw).trim()) return {raw:String(raw),model:c.id,idx:i,fallos};
       fallos.push(c.id.split("/").pop()+": vacío");
     }catch(e){fallos.push(c.id.split("/").pop()+": "+String(e&&e.message||e).slice(0,70));}
   }
@@ -1372,14 +1381,15 @@ async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
-{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
+{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"poderes_jugador":[],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
 ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enumera en "requisitos" TODO lo que pidió (nada más, nada menos). Cada objeto, habilidad y parte del plan debe servir a un requisito. No interpretes a tu gusto: si el usuario no lo dijo, no lo agregues.
+PODERES DEL JUGADOR: si el usuario quiere TENER poderes él mismo (inmortal, vida infinita, volar, velocidad, fuerza, daño infinito, aura, miedo en monstruos, aldeanos que lo adoran, destruir, levantar objetos, visión nocturna, saltar, respirar bajo el agua, sin hambre, inmune al fuego), ponlos en \"poderes_jugador\" usando SOLO estos nombres: inmortal, vida_infinita, vuelo, velocidad, fuerza, dano_infinito, aura, miedo_mobs, adoracion_aldeanos, destruccion, telekinesis, vision_nocturna, salto, respirar_agua, sin_hambre, resistencia_fuego. EGO los programa y se activan solos al entrar al mundo: NO crees ítems, criaturas ni scripts para eso. Si dijo que no quiere objetos, objetos=[] y partes=[].
 REGLA CLAVE: incluye SOLO lo que el usuario pidió, nada más (cero extras de ejemplo). EGO programa por su cuenta, sin que tú lo escribas: (a) las habilidades de armas (campo habilidad), (b) los poderes de un ítem (campo poderes: vuelo, visión nocturna, etc.), (c) el KIT INICIAL: si el usuario pide recibir al crear/entrar al mundo un cofre con armadura, herramientas o recursos, pon en el JSON "kit":{"armadura":true|false,"herramientas":true|false,"recursos":true|false,"encantar":true|false,"material":"netherite|diamond"} (si no lo pidió, "kit":null) y NO crees bloques, ítems ni scripts para eso. Solo crea los objetos personalizados que el usuario nombró (ej. el reloj o el amuleto).
 Reglas: máximo 8 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
-    const r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}],6000,0);
+    const r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}],6000,0,"razonar");
     const plan=limpiarPlan(extractJson(r.raw),prompt);
-    return json({ok:true,plan,model:r.model});
+    return json({ok:true,plan,model:r.model,fallosModelos:r.fallos||[]});
   }catch(e){
     const plan=limpiarPlan(null,prompt);
     return json({ok:true,plan,model:"plan-basico",aviso:String(e&&e.message||e).slice(0,160)});
@@ -1387,24 +1397,50 @@ Reglas: máximo 8 partes y 12 archivos por parte; separa en partes lógicas (ít
 }
 
 const MC_FORMATO=`\n\nFORMATO DE RESPUESTA (obligatorio, sin Markdown ni explicaciones): para CADA archivo escribe una línea exacta "=== ARCHIVO: ruta/relativa.ext ===", luego el contenido completo del archivo tal cual y termina con la línea exacta "=== FIN ===".`;
+
+const MC_CRITICO_SYS=`Eres un REVISOR TÉCNICO estricto de add-ons de Minecraft Bedrock 1.26.60 (@minecraft/server 2.11.0). Recibes los REQUISITOS del usuario, el plan y los archivos recién escritos por otra IA. Busca SOLO defectos REALES y concretos que harían que algo NO funcione en el juego o que no cumplan un requisito:
+- lógica que falta o está vacía (funciones sin cuerpo, TODO, comentarios en vez de código), o que no implementa lo que dice el requisito;
+- ids que no coinciden con los del plan; efectos/eventos/sonidos/partículas con nombres inexistentes;
+- API obsoleta: world.events, runCommandAsync, require(), setTimeout, Location(), applyKnockback con 4 argumentos (ahora es applyKnockback({x,z}, vertical)), cambiar bloques o entidades dentro de beforeEvents sin system.run;
+- JSON de entidades/ítems/bloques con componentes inventados o mal formados;
+- cosas que se ejecutan al cargar el script usando world/dimensiones antes de tiempo.
+No inventes problemas ni pidas mejoras de estilo. Si todo está bien responde {"problemas":[]}.
+Responde SOLO JSON: {"problemas":[{"archivo":"ruta","problema":"qué está mal, concreto","arreglo":"cómo corregirlo"}]} con máximo 6.`;
+const tmoMc=(ms)=>new Promise((_,rej)=>setTimeout(()=>rej(new Error("tiempo")),ms));
+function parsearSalidaMc(raw){
+  const p=leerProyectoModelo(raw);const files=[],errores=[];const vistos=new Set();
+  if(!p||!p.files.length)return {files,errores:["formato"]};
+  for(const f of p.files){
+    const path=safeProjectPath(f.path);
+    if(!path||!/^(BP|RP)\//.test(path)||/manifest\.json$|\.(png|jpg|ogg|zip|mcaddon)$/i.test(path)||vistos.has(path)||typeof f.content!=="string")continue;
+    vistos.add(path);
+    if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path);continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
+    else if(/\.js$/i.test(path)){if(balanceJs(f.content)||lintScriptApi(f.content).length){errores.push(path);continue;}files.push({path,content:f.content});}
+    else files.push({path,content:f.content.slice(0,300000)});
+  }
+  return {files,errores};
+}
 async function mcPart(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   const plan=limpiarPlan(body.plan,prompt);
   const i=Math.max(0,Math.min(plan.partes.length-1,Number(body.parte)||0));
-  const parte=plan.partes[i];
+  const pe=body.parteExtra&&typeof body.parteExtra==='object'?body.parteExtra:null;
+  const parte=pe?{titulo:String(pe.titulo||"Completar").slice(0,60),tipo:MC_TIPOS_PARTE.includes(pe.tipo)?pe.tipo:"script",detalle:String(pe.detalle||"").slice(0,3000),archivos:[]}:plan.partes[i];
+  const existentes=String(body.existentes||"").slice(0,14000);
   const previos=(Array.isArray(body.previos)?body.previos:[]).map(x=>String(x).slice(0,120)).slice(0,120);
   const sys=MC_GUIA_BASE+"\n\n"+(MC_GUIAS[parte.tipo]||MC_GUIAS.misc)+
     "\n\nPLAN DEL ADD-ON (úsalo tal cual):\n"+JSON.stringify({nombre:plan.nombre,ns:plan.ns,resumen:plan.resumen,objetos:plan.objetos})+MC_FORMATO;
   const user=`Escribe SOLO los archivos de esta parte: "${parte.titulo}" (tipo ${parte.tipo}).\nQué debe contener: ${parte.detalle||plan.resumen}\n`+
     (parte.archivos.length?`Archivos esperados: ${parte.archivos.join(", ")}\n`:"Elige tú las rutas dentro de BP/ o RP/.\n")+
     (previos.length?`Archivos que ya existen en otras partes (no los repitas): ${previos.join(", ")}\n`:"")+
+    (existentes?`\nARCHIVOS ACTUALES DEL ADD-ON (modifícalos o amplíalos; devuelve completos los que cambies):\n${existentes}\n`:"")+
     `\nPedido original del usuario (para mantener fidelidad):\n${prompt}`;
-  let desde=0,errores=[],mejor=null,modelo="";
+  let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   for(let intento=0;intento<2;intento++){
     let r;
     try{r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],12000,desde);}
     catch(e){ if(mejor) break; return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+String(e&&e.message||e).slice(0,200)},502); }
-    modelo=r.model; desde=r.idx+(intento===0?1:0);
+    modelo=r.model; fallosM=(r.fallos||[]); desde=r.idx+(intento===0?1:0);
     const p=leerProyectoModelo(r.raw);
     errores=[]; const files=[];
     if(!p||!p.files.length){errores.push("No usaste el formato '=== ARCHIVO: ruta ===' ... '=== FIN ==='.");continue;}
@@ -1421,8 +1457,24 @@ async function mcPart(body,env){
     if(!mejor||errores.length<mejor.errores.length||(errores.length===mejor.errores.length&&files.length>=mejor.files.length))mejor={files,errores:errores.slice()};
     if(!errores.length) break;
   }
+  // ---- Revisor independiente (otro modelo, de razonamiento) + corrección ----
+  let revisado="";
+  if(mejor&&mejor.files.length&&["script","entities","items","blocks","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
+    try{
+      const texto=mejor.files.filter(f=>/\.(js|json)$/.test(f.path)).map(f=>"=== ARCHIVO: "+f.path+" ===\n"+f.content).join("\n").slice(0,16000);
+      const crit=await Promise.race([llamarCodigo(env,[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:"REQUISITOS:\n"+((plan.requisitos||[]).map((x,k)=>(k+1)+". "+x).join("\n")||prompt.slice(0,1500))+"\n\nPLAN:\n"+JSON.stringify({objetos:plan.objetos,poderes_jugador:plan.poderesJugador})+"\n\nARCHIVOS DE LA PARTE «"+parte.titulo+"»:\n"+texto}],1800,0,"razonar"),tmoMc(50000)]);
+      const jc=extractJson(crit.raw);
+      const probs=(jc&&Array.isArray(jc.problemas)?jc.problemas:[]).map(x=>String((x&&x.archivo?x.archivo+": ":"")+((x&&x.problema)||"")+(x&&x.arreglo?" → "+x.arreglo:"")).slice(0,260)).filter(x=>x.length>12).slice(0,6);
+      if(probs.length){
+        const rr=await Promise.race([llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nUN REVISOR ENCONTRÓ ESTOS PROBLEMAS REALES. Corrígelos TODOS y devuelve TODOS los archivos de esta parte completos otra vez:\n- "+probs.join("\n- ")}],12000,0),tmoMc(150000)]);
+        const np=parsearSalidaMc(rr.raw);
+        if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="el revisor ("+String(crit.model).replace(/^.*\//,"")+") encontró "+probs.length+" problema(s) y se corrigieron";}
+        else revisado="el revisor encontró "+probs.length+" problema(s) pero la corrección no pasó la verificación; se dejó la versión original";
+      }else revisado="revisado por "+String(crit.model).replace(/^.*\//,"")+": sin problemas";
+    }catch(e){}
+  }
   if(!mejor||!mejor.files.length) return json({error:"La parte «"+parte.titulo+"» no produjo archivos válidos.",detalle:errores.slice(0,4)},502);
-  return json({ok:true,files:mejor.files,model:modelo,avisos:mejor.errores.slice(0,6),parte:i,titulo:parte.titulo});
+  return json({ok:true,files:mejor.files,model:modelo,revisado,fallosModelos:fallosM,avisos:mejor.errores.slice(0,6),parte:i,titulo:parte.titulo});
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
 function balanceJs(src){
@@ -1646,6 +1698,99 @@ function scriptKit(k,propios){
   '  system.runTimeout(() => {','    try {','      if (p.getDynamicProperty("ego_kit_entregado")) return;','      p.setDynamicProperty("ego_kit_entregado", true);','      colocarCofres(p, armar());','    } catch (e) {}','  }, 60);','});',''].join("\n");
 }
 function detectarKit(plan){return plan.kit||null;}
+// ---- Poderes del JUGADOR (sin objetos): scripts probados que se activan solos al entrar al mundo ----
+const MC_PODERES_JUG={inmortal:"Inmortalidad (no mueres por daño)",vida_infinita:"Vida infinita",vuelo:"Vuelo (toca saltar dos veces rápido; sprint = velocidad extrema; agacharte = bajar)",velocidad:"Velocidad extrema",fuerza:"Fuerza extrema",dano_infinito:"Daño infinito (todo lo que golpeas muere)",aura:"Aura divina (el mundo tiembla a tu alrededor)",miedo_mobs:"Los monstruos huyen de ti",adoracion_aldeanos:"Los aldeanos te adoran",destruccion:"Poder de destrucción (al romper un bloque se rompe el área; agachado rompes uno solo)",telekinesis:"Telequinesis (agachado y mirando algo, lo levantas)",vision_nocturna:"Visión nocturna",salto:"Super salto",respirar_agua:"Respirar bajo el agua",sin_hambre:"Sin hambre",resistencia_fuego:"Inmune al fuego y la lava"};
+function detectarPoderesJugador(prompt){
+  const t=normMc(prompt),r=[];
+  if(/(inmortal|no morir|no muero|invencible|invulnerab)/.test(t))r.push("inmortal");
+  if(/(vida infinita|salud infinita|vida ilimitada)/.test(t))r.push("vida_infinita");
+  if(/(\bvolar\b|\bvuelo\b|volando)/.test(t))r.push("vuelo");
+  if(/(velocidad (?:extrema|infinita|increible|maxima)|super ?velocidad|correr (?:muy )?rapido|rapidisimo)/.test(t))r.push("velocidad");
+  if(/(fuerza (?:infinita|extrema|divina)|super ?fuerza)/.test(t))r.push("fuerza");
+  if(/(dano infinito|dano ilimitado|matar de un golpe|mato de un golpe|un solo golpe)/.test(t))r.push("dano_infinito");
+  if(/\baura\b/.test(t)||/(temblar|tiemble|terremoto)/.test(t))r.push("aura");
+  if(/(sienta(?:n)? miedo|miedo al ver|me teman|huyan|huyen de mi)/.test(t))r.push("miedo_mobs");
+  if(/(aldeanos? (?:me )?ador|me ador)/.test(t))r.push("adoracion_aldeanos");
+  if(/(poder de destruccion|destruir bloques|destruccion)/.test(t))r.push("destruccion");
+  if(/(levantar objetos|telequinesis|telekinesis|levitar objetos|levantar cosas)/.test(t))r.push("telekinesis");
+  if(/(ver de noche|vision nocturna|ver en la oscuridad)/.test(t))r.push("vision_nocturna");
+  if(/(super salto|saltar muy alto|salto infinito)/.test(t))r.push("salto");
+  if(/(respirar (?:bajo el )?agua)/.test(t))r.push("respirar_agua");
+  if(/(sin hambre|no tener hambre|hambre infinit)/.test(t))r.push("sin_hambre");
+  if(/(inmune al fuego|resistencia al fuego|no quemar|inmune a la lava)/.test(t))r.push("resistencia_fuego");
+  return r;
+}
+function scriptPoderesJugador(lista){
+  const P=new Set(lista);const has=k=>P.has(k);
+  const L=[];
+  L.push('import { world, system } from "@minecraft/server";','',
+  '// Poderes del jugador generados por EGO. Se activan solos para todos los jugadores del mundo.',
+  'const PODERES = '+JSON.stringify([...P])+';',
+  'const tiene = (k) => PODERES.includes(k);',
+  'function efecto(p, id, nivel, dur) { try { p.addEffect(id, dur || 300, { amplifier: nivel, showParticles: false }); } catch (e) {} }',
+  'function libre(dim, loc) { try { const b = dim.getBlock(loc); return !b || b.isAir || b.isLiquid; } catch (e) { return true; } }',
+  '',
+  '// ---- cada segundo: efectos permanentes ----',
+  'system.runInterval(() => {','  for (const p of world.getAllPlayers()) {','    try {');
+  if(has("inmortal")||has("vida_infinita")){L.push('      efecto(p, "resistance", 4, 300);','      efecto(p, "regeneration", 4, 300);'+(has("vida_infinita")?'\n      efecto(p, "health_boost", 9, 300);\n      efecto(p, "absorption", 9, 300);':''));}
+  if(has("inmortal"))L.push('      efecto(p, "fire_resistance", 0, 300);','      efecto(p, "water_breathing", 0, 300);');
+  if(has("velocidad"))L.push('      efecto(p, "speed", 9, 300);');
+  if(has("fuerza"))L.push('      efecto(p, "strength", 19, 300);');
+  if(has("vision_nocturna"))L.push('      efecto(p, "night_vision", 0, 440);');
+  if(has("salto"))L.push('      efecto(p, "jump_boost", 6, 300);');
+  if(has("respirar_agua"))L.push('      efecto(p, "water_breathing", 0, 300);');
+  if(has("sin_hambre"))L.push('      efecto(p, "saturation", 4, 300);');
+  if(has("resistencia_fuego"))L.push('      efecto(p, "fire_resistance", 0, 300);');
+  L.push('    } catch (e) {}','  }','}, 20);','');
+  if(has("inmortal")||has("vida_infinita")){
+    L.push('// ---- cada 5 ticks: la vida siempre al máximo ----','system.runInterval(() => {','  for (const p of world.getAllPlayers()) {','    try { p.getComponent("minecraft:health")?.resetToMaxValue(); } catch (e) {}','  }','}, 5);','');
+  }
+  if(has("vuelo")){
+    L.push('// ---- VUELO: salta dos veces rápido. Salto = subir, agacharse = bajar, sprint = avanzar a gran velocidad ----',
+    '// (vuelo simulado: en supervivencia Minecraft no permite el vuelo creativo real)',
+    'const volando = new Set();','const ultimoSalto = new Map();','const saltoAntes = new Map();',
+    'system.runInterval(() => {','  for (const p of world.getAllPlayers()) {','    try {',
+    '      if (p.isFlying) continue;',
+    '      const salta = !!p.isJumping;','      const antes = !!saltoAntes.get(p.id); saltoAntes.set(p.id, salta);',
+    '      const ahora = system.currentTick;',
+    '      if (salta && !antes) { const u = ultimoSalto.get(p.id) ?? -100; if (!volando.has(p.id) && ahora - u <= 12) { volando.add(p.id); p.onScreenDisplay.setActionBar("Vuelo activado"); } ultimoSalto.set(p.id, ahora); }',
+    '      if (!volando.has(p.id)) continue;',
+    '      if (p.isOnGround && !salta) { volando.delete(p.id); p.onScreenDisplay.setActionBar("Vuelo desactivado"); continue; }',
+    '      const l = p.location; const v = p.getViewDirection();',
+    '      let destino = { x: l.x, y: l.y, z: l.z };',
+    '      if (p.isSneaking) destino = { x: l.x, y: l.y - 0.5, z: l.z };',
+    '      else if (salta) destino = { x: l.x, y: l.y + 0.7, z: l.z };',
+    '      else if (p.isSprinting) destino = { x: l.x + v.x * 1.6, y: l.y + v.y * 1.6, z: l.z + v.z * 1.6 };',
+    '      if (libre(p.dimension, { x: destino.x, y: destino.y, z: destino.z }) && libre(p.dimension, { x: destino.x, y: destino.y + 1, z: destino.z })) p.teleport(destino, { keepVelocity: false });',
+    '      else p.teleport(l, { keepVelocity: false });',
+    '    } catch (e) {}','  }','}, 2);','');
+  }
+  if(has("dano_infinito")){
+    L.push('// ---- DAÑO INFINITO: lo que golpeas muere ----','world.afterEvents.entityHitEntity.subscribe((ev) => {','  try {','    const p = ev.damagingEntity; const x = ev.hitEntity;','    if (!p || p.typeId !== "minecraft:player" || !x || x.typeId === "minecraft:player") return;',
+    '    try { x.kill(); } catch (e) { try { x.applyDamage(1000000); } catch (e2) {} }','  } catch (e) {}','});','');
+  }
+  if(has("destruccion")){
+    L.push('// ---- DESTRUCCIÓN: al romper un bloque se rompe el área (agachado: solo ese bloque) ----','world.afterEvents.playerBreakBlock.subscribe((ev) => {','  try {','    const p = ev.player; if (p.isSneaking) return;','    const b = ev.block.location; const r = 2;',
+    '    p.dimension.runCommand(`fill ${b.x - r} ${b.y - r} ${b.z - r} ${b.x + r} ${b.y + r} ${b.z + r} air destroy`);','  } catch (e) {}','});','');
+  }
+  if(has("aura")||has("miedo_mobs")||has("adoracion_aldeanos")){
+    L.push('// ---- AURA: temblor, partículas, monstruos que huyen y aldeanos que te adoran ----',
+    'system.runInterval(() => {','  for (const p of world.getAllPlayers()) {','    try {','      const l = p.location;');
+    if(has("aura"))L.push('      p.runCommand("camerashake add @s 0.12 0.6 positional");',
+      '      try { p.dimension.spawnParticle("minecraft:totem_particle", { x: l.x, y: l.y + 1, z: l.z }); } catch (e) {}',
+      '      if (system.currentTick % 60 === 0) { try { p.playSound("random.explode", { volume: 0.4, pitch: 0.5 }); } catch (e) {} }');
+    if(has("miedo_mobs"))L.push('      for (const e of p.dimension.getEntities({ location: l, maxDistance: 18, families: ["monster"] })) {','        try { const dx = e.location.x - l.x, dz = e.location.z - l.z; const d = Math.sqrt(dx * dx + dz * dz) || 1;',
+      '          e.applyKnockback({ x: (dx / d) * 1.2, z: (dz / d) * 1.2 }, 0.3); e.addEffect("slowness", 40, { amplifier: 1, showParticles: false }); } catch (e2) {}','      }');
+    if(has("adoracion_aldeanos"))L.push('      for (const e of p.dimension.getEntities({ location: l, maxDistance: 18, type: "minecraft:villager_v2" })) {','        try { e.addEffect("regeneration", 60, { amplifier: 1, showParticles: false }); p.dimension.spawnParticle("minecraft:heart_particle", { x: e.location.x, y: e.location.y + 2, z: e.location.z }); } catch (e2) {}','      }');
+    L.push('    } catch (e) {}','  }','}, 10);','');
+  }
+  if(has("telekinesis")){
+    L.push('// ---- TELEQUINESIS: agachado en el suelo y mirando algo, lo levantas ----','system.runInterval(() => {','  for (const p of world.getAllPlayers()) {','    try {','      if (!p.isSneaking || !p.isOnGround) continue;',
+    '      const m = p.getEntitiesFromViewDirection({ maxDistance: 40 }).find((r) => r.entity.id !== p.id)?.entity;','      if (m) m.addEffect("levitation", 30, { amplifier: 2, showParticles: false });','    } catch (e) {}','  }','}, 10);','');
+  }
+  L.push('world.afterEvents.playerSpawn.subscribe((ev) => {','  try { if (ev.initialSpawn) ev.player.sendMessage("§6Poderes divinos activos: §f"+PODERES.join(", ")); } catch (e) {}','});','');
+  return L.join("\n");
+}
 function postprocesarAddon(entrada,plan,verSrv){
   const notas=[],mapa=new Map(),ns=plan.ns||"ego";
   for(const f of entrada){ if(f&&typeof f.path==="string"&&typeof f.content==="string") mapa.set(f.path,f.content); }
@@ -1773,6 +1918,10 @@ function postprocesarAddon(entrada,plan,verSrv){
     habilidades.push(nombreDeId(id,plan)+": "+pod.map(p=>({vuelo:"vuelo",vision_nocturna:"visión nocturna",velocidad:"velocidad",fuerza:"fuerza",regeneracion:"regeneración",resistencia:"resistencia",salto:"super salto",respirar_agua:"respirar bajo el agua",sin_hambre:"sin hambre",resistencia_fuego:"resistencia al fuego"}[p])).join(", ")+" (mientras lo llevas en el inventario"+(pod.includes("vuelo")?"; clic derecho activa el vuelo":"")+")");
   }
   if(kit)habilidades.push("Kit inicial"+(kit.propios&&kit.propios.length?" (incluye tus ítems propios: "+kit.propios.map(id=>nombreDeId(id,plan)).join(", ")+")":"")+": "+(kit.armadura?"armadura ":"")+(kit.herramientas?"herramientas ":"")+(kit.recursos?"recursos ":"")+"de "+(kit.material==="diamond"?"diamante":"netherite")+(kit.encantar?" encantados al máximo":"")+" en cofres junto a ti la primera vez que entras al mundo");
+  if(plan.poderesJugador&&plan.poderesJugador.length){
+    mapa.set("BP/scripts/ego_poderes.js",scriptPoderesJugador(plan.poderesJugador));
+    habilidades.push("Poderes del jugador (activos desde que entras al mundo, sin objetos): "+plan.poderesJugador.map(k=>MC_PODERES_JUG[k]).join("; "));
+  }
   const scripts=[...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k));
   const mods=new Set();
   for(const s of scripts){
@@ -1839,7 +1988,7 @@ async function auditarAddon(plan,files,habilidades,env){
   try{
     const sys="Eres un auditor estricto de add-ons de Minecraft Bedrock. Recibes los REQUISITOS que pidió el usuario y el INVENTARIO real de lo que quedó dentro del add-on. Para cada requisito decide si el inventario lo cumple de verdad (existe el archivo/script/componente que lo implementa). Sé honesto: si solo hay un archivo pero no la lógica, NO está cumplido. Si el requisito empieza con IMPOSIBLE:, márcalo como cumplido solo si el sustituto existe. Responde SOLO JSON: {\"cumplidos\":[números base 1],\"faltan\":[{\"n\":número,\"motivo\":\"en español, corto, qué falta\"}]}";
     const user="REQUISITOS:\n"+req.map((x,i)=>(i+1)+". "+x).join("\n")+"\n\nINVENTARIO:\n"+inventarioAddon(files,habilidades);
-    const r=await Promise.race([llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user}],1500,0),new Promise((_,rej)=>setTimeout(()=>rej(new Error("tiempo")),25000))]);
+    const r=await Promise.race([llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user}],1500,0,"razonar"),new Promise((_,rej)=>setTimeout(()=>rej(new Error("tiempo")),25000))]);
     const j=extractJson(r.raw);if(!j)return null;
     const faltan=(Array.isArray(j.faltan)?j.faltan:[]).map(x=>({n:Number(x&&x.n),motivo:String(x&&x.motivo||"").slice(0,140)})).filter(x=>x.n>=1&&x.n<=req.length);
     const cumplidos=req.length-new Set(faltan.map(x=>x.n)).size;
@@ -1858,6 +2007,8 @@ function fichaAddon(plan,r,au){
   ids.item.forEach(id=>{if(!(r.conteo.habilidades||[]).some(h=>h.startsWith(nom(id)+":")))incluye.push("Ítem «"+nom(id)+"»");});ids.block.forEach(id=>incluye.push("Bloque «"+nom(id)+"»"));ids.entity.forEach(id=>incluye.push("Criatura «"+nom(id)+"»"));
   [...new Set(r.conteo.habilidades||[])].forEach(h=>incluye.push(h));
   const prueba=["Abre el archivo .mcaddon con Minecraft: se importa solo.","Crea un mundo nuevo (o edita uno), entra a «Add-ons» y activa el Behavior Pack y el Resource Pack de este add-on."];
+  if(plan.poderesJugador&&plan.poderesJugador.length)prueba.push("Crea un mundo en supervivencia con el add-on activado: los poderes se activan solos al entrar (no necesitas objetos).");
+  if(plan.poderesJugador&&plan.poderesJugador.includes("vuelo"))prueba.push("Vuelo: salta dos veces rápido; salto = subir, agacharte = bajar, correr = avanzar muy rápido.");
   if(plan.kit)prueba.push("Entra al mundo: la primera vez aparecen cofres a tu lado con el kit.");
   ids.item.forEach(id=>prueba.push("Para tener «"+nom(id)+"»: `/give @s "+id+"`"));
   ids.block.forEach(id=>prueba.push("Para tener «"+nom(id)+"»: `/give @s "+id+"`"));
@@ -1875,7 +2026,7 @@ async function mcBuild(body,env,request){
     if(/manifest\.json$|\.(png|jpg|zip|mcaddon)$/i.test(path)) continue;
     vistos.add(path);entrada.push({path,content:f.content});
   }
-  if(!entrada.length) return json({error:"No hay archivos para armar el add-on."},400);
+  if(!entrada.length&&!(plan.poderesJugador&&plan.poderesJugador.length)&&!plan.kit) return json({error:"No hay archivos para armar el add-on."},400);
   try{
     plan._prompt=prompt;
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
@@ -1995,7 +2146,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.13.0",
+    version: "14.15.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2815,11 +2966,15 @@ async function manejar(request, env) {
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("venice")) {
     if (!veniceKey(env)) return json({ configurado: false, aviso: "Falta el secreto VENICE_API_KEY." });
+    if (url.searchParams.get("venice") === "test") {
+      try { const mod = (await veniceModelos(env, "code"))[0]; const t0 = Date.now(); const r = await veniceChat([{ role: "user", content: "Responde solo: ok" }], env, 30, mod); return json({ ok: true, modelo: mod, ms: Date.now() - t0, respuesta: String(r.content).slice(0, 40) }); }
+      catch (e) { return json({ ok: false, error: String((e && e.message) || e).slice(0, 300), ayuda: "Venice rechazó la prueba: revisa saldo/créditos de la clave o el nombre del modelo." }); }
+    }
     const cat = await veniceCatalogo(env);
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.13.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.15.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env), freeModels: OR_FREE
   });
@@ -2844,7 +2999,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.13.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.15.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -2914,7 +3069,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.13.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.15.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
