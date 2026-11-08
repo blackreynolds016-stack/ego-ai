@@ -45,6 +45,10 @@ header button.icon:active{transform:scale(.96)}
 .chatitem button{background:none;border:0;color:var(--muted);font-size:13px;padding:2px 4px;opacity:.55}
 #main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 #chat{flex:1;overflow-y:auto;padding:12px var(--pad);display:flex;flex-direction:column;gap:18px;max-width:760px;width:100%;margin:0 auto;contain:content;overscroll-behavior:contain}
+:root{}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.msg,.msg *,textarea,input{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.act,.act *,.msg button{-webkit-user-select:none;user-select:none}
 .msg{line-height:1.6;font-size:16px;word-wrap:break-word;max-width:100%}
 .user{align-self:flex-end;max-width:84%;background:var(--raise);color:var(--text);padding:12px 18px;border-radius:24px 24px 7px 24px;white-space:pre-wrap;box-shadow:var(--btn-sh);border:var(--raise-bd)}
 .bot{align-self:stretch}
@@ -800,7 +804,7 @@ const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u
 function guardarArchivo(id,name,blob){try{if(blob.size>300000)return;const fr=new FileReader();fr.onload=()=>{try{const b64=String(fr.result).split(",")[1]||"";localStorage.setItem("ego_f_"+id,JSON.stringify({n:name,b:b64}));let ks=JSON.parse(localStorage.getItem("ego_fkeys")||"[]");ks.push(id);while(ks.length>6){try{localStorage.removeItem("ego_f_"+ks.shift())}catch(e){}}localStorage.setItem("ego_fkeys",JSON.stringify(ks))}catch(e){}};fr.readAsDataURL(blob)}catch(e){}}
 function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.parse(localStorage.getItem("ego_f_"+id)||"null");if(!o||!o.b)return false;const bin=atob(o.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);FILES.set(id,{name:o.n||name,blob:new Blob([u],{type:"application/octet-stream"}),mime:/\.zip$/i.test(o.n||name)?"application/zip":"application/octet-stream"});return true}catch(e){return false}}
 async function genAddonPro(c,d,text){
-const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null;const modelos=new Set(),fm=new Set();
+const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null;const modelos=new Set(),fm=new Set(),modelos3d=[];
 const prog=t=>{d.removeAttribute("data-err");d.innerHTML='<span class="dots">'+t+'</span>';scroll()};
 async function pedir(o,ms){const ac=new AbortController();ctrl=ac;const tm=setTimeout(()=>ac.abort(),ms);try{const r=await wPost(Object.assign({usuario:usuario},o),ac.signal);return r}finally{clearTimeout(tm)}}
 try{
@@ -815,7 +819,7 @@ while(!stop){const i=sig++;if(i>=plan.partes.length)return;
 let ok=false,err="";
 for(let t=0;t<2&&!ok&&!stop;t++){
 try{const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:i,previos:[]},170000);const jj=await rr.json().catch(()=>null);
-if(rr.ok&&jj&&jj.files&&jj.files.length){res[i]=jj.files;(jj&&jj.fallosModelos||[]).forEach(function(x){fm.add(String(x))});if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
+if(rr.ok&&jj&&((jj.files&&jj.files.length)||jj.modelo3d)){res[i]=jj.files||[];if(jj.modelo3d)modelos3d.push(jj.modelo3d);(jj&&jj.fallosModelos||[]).forEach(function(x){fm.add(String(x))});if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
 catch(e){err=(e&&e.name==="AbortError")?"tiempo agotado":"sin conexión"}}
 if(!ok&&!stop)fallos.push(plan.partes[i].titulo+" ("+err+")");hechas++;pintar()}}
 await Promise.all([trabajador(),trabajador(),trabajador()]);
@@ -823,7 +827,7 @@ res.forEach(function(a){if(a)files.push(...a)});
 if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";ctrl=null;return}
 if(!files.length&&plan.partes.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+fallos[0]:""));
 prog("📦 Armando el paquete, texturas y manifests…");
-r=await pedir({action:"mc_build",prompt:text,plan:plan,files:files},90000);
+r=await pedir({action:"mc_build",prompt:text,plan:plan,files:files,modelos3d:modelos3d},90000);
 if(r.ok&&/zip|octet-stream/.test(r.headers.get("content-type")||"")){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
 try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}try{ficha=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Ficha")||"null"))}catch(e){ficha=null}
 const m=(r.headers.get("content-disposition")||"").match(/filename="?([^";]+)"?/i);if(m)name=m[1]}
@@ -834,7 +838,7 @@ const ex=files.filter(function(f){return /\.(js|json)$/.test(f.path)&&!/manifest
 const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:0,previos:[],existentes:ex,parteExtra:{titulo:"Completar lo que faltó",tipo:"script",detalle:"Faltan estos requisitos del usuario; impleméntalos de verdad:\n- "+ficha.revision.faltan.join("\n- ")}},170000);
 const jj=await rr.json().catch(()=>null);
 if(rr.ok&&jj&&jj.files&&jj.files.length){const nf=files.filter(function(f){return !jj.files.some(function(g){return g.path===f.path})}).concat(jj.files);
-const r2=await pedir({action:"mc_build",prompt:text,plan:plan,files:nf},90000);
+const r2=await pedir({action:"mc_build",prompt:text,plan:plan,files:nf,modelos3d:modelos3d},90000);
 if(r2.ok&&/zip|octet-stream/.test(r2.headers.get("content-type")||"")){const b2=await r2.blob();let f2=null;try{f2=JSON.parse(decodeURIComponent(r2.headers.get("X-EGO-Ficha")||"null"))}catch(e){}
 const antes=ficha.revision.faltan.length,desp=f2&&f2.revision?f2.revision.faltan.length:antes;
 if(f2&&desp<=antes){blob=b2;ficha=f2;nfiles=Number(r2.headers.get("X-EGO-Files"))||nfiles;if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop())}}}}catch(e){}}
