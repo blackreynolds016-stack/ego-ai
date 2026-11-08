@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.17.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.20.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -30,13 +30,13 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, X-Usuario-Correo, Authorization",
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas"
+  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas, X-EGO-Validacion, X-EGO-Reparacion"
 };
 
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.17.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.20.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -385,7 +385,7 @@ addEventListener('pointerdown',()=>{if(state!=='play')reset()});requestAnimation
   resumen: "Cómo construir un add-on de Minecraft Bedrock (Android, Windows, consolas) con behavior pack + resource pack enlazados, ítems personalizados y Script API, listo para importar como .mcaddon.",
   reglas: [
     "Minecraft es SIEMPRE Bedrock aquí: nunca Java, Forge ni Fabric. Un add-on son DOS carpetas en la raíz del paquete: BP/ (behavior pack) y RP/ (resource pack), cada una con su manifest.json. Nunca pongas archivos sueltos en la raíz.",
-    "manifest.json: format_version 2; header con name, description, uuid, version [1,0,0] y min_engine_version [1,21,0] (ajústalo si el usuario dice su versión). Todos los UUID (headers y módulos) deben ser UUID v4 distintos entre sí. El BP depende del RP y el RP del BP usando el uuid del header del otro pack.",
+    "manifest.json: format_version 2; header con name, description, uuid, version [1,0,0] y min_engine_version [1,26,50] (ajústalo si el usuario dice su versión). Todos los UUID (headers y módulos) deben ser UUID v4 distintos entre sí. SOLO el BP depende del RP usando el UUID del header del RP; el RP no debe depender del BP.",
     "BP modules: {type:'data'} y, si hay scripts, {type:'script', language:'javascript', entry:'scripts/main.js'} más la dependencia {module_name:'@minecraft/server', version:'<versión estable reciente>'}. No uses módulos beta salvo que haga falta; si usas @minecraft/server-ui o similares, declara también su dependencia.",
     "Ítems personalizados: BP/items/<nombre>.json con format_version '1.21.0', 'minecraft:item' > description.identifier con prefijo propio (ej. ego:espada_trueno) y menu_category {category:'equipment', group:'minecraft:itemGroup.name.sword'}; components típicos: minecraft:icon, minecraft:max_stack_size, minecraft:hand_equipped, minecraft:damage, minecraft:durability, minecraft:enchantable.",
     "Icono y textura: EGO SÍ genera la textura PNG 16x16 del ítem y el pack_icon.png con su propio código (ítems tipo espada, hacha, pico o vara); nunca digas que no puedes crear texturas. Si hay que describir el ícono, el PNG va en RP/textures/items/<nombre>.png, se registra en RP/textures/item_texture.json (texture_data > nombre > textures: 'textures/items/<nombre>') y el ítem lo usa con minecraft:icon {textures:{default:'<nombre>'}}. No uses minecraft:cooldown en el JSON del ítem; el enfriamiento va en el script.",
@@ -1035,7 +1035,13 @@ async function veniceImagen(env, prompt, width, height) {
 async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
   if (!routerApiKey(env) || env.EGO_TEAM_MODE === "0") return null;
 
-  const roles = [
+  const esProyecto = task === "minecraft-bedrock-addon" || task === "software-project";
+  const roles = esProyecto ? [
+    ["planner", "Eres el arquitecto del proyecto. Extrae requisitos, define una estructura mínima completa y señala dependencias/riesgos. No generes archivos; entrega un plan breve y verificable."],
+    ["reasoner", "Eres el revisor técnico. Comprueba compatibilidad, APIs, lógica, dependencias y casos límite. No inventes versiones ni APIs; indica incertidumbres concretas."],
+    ["coder", "Eres el IMPLEMENTADOR PRINCIPAL. Debes generar el proyecto completo, con contenido íntegro de cada archivo, sin placeholders. Obedece literalmente el formato de salida exigido por el mensaje system original. Para Minecraft, solo Bedrock; nunca Java/Forge/Fabric."],
+    ["auditor", "Eres el auditor independiente. Revisa los requisitos y el plan; detecta omisiones, archivos faltantes, referencias rotas, incompatibilidades y errores probables. No generes un proyecto alternativo; entrega una lista breve de correcciones imprescindibles."]
+  ] : [
     ["planner", "Eres el planificador principal. Descompón el problema, detecta requisitos y propone una solución verificable."],
     ["reasoner", "Eres el especialista en razonamiento, matemáticas y análisis técnico. Comprueba la lógica y detecta supuestos incorrectos."],
     ["coder", "Eres el especialista en programación e implementación. Prioriza código correcto, APIs reales y manejo de errores."],
@@ -1046,13 +1052,19 @@ async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
     content: typeof m?.content === "string" ? m.content : textOf(m?.content)
   }));
   const memberTokens = Math.max(900, Math.min(7000, Math.floor(maxTokens * 0.45)));
+  const systemOriginal = base.find(m => m.role === "system")?.content || "";
+  const contextoNoImplementador = esProyecto
+    ? [{ role: "system", content: `Analiza la solicitud de proyecto como especialista de EGO AI. Requisitos y restricciones originales:\n${systemOriginal.slice(0, 12000)}\nNo generes archivos ni repitas el formato de salida; entrega solo tu análisis técnico breve.` }, ...base.filter(m => m.role !== "system")]
+    : base;
   const results = await Promise.all(roles.map(async ([key, rolePrompt]) => {
     const model = EGO_TEAM_MODELS[key];
+    const mensajesRol = esProyecto && key !== "coder" ? contextoNoImplementador : base;
+    const tokensRol = esProyecto ? (key === "coder" ? Math.max(5000, Math.min(14000, Math.floor(maxTokens * 0.78))) : 1800) : memberTokens;
     try {
       const r = await openRouterChat([
-        { role: "system", content: `${rolePrompt}\nTarea: ${task}. Entrega una propuesta concreta y breve. No inventes pruebas ni APIs.` },
-        ...base
-      ], env, memberTokens, model);
+        { role: "system", content: `${rolePrompt}\nTarea: ${task}. No inventes pruebas ni APIs.` },
+        ...mensajesRol
+      ], env, tokensRol, model);
       return { key, model, content: String(r.content || "").trim() };
     } catch (e) {
       return { key, model, content: "", error: String(e?.message || e).slice(0, 150) };
@@ -1069,10 +1081,13 @@ async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
   };
 
   const aportes = ok.map(x => `ESPECIALISTA ${x.key.toUpperCase()} (${x.model}):\n${x.content}`).join("\n\n---\n\n");
+  const instruccionSintesis = esProyecto
+    ? "Eres el coordinador final de EGO AI para GENERACIÓN DE PROYECTOS. La respuesta del especialista CODER es la base de los archivos. Usa al planificador, razonador y auditor para corregir omisiones y errores, pero NO sustituyas el proyecto por una explicación. PRESERVA EXACTAMENTE el protocolo de archivos indicado en el mensaje system original: primera línea PROYECTO: nombre; después cada archivo con === ARCHIVO: ruta ===, contenido completo y === FIN ===. No uses Markdown, no añadas texto fuera del protocolo, no omitas README.md, no inventes pruebas ejecutadas. Si es Minecraft, conserva BP/ y RP/ con manifests coherentes. Devuelve solo el proyecto final."
+    : "Eres el coordinador final de EGO AI. Integra las aportaciones de cuatro especialistas. Resuelve discrepancias usando la opción técnicamente más sólida; elimina errores y duplicados; cumple todos los requisitos del usuario. No afirmes que ejecutaste pruebas que no se hicieron. Devuelve únicamente la respuesta final en español.";
   const synthesisMessages = [
     {
       role: "system",
-      content: "Eres el coordinador final de EGO AI. Integra las aportaciones de cuatro especialistas. Resuelve discrepancias usando la opción técnicamente más sólida; elimina errores y duplicados; cumple todos los requisitos del usuario. No afirmes que ejecutaste pruebas que no se hicieron. Devuelve únicamente la respuesta final en español."
+      content: instruccionSintesis
     },
     {
       role: "user",
@@ -1188,10 +1203,13 @@ const MC_JS_CONOCIDOS=new Set(("length push pop shift unshift slice splice conca
  "floor ceil round abs min max sqrt pow random sin cos tan atan atan2 hypot sign trunc log exp PI "+
  "assign freeze fromEntries getPrototypeOf hasOwnProperty isArray isInteger isFinite isNaN parseInt parseFloat stringify parse from of now call apply bind "+
  "toISOString getTime error warn log info constructor prototype name message stack").split(" "));
-function lintScriptApi(texto){
+function lintScriptApi(texto, verSrv="2.10.0"){
   const prob=[];const api=MC_API.act;
+  const es210=/^2\.10(?:\.|$)/.test(String(verSrv));
+  const apiNo210=new Set(["spawnXp","fade","pause","resume","seek","setPitch","setVolume","lineGapHeight","getClock","worldClockOnPaused","worldClockOnResumed","worldClockOnTimeMarker","worldClockOnTimeModified","worldClockOnRestart","TimeMarker","TimeMarkerOptions","WorldClock","WorldClockAddTimeMarkerError","WorldClockEventOptions","WorldClockInvalidRegistryError","WorldClockInvalidTimeMarkerError","WorldClockNotFoundError","WorldClockOnPausedAfterEvent","WorldClockOnPausedAfterEventSignal","WorldClockOnRestartBeforeEvent","WorldClockOnRestartBeforeEventSignal","WorldClockOnResumedAfterEvent","WorldClockOnResumedAfterEventSignal","WorldClockOnTimeMarkerAfterEvent","WorldClockOnTimeMarkerAfterEventSignal","WorldClockOnTimeModifiedAfterEvent","WorldClockOnTimeModifiedAfterEventSignal","WorldClockRegistrationError","WorldClockRegistrationOptions","WorldClockRegistry","WorldClockReloadNewWorldClockError","WorldClockReloadTimeMarkerError","WorldClockRemoveMinecraftTimeMarkerError","WorldClockRewindError","WorldClockTimeMarkerEventOptions","WorldClockTimeMarkerNotFoundError","button1WithOptions","button2WithOptions"]);
   const sin=String(texto).replace(/\/\*[\s\S]*?\*\//g,"").replace(/\/\/[^\n]*/g,"").replace(/`(?:\\.|[^`\\])*`/g,'""').replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g,'""');
   const conocidos=new Set([...api.members,...api.ui_members,...api.exports,...api.ui_exports,...MC_JS_CONOCIDOS]);
+  if(es210)for(const n of apiNo210)conocidos.delete(n);
   const locales=new Set();
   for(const m of sin.matchAll(/(?:function\s+|class\s+|const\s+|let\s+|var\s+)([A-Za-z_$][\w$]*)/g))locales.add(m[1]);
   for(const m of sin.matchAll(/([A-Za-z_$][\w$]*)\s*(?::|\()\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/g))locales.add(m[1]);
@@ -1199,6 +1217,7 @@ function lintScriptApi(texto){
   for(const m of sin.matchAll(/[{,]\s*([A-Za-z_$][\w$]*)\s*(?=[:,}])/g))locales.add(m[1]);
   // 1) importaciones
   const ok1=new Set(api.exports),ok2=new Set(api.ui_exports);
+  if(es210)for(const n of apiNo210){ok1.delete(n);ok2.delete(n);}
   for(const m of sin.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']?@minecraft\/(server-ui|server)["']?/g)){}
   for(const m of String(texto).matchAll(/import\s*\{([^}]*)\}\s*from\s*["']@minecraft\/(server-ui|server)["']/g)){
     const ok=m[2]==="server"?ok1:ok2;
@@ -1207,6 +1226,7 @@ function lintScriptApi(texto){
   // 2) eventos
   for(const m of sin.matchAll(/\.\s*(afterEvents|beforeEvents)\s*\.\s*([A-Za-z_$][\w$]*)/g)){
     const lista=api.events[m[1]==="afterEvents"?"after":"before"];
+    if(es210 && apiNo210.has(m[2])){prob.push("el evento "+m[1]+"."+m[2]+" requiere @minecraft/server 2.11.0 o superior");continue;}
     if(!lista.includes(m[2]))prob.push("el evento "+m[1]+"."+m[2]+" no existe"+(m[1]==="beforeEvents"&&api.events.after.includes(m[2])?" (existe en afterEvents)":""));
   }
   // 3) métodos llamados que no existen en la API ni en JavaScript ni en el propio script
@@ -1497,7 +1517,7 @@ Reglas: máximo 8 partes y 12 archivos por parte; separa en partes lógicas (ít
 
 const MC_FORMATO=`\n\nFORMATO DE RESPUESTA (obligatorio, sin Markdown ni explicaciones): para CADA archivo escribe una línea exacta "=== ARCHIVO: ruta/relativa.ext ===", luego el contenido completo del archivo tal cual y termina con la línea exacta "=== FIN ===".`;
 
-const MC_CRITICO_SYS=`Eres un REVISOR TÉCNICO estricto de add-ons de Minecraft Bedrock 1.26.60 (@minecraft/server 2.11.0). Recibes los REQUISITOS del usuario, el plan y los archivos recién escritos por otra IA. Busca SOLO defectos REALES y concretos que harían que algo NO funcione en el juego o que no cumplan un requisito:
+const MC_CRITICO_SYS=`Eres un REVISOR TÉCNICO estricto de add-ons de Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable). Recibes los REQUISITOS del usuario, el plan y los archivos recién escritos por otra IA. Busca SOLO defectos REALES y concretos que harían que algo NO funcione en el juego o que no cumplan un requisito:
 - lógica que falta o está vacía (funciones sin cuerpo, TODO, comentarios en vez de código), o que no implementa lo que dice el requisito;
 - ids que no coinciden con los del plan; efectos/eventos/sonidos/partículas con nombres inexistentes;
 - API obsoleta: world.events, runCommandAsync, require(), setTimeout, Location(), applyKnockback con 4 argumentos (ahora es applyKnockback({x,z}, vertical)), cambiar bloques o entidades dentro de beforeEvents sin system.run;
@@ -1514,7 +1534,7 @@ function parsearSalidaMc(raw){
     if(!path||!/^(BP|RP)\//.test(path)||/manifest\.json$|\.(png|jpg|ogg|zip|mcaddon)$/i.test(path)||vistos.has(path)||typeof f.content!=="string")continue;
     vistos.add(path);
     if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path);continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
-    else if(/\.js$/i.test(path)){if(balanceJs(f.content)||lintScriptApi(f.content).length){errores.push(path);continue;}files.push({path,content:f.content});}
+    else if(/\.js$/i.test(path)){if(balanceJs(f.content)||lintScriptApi(f.content, "2.10.0").length){errores.push(path);continue;}files.push({path,content:f.content});}
     else files.push({path,content:f.content.slice(0,300000)});
   }
   return {files,errores};
@@ -1671,7 +1691,7 @@ async function mcPart(body,env){
       if(!path||!/^(BP|RP)\//.test(path)||/manifest\.json$|\.(png|jpg|ogg|zip|mcaddon)$/i.test(path)||vistos.has(path)||typeof f.content!=="string") continue;
       vistos.add(path);
       if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path+": JSON inválido ("+t.error+")");continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
-      else if(/\.js$/i.test(path)){const bal=balanceJs(f.content);if(bal){errores.push(path+": "+bal);}for(const pr of lintScriptApi(f.content))errores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server.");files.push({path,content:f.content});}
+      else if(/\.js$/i.test(path)){const bal=balanceJs(f.content);if(bal){errores.push(path+": "+bal);}for(const pr of lintScriptApi(f.content, "2.10.0"))errores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server.");files.push({path,content:f.content});}
       else files.push({path,content:f.content.slice(0,300000)});
     }
     if(!files.length&&!errores.length)errores.push("No devolviste archivos BP/ o RP/ válidos.");
@@ -2054,7 +2074,7 @@ function postprocesarAddon(entrada,plan,verSrv){
    for(const k of [...mapa.keys()].filter(k=>/^BP\/items\/.+\.json$/.test(k))){try{const id=JSON.parse(mapa.get(k))["minecraft:item"].description.identifier;if(bl.has(id)){mapa.delete(k);}}catch(_){}}}
   for(const k of [...mapa.keys()]){const mm=k.match(/^BP\/(items|blocks|entities)\/(?:.+\/)([^/]+\.json)$/);if(mm){const nk="BP/"+mm[1]+"/"+mm[2];if(!mapa.has(nk)){mapa.set(nk,mapa.get(k));mapa.delete(k);notas.push("Se movió "+k.replace("BP/","")+" a "+nk.replace("BP/","")+" (Minecraft solo lee esa carpeta).");}}}
   const iconos=[],bloques=[],entidades=[],items=[];
-  const verSrvOk=String(verSrv||"2.11.0"),verUI=/^2\./.test(verSrvOk)?"2.3.0":"1.3.0";
+  const verSrvOk=String(verSrv||"2.10.0"),verUI=/^2\.11(?:\.|$)/.test(verSrvOk)?"2.3.0":/^2\./.test(verSrvOk)?"2.2.0":"1.3.0";
   // --- ítems
   for(const p of [...mapa.keys()].filter(k=>/^BP\/items\/[^/]+\.json$/.test(k))){
     const o=leer(p); const it=o&&o["minecraft:item"]; if(!it||!it.description){notas.push(p+" no es un ítem válido; se omitió.");mapa.delete(p);continue;}
@@ -2147,7 +2167,7 @@ function postprocesarAddon(entrada,plan,verSrv){
   const aTxt=(m)=>[...m.entries()].map(([k,v])=>k+"="+v).join("\n")+"\n";
   mapa.set("RP/texts/en_US.lang",aTxt(en));mapa.set("RP/texts/es_ES.lang",aTxt(es));mapa.set("RP/texts/languages.json",'["en_US","es_ES"]\n');
   // --- scripts: se descartan los que usan APIs que no existen; las habilidades las programa el código
-  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const tx=String(mapa.get(k));const mal=lintScript(tx);const prs=lintScriptApi(tx);if(mal||prs.length){mapa.delete(k);notas.push(k.replace("BP/","")+" se descartó porque "+(mal||prs.slice(0,3).join("; "))+" (no existe en la API oficial de Minecraft y rompería todo el script).");}}
+  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const tx=String(mapa.get(k));const mal=lintScript(tx);const prs=lintScriptApi(tx, verSrv||"2.10.0");if(mal||prs.length){mapa.delete(k);notas.push(k.replace("BP/","")+" se descartó porque "+(mal||prs.slice(0,3).join("; "))+" (no existe en la API oficial de Minecraft y rompería todo el script).");}}
   const habilidades=[...(plan._hab3d||[])];
   for(const id of items){
     const o=(plan.objetos||[]).find(x=>x.id===id)||{id,nombre:nombreDeId(id,plan),descripcion:""};
@@ -2202,7 +2222,7 @@ function postprocesarAddon(entrada,plan,verSrv){
   if(scripts.length){modBP.push({type:"script",language:"javascript",entry:"scripts/main.js",uuid:crypto.randomUUID(),version:[1,0,0]});
     deps.push({module_name:"@minecraft/server",version:verSrvOk});if(mods.has("@minecraft/server-ui"))deps.push({module_name:"@minecraft/server-ui",version:verUI});
     for(const m of mods)if(!["@minecraft/server","@minecraft/server-ui"].includes(m))notas.push("El script usa "+m+", que puede no estar disponible en tu versión.");}
-  const man=(n,d,u,m,dp)=>JSON.stringify({format_version:2,metadata:{authors:["EGO AI"]},header:{name:n,description:d,uuid:u,version:[1,0,0],min_engine_version:[1,26,60]},modules:m,...(dp?{dependencies:dp}:{})},null,2)+"\n";
+  const man=(n,d,u,m,dp)=>JSON.stringify({format_version:2,metadata:{authors:["EGO AI"]},header:{name:n,description:d,uuid:u,version:[1,0,0],min_engine_version:[1,26,50]},modules:m,...(dp?{dependencies:dp}:{})},null,2)+"\n";
   mapa.set("BP/manifest.json",man(plan.nombre+" BP","Behavior pack: "+plan.nombre,pId,modBP,deps));
   mapa.set("RP/manifest.json",man(plan.nombre+" RP","Resource pack: "+plan.nombre,rId,[{type:"resources",uuid:crypto.randomUUID(),version:[1,0,0]}],null));
   // --- íconos de los packs
@@ -2259,7 +2279,7 @@ async function auditarAddon(plan,files,habilidades,env){
   }catch(e){return null;}
 }
 
-function fichaAddon(plan,r,au){
+function fichaAddon(plan,r,au,validacion,ciclo){
   const ids={item:[],block:[],entity:[]};
   for(const f of r.files){let mm;
     if(/^BP\/items\/.+\.json$/.test(f.path)&&(mm=String(f.content).match(/"identifier"\s*:\s*"([^"]+)"/)))ids.item.push(mm[1]);
@@ -2277,7 +2297,7 @@ function fichaAddon(plan,r,au){
   ids.block.forEach(id=>prueba.push("Para tener «"+nom(id)+"»: `/give @s "+id+"`"));
   ids.entity.forEach(id=>prueba.push("Para invocar «"+nom(id)+"»: `/summon "+id+"`"));
   if(r.files.some(f=>/ego_pod_/.test(f.path)&&/volando/.test(String(f.content))))prueba.push("Para volar: lleva el objeto en el inventario y haz clic derecho con él en la mano; salta para subir y agáchate para bajar.");
-  return {nombre:plan.nombre,incluye:incluye.slice(0,16),prueba:prueba.slice(0,12),revision:au?{cumplidos:au.cumplidos,total:au.total,faltan:au.faltan}:null,avisos:[...new Set(r.notas)].filter(x=>!/^Revisión final/.test(x)).slice(0,6)};
+  return {nombre:plan.nombre,incluye:incluye.slice(0,16),prueba:prueba.slice(0,12),revision:au?{cumplidos:au.cumplidos,total:au.total,faltan:au.faltan}:null,validacion:validacion?{ok:!!validacion.ok,errores:(validacion.errores||[]).slice(0,12),avisos:(validacion.avisos||[]).slice(0,8),archivos:validacion.archivos}:null,reparacion:ciclo?{estado:ciclo.estado,rondas:ciclo.rondas,cambios:(ciclo.cambios||[]).length,erroresFinales:(ciclo.erroresFinales||[]).slice(0,8),avisosFinales:(ciclo.avisosFinales||[]).slice(0,8)}:null,avisos:[...new Set(r.notas)].filter(x=>!/^Revisión final/.test(x)).slice(0,8)};
 }
 
 async function generarVocesAddon(plan,env){
@@ -2301,27 +2321,38 @@ async function generarVocesAddon(plan,env){
 async function mcBuild(body,env,request){
   const prompt=String(body.prompt||"").slice(0,2000);
   const plan=limpiarPlan(body.plan,prompt);
-  const entrada=[];const vistos=new Set();
+  const entrada=[];const porRuta=new Map();const colisiones=[];
   for(const f of (Array.isArray(body.files)?body.files:[]).slice(0,400)){
     const path=safeProjectPath(f&&f.path);
     if(!path||!/^(BP|RP)\//.test(path)||typeof f.content!=="string"||f.content.length>400000) continue;
     if(/manifest\.json$|\.(png|jpg|zip|mcaddon)$/i.test(path)) continue;
-    vistos.add(path);entrada.push({path,content:f.content});
+    if(porRuta.has(path) && porRuta.get(path)!==f.content) colisiones.push(path);
+    porRuta.set(path,f.content);
   }
+  for(const [path,content] of porRuta) entrada.push({path,content});
   if(!entrada.length&&!(plan.poderesJugador&&plan.poderesJugador.length)&&!plan.kit) return json({error:"No hay archivos para armar el add-on."},400);
   try{
     plan._prompt=prompt;
     plan._modelos3d=(Array.isArray(body.modelos3d)?body.modelos3d:[]).slice(0,4).map(q=>({entidad:String(q&&q.entidad||""),partes:limpiarModelo3d(q&&q.partes)})).filter(q=>q.entidad&&q.partes.length>=3);
     const vz=await generarVocesAddon(plan,env);plan._voces=vz.out;
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
+    if(colisiones.length)r.notas.push("Se detectaron rutas generadas en más de una parte; se conservó la última versión para: "+[...new Set(colisiones)].slice(0,8).join(", "));
     for(const x of vz.fallos)r.notas.push("Voz: "+x);
+    const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
+    const validacion=ciclo.validacion||validarAddonEstructural(r.files,env.MC_SERVER_VERSION);
+    for(const x of ciclo.informe.cambios)r.notas.push(`Auto-reparación ronda ${x.ronda}: ${x.path}`);
+    for(const x of ciclo.informe.avisosFinales)r.notas.push("Auto-reparación: "+x);
+    for(const x of validacion.errores)r.notas.push("Validación pendiente: "+x);
+    for(const x of validacion.avisos)r.notas.push("Revisión: "+x);
+    const readme=r.files.find(f=>/^BP\/README\.md$/i.test(f.path));
+    if(readme)readme.content+="\n\n## Validación estructural de EGO AI\n- Resultado: "+(validacion.ok?"sin errores estructurales detectados":"se detectaron problemas que debes revisar")+"\n- Archivos revisados: "+validacion.archivos+"\n"+[...validacion.errores,...validacion.avisos].map(x=>"- "+x).join("\n")+"\n- Esta revisión estática no sustituye la importación y prueba dentro de Minecraft.\n";
     const au=await auditarAddon(plan,r.files,r.conteo.habilidades,env);
     if(au&&au.faltan.length)r.notas.unshift("Revisión final: no pude confirmar "+au.faltan.length+" de "+au.total+" cosas que pediste → "+au.faltan.slice(0,3).join(" · "));
     const zip=await createZip(r.files);
     const nombre="ego-"+slugAscii(plan.nombre);
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au,validacion,ciclo.informe)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
@@ -2431,7 +2462,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.17.0",
+    version: "14.20.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2689,16 +2720,22 @@ async function generarProyecto(body, env, minecraft, request) {
       const r0 = await especificarAddon(prompt, env, body.spec);
       const spec = r0.spec;
       const files = construirAddonItem(spec, env.MC_SERVER_VERSION);
+      const reparaciones = repararAddon(files, env.MC_SERVER_VERSION);
+      const ciclo = await cicloReparacionAutomatica(files, env, { minecraft: true });
+      const validacion = ciclo.validacion || validarAddonEstructural(files,env.MC_SERVER_VERSION);
+      const avisos = [...reparaciones, ...ciclo.informe.cambios.map(x=>`Auto-reparación (ronda ${x.ronda}): ${x.path}`), ...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x), ...validacion.errores.map(x=>"Validación pendiente: "+x), ...validacion.avisos.map(x=>"Revisión: "+x)];
+      const readme = files.find(f=>/^BP\/README\.md$/i.test(f.path));
+      if(readme && avisos.length) readme.content += "\n\n## Revisión de EGO AI\n"+avisos.map(x=>"- "+x).join("\n")+"\n";
       const zip = await createZip(files);
-      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":"0","X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
+      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
     } catch(e) { console.error("tpl_addon",String(e?.message||e).slice(0,200)); return json({avanzado:true,motivo:"plantilla no disponible"}); }
   }
   const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 25 : 35)), 50));
   const system = minecraft
     ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO.
-Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y carpeta "RP/" (resource pack). Cada uno con su manifest.json (format_version 2, header con name, description, uuid, version [1,0,0], min_engine_version [1,21,0]; modules con su propio uuid distinto; SOLO el BP depende del RP (uuid del header del RP, version [1,0,0]); el RP NO depende de nada; el BP con script añade la dependencia {\"module_name\":\"@minecraft/server\",\"version\":\"1.17.0\"}). Todos los UUID deben ser v4 válidos y DISTINTOS entre sí.
+Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y carpeta "RP/" (resource pack). Cada uno con su manifest.json (format_version 2, header con name, description, uuid, version [1,0,0], min_engine_version [1,26,50]; modules con su propio uuid distinto; SOLO el BP depende del RP (uuid del header del RP, version [1,0,0]); el RP NO depende de nada; el BP con script añade la dependencia {\"module_name\":\"@minecraft/server\",\"version\":\"${String(env.MC_SERVER_VERSION || "2.10.0")}\"}). Todos los UUID deben ser v4 válidos y DISTINTOS entre sí.
 Ítems personalizados: BP/items/<nombre>.json con formato "minecraft:item" (format_version "1.21.0"), identificador con prefijo propio (por ejemplo ego:espada_trueno), componentes como minecraft:icon, minecraft:max_stack_size, minecraft:damage, minecraft:hand_equipped, minecraft:durability (NO uses minecraft:cooldown; el enfriamiento va en el script). El ícono es "minecraft:icon":{"textures":{"default":"nombre_corto"}} y ese nombre se define en RP/textures/item_texture.json. Textos en RP/texts/es_ES.lang y RP/texts/en_US.lang y RP/texts/languages.json.
-Icono: NO puedes crear imágenes binarias. En RP/textures/item_texture.json apunta a una textura que ya exista en el juego (por ejemplo "textures/items/diamond_sword") para que no falte ninguna imagen; documenta en README.md cómo cambiarla por un PNG propio.
+Recursos gráficos: no escribas bytes binarios como texto. Declara las referencias correctas de texturas; el postprocesador de EGO genera PNG de ítems, bloques e iconos de packs cuando reconoce esos recursos. Para geometría/animaciones de entidades, incluye los archivos JSON completos y rutas coherentes; no finjas que existe un PNG si no se generó.
 Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script API con "@minecraft/server" en BP/scripts/main.js (módulo "script" en el manifest con language "javascript", entry "scripts/main.js", y dependencia @minecraft/server con una version estable). Para rayos usa dimension.spawnEntity("minecraft:lightning_bolt", ubicacion) o /summon; para partículas dimension.spawnParticle o RP/particles; para sonidos world.playSound o dimension.playSound. Escucha eventos como world.afterEvents.itemUse y world.afterEvents.entityHitEntity y comprueba que el ítem sea el tuyo. Añade cooldown y no uses APIs inventadas. Explica en README.md si hay que activar Experimentos (Beta APIs) y cómo instalarlo.
 Incluye todos los archivos con contenido completo, sin placeholders, sin binarios, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.`
     : `Eres un arquitecto de software senior. Genera un proyecto ejecutable completo. Incluye README.md con instalación y ejecución, archivos de configuración, código completo y pruebas básicas cuando proceda. Elige una estructura simple y consistente con el stack solicitado. Máximo ${maxFiles} archivos. No incluyas placeholders, secretos, ni rutas absolutas.`;
@@ -2761,9 +2798,13 @@ Incluye todos los archivos con contenido completo, sin placeholders, sin binario
     const readmeExists=files.some(f=>/^README\.md$/i.test(f.path));
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
-    if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n";}
+    const ciclo=await cicloReparacionAutomatica(files,env,{minecraft});
+    const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files,env.MC_SERVER_VERSION):{ok:true,errores:[],avisos:[],archivos:files.length});
+    avisos.push(...ciclo.informe.cambios.map(x=>`Auto-reparación ronda ${x.ronda}: ${x.path}`),...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x));
+    if(minecraft) avisos.push(...validacion.errores.map(x=>"Validación pendiente: "+x),...validacion.avisos.map(x=>"Revisión: "+x));
+    if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos y validación de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n- La validación estática no sustituye la importación y prueba dentro de Minecraft.\n";}
     const zip=await createZip(files);
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Model":model,"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
   } catch(e) {
     console.error("project_generate",String(e?.message||e).slice(0,250));
     return json({error:"No se pudo generar el proyecto. Revisa la configuración del proveedor y los logs.",detail:String(e?.message||e).slice(0,180)},503);
@@ -3080,8 +3121,8 @@ function objetivo_(H,objetivo){return objetivo+H.uso;}
 function construirAddonItem(s,version){
   if(!s.id)s.id=slugAscii(s.nombre);
   const id="ego:"+s.id, pId=crypto.randomUUID(), rId=crypto.randomUUID();
-  const verSrv=String(version||"2.11.0");
-  const pack=(nombre,desc,uuid,modulos,deps)=>JSON.stringify({format_version:2,metadata:{authors:["EGO AI"]},header:{name:nombre,description:desc,uuid,version:[1,0,0],min_engine_version:[1,26,60]},modules:modulos,...(deps?{dependencies:deps}:{})},null,2)+"\n";
+  const verSrv=String(version||"2.10.0");
+  const pack=(nombre,desc,uuid,modulos,deps)=>JSON.stringify({format_version:2,metadata:{authors:["EGO AI"]},header:{name:nombre,description:desc,uuid,version:[1,0,0],min_engine_version:[1,26,50]},modules:modulos,...(deps?{dependencies:deps}:{})},null,2)+"\n";
   const px=dibujarIcono(s.tipo,s.principal,s.acento);
   const grupo={espada:"itemGroup.name.sword",hacha:"itemGroup.name.axe",pico:"itemGroup.name.pickaxe"}[s.tipo];
   const comp={
@@ -3116,7 +3157,160 @@ function construirAddonItem(s,version){
 }
 
 
+// Ciclo de reparación asistida: revisa JS/JSON, aplica parches acotados y vuelve a validar.
+// Solo modifica archivos existentes; máximo dos rondas. No ejecuta Minecraft ni simula pruebas reales.
+async function cicloReparacionAutomatica(files, env, opciones = {}) {
+  const informe = { habilitado: !!routerApiKey(env) && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], erroresFinales: [], avisosFinales: [], estado: "omitido" };
+  if (!Array.isArray(files) || !informe.habilitado) {
+    const v = opciones.minecraft ? validarAddonEstructural(files,env.MC_SERVER_VERSION) : null;
+    if (v) { informe.erroresFinales = v.errores; informe.avisosFinales = v.avisos; }
+    return { validacion: v, informe };
+  }
+  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 2), 2));
+  let validacion = opciones.minecraft ? validarAddonEstructural(files,env.MC_SERVER_VERSION) : { ok: true, errores: [], avisos: [], archivos: files.length };
+  for (let ronda = 1; ronda <= maxRondas; ronda++) {
+    const candidatos = files.filter(f => f && typeof f.content === "string" && (/\.js$/i.test(f.path) || /\.json$/i.test(f.path)));
+    if (!candidatos.length) break;
+    // Enfoca los archivos citados por el validador; si no hay errores, revisa los scripts generados.
+    const rutasError = [...validacion.errores, ...validacion.avisos].map(x => {
+      const m = String(x).match(/(?:en |: )((?:BP|RP)\/[^ :]+\.(?:json|js))/i); return m && m[1];
+    }).filter(Boolean);
+    let objetivo = rutasError.length ? candidatos.filter(f => rutasError.includes(f.path)) : candidatos.filter(f => /\.js$/i.test(f.path) && (!opciones.minecraft || /(^|\/)scripts?\//i.test(f.path)));
+    if (!objetivo.length && validacion.errores.length) objetivo = candidatos.filter(f => /\.json$/i.test(f.path));
+    objetivo = objetivo.slice(0, 12);
+    if (!objetivo.length) break;
+    const snapshot = objetivo.map(f => ({ path: f.path, content: f.content.slice(0, 18000) }));
+    const diagnostico = [...validacion.errores.map(x => "ERROR: " + x), ...validacion.avisos.map(x => "AVISO: " + x)].join("\n").slice(0, 9000) || "No hay errores estructurales. Revisa los scripts buscando errores claros de sintaxis, referencias inexistentes, APIs incompatibles y fallos lógicos evidentes. No cambies código correcto.";
+    const messages = [
+      { role: "system", content: `Eres el reparador de código de EGO AI. Corrige SOLO errores demostrables en los archivos proporcionados. No reescribas el proyecto ni cambies su diseño. Conserva compatibilidad con Minecraft Bedrock y @minecraft/server ${String(env.MC_SERVER_VERSION || "2.10.0")}. Devuelve ÚNICAMENTE JSON válido con esta forma: {"patches":[{"path":"ruta exacta existente","content":"contenido COMPLETO corregido del archivo"}]}. Si no puedes justificar una corrección, devuelve {"patches":[]}. No añadas archivos, no uses Markdown, no inventes APIs ni afirmes haber ejecutado pruebas.` },
+      { role: "user", content: `RONDA ${ronda}. DIAGNÓSTICO:\n${diagnostico}\n\nARCHIVOS ACTUALES:\n${JSON.stringify(snapshot)}` }
+    ];
+    informe.rondas = ronda;
+    try {
+      const respuesta = await Promise.race([
+        openRouterChat(messages, env, 7000, EGO_TEAM_MODELS.coder),
+        tmoMc(55000)
+      ]);
+      const parsed = extractJson(respuesta.content);
+      const patches = Array.isArray(parsed?.patches) ? parsed.patches : [];
+      const erroresAntes = validacion.errores.length;
+      let aplicados = 0;
+      const originales = [];
+      for (const patch of patches.slice(0, 8)) {
+        const path = safeProjectPath(patch && patch.path);
+        if (!path || typeof patch.content !== "string" || patch.content.length > 300000 || !/\\.(?:js|json)$/i.test(path)) continue;
+        const original = files.find(f => f.path === path);
+        if (!original || original.content === patch.content) continue;
+        originales.push({ file: original, content: original.content });
+        original.content = patch.content;
+        aplicados++;
+      }
+      if (!aplicados) break;
+      validacion = opciones.minecraft ? validarAddonEstructural(files,env.MC_SERVER_VERSION) : { ok: true, errores: [], avisos: [], archivos: files.length };
+      if (opciones.minecraft && (erroresAntes > 0 ? validacion.errores.length >= erroresAntes : validacion.errores.length > 0)) {
+        for (const x of originales) x.file.content = x.content;
+        validacion = validarAddonEstructural(files,env.MC_SERVER_VERSION);
+        informe.avisosFinales.push("Se descartó un parche que empeoraba la validación.");
+        break;
+      }
+      for (const x of originales) informe.cambios.push({ path: x.file.path, ronda, motivo: "parche del modelo reparador; validado estructuralmente" });
+      if (validacion.ok && !validacion.errores.length) break;
+    } catch (e) {
+      informe.estado = "fallo_reparador";
+      informe.avisosFinales.push("No se pudo ejecutar la reparación IA: " + String(e?.message || e).slice(0, 140));
+      break;
+    }
+  }
+  if (opciones.minecraft) validacion = validarAddonEstructural(files,env.MC_SERVER_VERSION);
+  informe.erroresFinales = validacion?.errores || [];
+  informe.avisosFinales.push(...(validacion?.avisos || []));
+  informe.estado = informe.erroresFinales.length ? (informe.cambios.length ? "reparado_parcial" : "pendiente") : (informe.cambios.length ? "reparado_y_validado" : "sin_cambios_necesarios");
+  return { validacion, informe };
+}
+
 // Valida y repara el add-on: JSON de manifest, UUID v4 únicos y dependencias coherentes.
+// Validación estructural local: no sustituye la prueba dentro de Minecraft.
+function validarAddonEstructural(files, verSrv = "2.10.0") {
+  const errores = [], avisos = [];
+  const porRuta = new Map();
+  for (const f of Array.isArray(files) ? files : []) {
+    const path = safeProjectPath(f && f.path);
+    if (!path) { errores.push("Hay una ruta de archivo insegura o inválida."); continue; }
+    if (porRuta.has(path)) errores.push(`Ruta duplicada: ${path}`);
+    else porRuta.set(path, f);
+    if (typeof f.content !== "string" && !(f.content instanceof Uint8Array)) errores.push(`Contenido inválido: ${path}`);
+    if (/\.json$/i.test(path) && typeof f.content === "string") {
+      try { JSON.parse(f.content); }
+      catch (e) { errores.push(`JSON inválido en ${path}: ${String(e && e.message || e).slice(0, 110)}`); }
+    }
+    if (/\.js$/i.test(path) && typeof f.content === "string") {
+      const balance = balanceJs(f.content);
+      if (balance) errores.push(`JavaScript desbalanceado en ${path}: ${balance}.`);
+      for (const problema of lintScriptApi(f.content, verSrv)) {
+        errores.push(`API Minecraft en ${path}: ${problema}.`);
+      }
+    }
+  }
+  const manifests = [];
+  for (const [path, f] of porRuta) {
+    if (!/(^|\/)manifest\.json$/i.test(path)) continue;
+    let obj;
+    try { obj = JSON.parse(f.content); } catch { continue; }
+    manifests.push({ path, obj });
+    if (!obj.header || !Array.isArray(obj.header.version) || !Array.isArray(obj.modules) || !obj.modules.length)
+      errores.push(`${path}: faltan header, version o modules válidos.`);
+    const packUuids = [obj.header, ...(Array.isArray(obj.modules) ? obj.modules : [])].map(x => x && x.uuid).filter(Boolean);
+    if (packUuids.length !== 1 + (obj.modules || []).length) errores.push(`${path}: falta UUID en header o módulo.`);
+    for (const x of packUuids) if (!RX_UUID4.test(String(x))) errores.push(`${path}: UUID no válido (${String(x).slice(0, 45)}).`);
+    const scriptModules = (obj.modules || []).filter(m => m && m.type === "script");
+    for (const mod of scriptModules) {
+      const entry = String(mod.entry || "").replace(/^\/+/, "");
+      const root = path.split("/")[0];
+      if (!entry || !porRuta.has(`${root}/${entry}`)) errores.push(`${path}: el entry de script no existe (${entry || "vacío"}).`);
+      if (!Array.isArray(obj.dependencies) || !obj.dependencies.some(d => d && d.module_name === "@minecraft/server" && d.version))
+        errores.push(`${path}: falta dependencia versionada de @minecraft/server.`);
+    }
+  }
+  const uuidOwners = new Map();
+  for (const { path, obj } of manifests) {
+    for (const x of [obj.header, ...(obj.modules || [])]) {
+      const id = String(x && x.uuid || "").toLowerCase();
+      if (!id) continue;
+      if (uuidOwners.has(id)) errores.push(`UUID repetido en ${path} y ${uuidOwners.get(id)}.`);
+      else uuidOwners.set(id, path);
+    }
+  }
+  const rp = manifests.find(x => (x.obj.modules || []).some(m => m && m.type === "resources"));
+  const bp = manifests.find(x => (x.obj.modules || []).some(m => m && (m.type === "data" || m.type === "script")));
+  if (manifests.length && (!bp || !rp)) avisos.push("No se detectaron claramente los dos packs BP (behavior) y RP (resource). Revisa el tipo de pack solicitado.");
+  if (bp && rp) {
+    const deps = Array.isArray(bp.obj.dependencies) ? bp.obj.dependencies : [];
+    if (!deps.some(d => d && d.uuid && String(d.uuid).toLowerCase() === String(rp.obj.header && rp.obj.header.uuid || "").toLowerCase()))
+      errores.push("El Behavior Pack no declara dependencia del Resource Pack.");
+    const rpDeps = Array.isArray(rp.obj.dependencies) ? rp.obj.dependencies : [];
+    if (rpDeps.some(d => d && d.uuid && String(d.uuid).toLowerCase() === String(bp.obj.header && bp.obj.header.uuid || "").toLowerCase()))
+      errores.push("Dependencia circular: el Resource Pack apunta al Behavior Pack.");
+  }
+  // Verifica las texturas declaradas en atlas de recursos.
+  for (const atlasPath of ["RP/textures/item_texture.json", "RP/textures/terrain_texture.json"]) {
+    const f = porRuta.get(atlasPath); if (!f || typeof f.content !== "string") continue;
+    let atlas; try { atlas = JSON.parse(f.content); } catch { continue; }
+    const data = atlas.texture_data || {};
+    for (const [key, entry] of Object.entries(data)) {
+      const raw = typeof entry === "string" ? entry : entry && entry.textures;
+      const candidates = (Array.isArray(raw) ? raw : [raw]).filter(x => typeof x === "string");
+      if (!candidates.length) { avisos.push(`${atlasPath}: la textura ${key} no contiene una ruta reconocible.`); continue; }
+      for (const texture of candidates) {
+        const clean = texture.replace(/^\//, "").replace(/\.(png|tga|jpg)$/i, "");
+        if (!["png", "tga", "jpg"].some(ext => porRuta.has(`RP/${clean}.${ext}`)))
+          errores.push(`${atlasPath}: falta el archivo de textura ${texture} (clave ${key}).`);
+      }
+    }
+  }
+  if (!manifests.length) errores.push("No se encontró ningún manifest.json.");
+  return { ok: errores.length === 0, errores: [...new Set(errores)].slice(0, 40), avisos: [...new Set(avisos)].slice(0, 25), archivos: porRuta.size };
+}
+
 const RX_UUID4=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function nuevoUuid(){return crypto.randomUUID();}
 function repararAddon(files,verSrv){
@@ -3171,7 +3365,7 @@ function repararAddon(files,verSrv){
     avisos.push("El Behavior Pack ahora depende del Resource Pack.");
   }
   if(bp&&(bp.o.modules||[]).some(m=>m&&m.type==="script")&&!(bp.o.dependencies||[]).some(d=>d&&d.module_name==="@minecraft/server")){
-    bp.o.dependencies=(bp.o.dependencies||[]).concat([{module_name:"@minecraft/server",version:String(verSrv||"2.11.0")}]);
+    bp.o.dependencies=(bp.o.dependencies||[]).concat([{module_name:"@minecraft/server",version:String(verSrv||"2.10.0")}]);
     avisos.push("Se añadió la dependencia @minecraft/server que faltaba.");
   }
   for(const x of objs) x.f.content=JSON.stringify(x.o,null,2)+"\n";
@@ -3273,7 +3467,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.17.0", aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.20.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -3302,7 +3496,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.17.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.20.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -3372,7 +3566,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.17.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.20.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
