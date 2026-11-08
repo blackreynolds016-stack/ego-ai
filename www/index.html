@@ -854,7 +854,9 @@ function fichaMc(f,name,nfiles,fallos,extra){
 var L=["## ✅ "+((f&&f.nombre)||"Tu add-on")+" está listo","","**Archivo:** `"+name+"` · "+(nfiles||"varios")+" archivos",""];
 if(f&&f.incluye&&f.incluye.length){L.push("**Qué incluye**");f.incluye.forEach(function(x){L.push("- "+x)});L.push("")}
 if(f&&f.prueba&&f.prueba.length){L.push("**Cómo probarlo**");f.prueba.forEach(function(x,i){L.push((i+1)+". "+x)});L.push("")}
-if(f&&f.revision){var rv=f.revision;L.push("**Revisión final:** "+rv.cumplidos+" de "+rv.total+" cosas que pediste están verificadas dentro del archivo.");(rv.faltan||[]).forEach(function(x){L.push("- ⚠️ "+x)});L.push("")}
+if(f&&f.revision){var rv=f.revision;L.push("**Revisión de requisitos:** "+rv.cumplidos+" de "+rv.total+" cosas que pediste están verificadas dentro del archivo.");(rv.faltan||[]).forEach(function(x){L.push("- ⚠️ "+x)});L.push("")}
+if(f&&f.validacion){var v=f.validacion;L.push("**Validación automática:** "+(v.ok?"sin errores estáticos detectados":"se detectaron errores que requieren revisión")+" · "+(v.archivos||0)+" archivos revisados.");(v.errores||[]).forEach(function(x){L.push("- ❌ "+x)});(v.avisos||[]).forEach(function(x){L.push("- ⚠️ "+x)});L.push("")}
+if(f&&f.reparacion){var rp=f.reparacion;L.push("**Ciclo de reparación:** "+rp.estado+" · "+(rp.rondas||0)+" ronda(s) · "+(rp.cambios||0)+" cambio(s) aplicado(s).");(rp.erroresFinales||[]).forEach(function(x){L.push("- ❌ Pendiente: "+x)});L.push("")}
 if(fallos&&fallos.length){L.push("⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+". Pídelas de nuevo y las rehago.","")}
 if(f&&f.avisos&&f.avisos.length){L.push("**Avisos**");f.avisos.forEach(function(x){L.push("- "+x)});L.push("")}
 if(extra)L.push(extra,"");
