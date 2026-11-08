@@ -274,10 +274,10 @@ jobs:
           let colors = fs.existsSync(cp) ? fs.readFileSync(cp, 'utf8') : HEAD + '<resources>\n</resources>';
           colors = colors.replace(/\s*<color name="app_(bg|panel|nav)">[^<]*<\/color>/g, '');
           colors = colors.replace('</resources>',
-            '    <color name="app_bg">#f4f4f7</color>\n    <color name="app_panel">#fcfcfd</color>\n    <color name="app_nav">#f4f4f7</color>\n</resources>');
+            '    <color name="app_bg">#f4f4f7</color>\n    <color name="app_panel">#fcfcfd</color>\n    <color name="app_nav">#f4f4f7</color>\n    <color name="splash_bg">#06070b</color>\n</resources>');
           write(cp, colors);
           write(res + 'values-night/colors.xml', HEAD +
-            '<resources>\n    <color name="app_bg">#09090b</color>\n    <color name="app_panel">#0e0e10</color>\n    <color name="app_nav">#0a0a0c</color>\n</resources>\n');
+            '<resources>\n    <color name="splash_bg">#06070b</color>\n    <color name="app_bg">#09090b</color>\n    <color name="app_panel">#0e0e10</color>\n    <color name="app_nav">#0a0a0c</color>\n</resources>\n');
 
           // Iconos de la barra de estado claros/oscuros segun el modo
           write(res + 'values/bools.xml', HEAD + '<resources>\n    <bool name="light_bars">true</bool>\n</resources>\n');
@@ -308,13 +308,13 @@ jobs:
           if (!/<style name="AppTheme\.NoActionBarLaunch"/.test(styles)) throw new Error('style NoActionBarLaunch no encontrado');
           const launch =
             '<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">\n' +
-            '        <item name="windowSplashScreenBackground">@color/app_bg</item>\n' +
-            '        <item name="windowSplashScreenAnimatedIcon">' + (hasLogo ? '@drawable/splash_logo' : '@drawable/splash_empty') + '</item>\n' +
+            '        <item name="windowSplashScreenBackground">@color/splash_bg</item>\n' +
+            '        <item name="windowSplashScreenAnimatedIcon">' + '@drawable/splash_empty' + '</item>\n' +
             '        <item name="windowSplashScreenAnimationDuration">0</item>\n' +
             '        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>\n' +
-            (hasBrand ? '        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_brand</item>\n' : '') +
-            '        <item name="android:windowBackground">@color/app_bg</item>\n' +
-            '        <item name="android:background">@color/app_bg</item>\n' +
+            '' +
+            '        <item name="android:windowBackground">@color/splash_bg</item>\n' +
+            '        <item name="android:background">@color/splash_bg</item>\n' +
             '        <item name="android:statusBarColor">@color/app_panel</item>\n' +
             '        <item name="android:windowLightStatusBar">@bool/light_bars</item>\n' +
             '        <item name="android:navigationBarColor">@color/app_nav</item>\n' +
@@ -671,7 +671,7 @@ jobs:
                   t0 = SystemClock.uptimeMillis();
                   if (getBridge() != null && getBridge().getWebView() != null) {
                       WebView wv = getBridge().getWebView();
-                      wv.setBackgroundColor(ContextCompat.getColor(this, R.color.app_bg));
+                      wv.setBackgroundColor(ContextCompat.getColor(this, R.color.splash_bg));
                       poll(wv);
                   } else {
                       ready = true;
