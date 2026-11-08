@@ -244,8 +244,8 @@ jobs:
               img.save(os.path.join(p, name))
 
           modes = {
-              'drawable-xxhdpi':       dict(text='#2b2621', accent='#c2693f', muted='#8a8178'),
-              'drawable-night-xxhdpi': dict(text='#ece6dd', accent='#da8a5f', muted='#9c9186'),
+              'drawable-xxhdpi':       dict(text='#0b1220', accent='#12a8d6', muted='#6b7c90'),
+              'drawable-night-xxhdpi': dict(text='#eaf6ff', accent='#35e4ff', muted='#7e93a8'),
           }
           for folder, c in modes.items():
               # Logo central: 288dp -> 864 px (xxhdpi), texto de ~520 px de ancho
