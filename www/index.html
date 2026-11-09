@@ -362,7 +362,7 @@ button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-fa
 .chatitem.sub{padding:10px 10px;font-size:14.5px}
 .projnew{width:100%;text-align:left;background:none;border:0;color:var(--n1);font-size:13.5px;padding:8px 10px;font-weight:600}
 /* splash animado */
-#egoSplash{position:fixed;inset:0;z-index:99999;background:#06070b;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;transition:opacity .45s ease,transform .45s ease;pointer-events:all}
+#egoSplash{position:fixed;inset:0;z-index:99999;background:#06070b;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;transition:opacity .45s ease,transform .45s ease;pointer-events:all}
 #egoSplash:not(.go) *,#egoSplash:not(.go) *::after{animation-play-state:paused!important}
 #egoSplash:not(.go) .sl::after{opacity:0}
 #egoSplash.out{opacity:0;transform:scale(1.06);pointer-events:none}
@@ -400,8 +400,8 @@ button,.tile,.ib,.chip,.projitem,.chatitem{touch-action:manipulation;-webkit-tap
 </head>
 <body>
 <div id="egoSplash" aria-hidden="true"><div class="sg"></div><div class="sr"></div><div class="sl"><span>EGO</span><b>AI</b></div><div class="st">TU MENTE, SIN LÍMITES</div></div>
-<script>(function(){var s=document.getElementById("egoSplash");if(!s)return;var t0=Date.now();function bye(){if(s.className.indexOf("out")>-1)return;try{clearInterval(_bi)}catch(e){}s.className="out";setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);try{if(window.applyBars)window.applyBars(document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light")}catch(e){}},520)}
-document.documentElement.setAttribute("data-ready","1");var _bi=setInterval(function(){try{if(window.applyBars){window.applyBars("dark");clearInterval(_bi)}}catch(e){}},60);window.__egoSplashBye=bye;var started=false;function go(){if(started)return;started=true;s.className="go";setTimeout(bye,1300)}window.__egoSplashGo=go;var nat=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());if(nat){setTimeout(go,2600)}else{requestAnimationFrame(function(){requestAnimationFrame(go)});setTimeout(go,2500)}})();</script>
+<script>(function(){var s=document.getElementById("egoSplash");if(!s)return;var t0=Date.now();function bye(){if(s.className.indexOf("out")>-1)return;s.className="out";setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s)},520)}
+document.documentElement.setAttribute("data-ready","1");window.__egoSplashBye=bye;var started=false;function go(){if(started)return;started=true;s.className="go";setTimeout(bye,1300)}window.__egoSplashGo=go;var nat=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());if(nat){setTimeout(go,4500)}else{requestAnimationFrame(function(){requestAnimationFrame(go)});setTimeout(go,2500)}})();</script>
 <header>
 <button class="icon" id="toggleSide" type="button" aria-label="Menú"><svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
 <div class="htitle"><h1>EGO <span>AI</span></h1><small>Tu mente, sin límites</small></div>
@@ -470,7 +470,7 @@ if(esCmdAdmin(t)&&esAdminLocal()){const tk=await tokenSesion();if(tk)o.idToken=t
 return fetch(API,{method:"POST",headers:wHeaders(),body:wBody(o),signal:signal})}
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
-const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Eres una IA especializada en programación, matemáticas, ciencias y creación de apps y juegos. Resuelves problemas difíciles con rigor, razonas paso a paso y entregas código completo que funciona. Lees y analizas imágenes y videos: texto, código, ecuaciones, errores en capturas y problemas en pantalla. Si te piden otro tema, dilo con amabilidad en una frase y ofrece ayuda dentro de tu especialidad. La app SÍ crea y edita imágenes (el usuario solo debe pedirlo: «créame una imagen de…», o enviar una foto con el cambio que quiere) y SÍ crea add-ons de Minecraft Bedrock como archivo .mcaddon con texturas PNG, receta y habilidades (el usuario pide «crea un add-on de una espada…»). También SÍ crea MUNDOS de Minecraft Bedrock como archivo .mcworld (el usuario pide «crea un mundo», «mundo con aldea», «supervivencia», «.mcworld»): el .mcworld debe incluir level.dat, levelname.txt, la carpeta db/ y los behavior_packs/resource_packs DENTRO del mundo, referenciados con world_behavior_packs.json y world_resource_packs.json. NUNCA digas que no puedes generar texturas, imágenes ni archivos descargables: esta app SÍ los genera y los entrega con botón de Descargar; si el usuario pide un archivo o algo «descargable», usa SIEMPRE el generador de archivos de la app, nunca respondas solo con texto ni con «copia y pega». Si el usuario quiere cambios en lo que se creó, dile que escriba el cambio (por ejemplo «hazlo de fuego» o «más daño») y la app lo rehace. No pegues JSON de add-ons a mano ni pidas armar el ZIP manualmente. TODO el código que escribas debe ir SIEMPRE en bloques ``` con su lenguaje indicado; nunca pegues código suelto sin cercar. También analizas imágenes y videos. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Capacidades de la app: memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto), fotos y videos.";
+const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Eres una IA especializada en programación, matemáticas, ciencias y creación de apps y juegos. Resuelves problemas difíciles con rigor, razonas paso a paso y entregas código completo que funciona. Lees y analizas imágenes y videos: texto, código, ecuaciones, errores en capturas y problemas en pantalla. Si te piden otro tema, dilo con amabilidad en una frase y ofrece ayuda dentro de tu especialidad. La app SÍ crea y edita imágenes (el usuario solo debe pedirlo: «créame una imagen de…», o enviar una foto con el cambio que quiere) y SÍ crea add-ons de Minecraft Bedrock como archivo .mcaddon con texturas PNG, receta y habilidades (el usuario pide «crea un add-on de una espada…»). Nunca digas que no puedes generar texturas, imágenes ni archivos: si el usuario quiere cambios en lo que se creó, dile que escriba el cambio (por ejemplo «hazlo de fuego» o «más daño») y la app lo rehace. No pegues JSON de add-ons a mano ni pidas armar el ZIP manualmente. También analizas imágenes y videos. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Capacidades de la app: memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto), fotos y videos.";
 const P={
 normal:"",
 dev:" Eres ingeniera de software senior y experta en hacking \u00e9tico: entrega el programa COMPLETO listo para ejecutar (sin partes omitidas), con arquitectura limpia, manejo de errores, interfaz cuidada y futurista cuando sea una app o herramienta de terminal, e instrucciones de instalaci\u00f3n y uso en 3-4 l\u00edneas. Piensa en los casos l\u00edmite y en el m\u00f3vil (Termux/Android).",
@@ -540,34 +540,9 @@ const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").r
 const inl=t=>{const cs=[];t=t.replace(/`([^`]+)`/g,(m,c)=>{cs.push(c);return"\u0001"+(cs.length-1)+"\u0001"});
 t=t.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<i>$2</i>").replace(/!\[([^\]]*)\]\((https?:[^)\s]+|data:image\/[a-z+]+;base64,[A-Za-z0-9+\/=]+)\)/g,'<img src="$2" alt="$1" loading="lazy">').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
 return t.replace(/\u0001(\d+)\u0001/g,(m,i)=>"<code>"+cs[+i]+"</code>")};
-function fenceUnfenced(src){
-  var lines=src.split("\n"), out=[], i=0, inFence=false;
-  var strong=/^\s*(<!doctype\b|<html\b|function\s|const\s|let\s|var\s|import\s|export\s|class\s|def\s|public\s|private\s|protected\s|void\s|int\s|string\s|#include|using\s|print\(|console\.|if\s*\(|for\s*\(|while\s*\(|try\s*\{|catch|switch\s|case\s|await\s|async\s|=>)/i;
-  var codeish=/^\s*(<!|<!doctype|<\/?[a-zA-Z][^>]*>|function\s|const\s|let\s|var\s|import\s|export\s|return\s|class\s|def\s|public\s|private\s|protected\s|void\s|int\s|string\s|#include|using\s|print\(|console\.|System\.|if\s*\(|for\s*\(|while\s*\(|try\s*\{|catch|switch\s|case\s|break|continue|new\s|await\s|async\s|else|finally|=>|\}|\);?|\];?|;$|\/\/|\/\*|\*\/|#|@\w+|\{|\})/i;
-  var isCode=function(l){ return !l.trim() || codeish.test(l) || /^\s{4,}\S/.test(l) || (/^\s*["']?[\w$]+["']?\s*:/.test(l) && /[,{}\[\];]$/.test(l.trim())); };
-  var guess=function(l){ if(/<(!doctype|html|\/?div|\/?span|style|script|body|head|meta|title)\b/i.test(l))return"html"; if(/^(import |export |const |let |var |function |=>|console\.|document\.)/.test(l))return"javascript"; if(/^(def |from |import |print\()/.test(l))return"python"; if(/^(#include|using |int |void |std::)/.test(l))return"cpp"; if(/^\s*["']?\w+["']?\s*:/.test(l)&&/[,{}\[\]]$/.test(l.trim()))return"json"; return""; };
-  while(i<lines.length){
-    var l=lines[i];
-    if(/^\s*```/.test(l)){ inFence=!inFence; out.push(l); i++; continue; }
-    if(inFence){ out.push(l); i++; continue; }
-    if(strong.test(l)){
-      var run=[], j=i;
-      while(j<lines.length && isCode(lines[j])){ run.push(lines[j]); j++; }
-      while(run.length && !run[run.length-1].trim()) run.pop();
-      var nonblank=run.filter(function(x){return x.trim()}).length;
-      if(nonblank>=3){
-        var first=run.filter(function(x){return x.trim()})[0]||"";
-        out.push("```"+(guess(l)||guess(first)));
-        for(var k=0;k<run.length;k++) out.push(run[k]);
-        out.push("```");
-        i=j; continue;
-      }
-    }
-    out.push(l); i++;
-  }
-  return out.join("\n");
-}
-function md(src){src=fenceUnfenced(src);
+function md(src){
+// Si el modelo devuelve un documento HTML sin cercas Markdown, preséntalo como código ejecutable.
+if(!/```/.test(src)&&/^\s*(?:&lt;!doctype|<!doctype|&lt;html|<html)/i.test(src))src="```html\n"+src.trim()+"\n```";
 if((src.match(/```/g)||[]).length%2)src+="\n```";
 const bl=[];
 const s=esc(src).replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{bl.push('<div class="code"><div class="ch"><span>'+(l||"código")+'</span><span class="cb">'+((/^(html|svg|xml)$/i.test(l)||/^\s*(&lt;!doctype html|&lt;html)/i.test(c))?'<button class="cr" type="button">▶ Ejecutar</button>':"")+'<button class="cc" type="button">Copiar</button></span></div><pre>'+c+"</pre></div>");return"\u0000"+(bl.length-1)+"\u0000"});
@@ -1033,25 +1008,21 @@ return inm||cambio}
 function proyectoIntent(t){t=String(t||"");if(seguirMc(cur(),t))return"mc";if(IM_ASKQ.test(t))return null;
 {const c0=cur();const la=ultAsist(c0);
 if(la&&!/\?\s*$/.test(t)&&t.length<400&&/(?:avanzad|por partes|c[aá]mbi|ponle|p[oó]nle|hazle|h[aá]zlo|h[aá]zla|agr[eé]ga|a[nñ]ade|quita|qu[ií]tale|m[aá]s\s|menos\s|mejor|otra vez|de nuevo|versi[oó]n|otro color|textura|animaci|efecto|part[ií]cula|sonido|brill|no (?:trae|tiene|sale|se ve|funciona|aparece|hace|tira|lanza|dispara)|falta|faltan|arregl|corrig|rehaz|repite|otra\b|nuev[oa]\b|da[ñn]o|velocidad|r[aá]pid|mortal|nombre|color|de (?:fuego|hielo|rayo|veneno|viento|explosi))/i.test(t))return"mc"}
-const RX_MCWORLD=/\b(?:mcworld|\.mcworld|mundo(?:\s|$)|seed|bioma|aldea|spawn|nether|end|cueva|diamante|netherita|templo|chunk|supervivencia|creativo|hardcore|creeper|steve|bedrock|veterano)\b/i;
-if(/\.mcworld|\bmcworld\b/i.test(t)||(RX_MCWORLD.test(t)&&/(?:minecraft|mine\s*craft|juego|bloque|recursos|casa|aldea|seed|supervivencia|creativo|antigüedad|veterano|grande|cueva|diamante|nether)/i.test(t)))return"mc";
 if(!RX_VERBO.test(t))return null;
 if(RX_MCW.test(t)&&RX_MC.test(t))return"mc";
 if(/\b(?:mcaddon|mcpack|behaviou?r pack|resource pack)\b/i.test(t))return"mc";
 if(RX_PROJ.test(t))return"proj";
-if(/(?:archivo|descarg|ejecut|instal)/i.test(t)){const c=cur();const prev=c&&c.msgs?c.msgs.slice(-8):[];if(prev.some(m=>/minecraft|add-?on|mcaddon|mundo|mcworld/i.test(m.content||"")))return"mc"}
+if(/(?:archivo|descarg|ejecut|instal)/i.test(t)){const c=cur();const prev=c&&c.msgs?c.msgs.slice(-8):[];if(prev.some(m=>/minecraft|add-?on|mcaddon/i.test(m.content||"")))return"mc"}
 return null}
 function ultAsist(c){const todo=(c&&c.msgs?c.msgs:[]).slice(-8);const as=todo.filter(x=>x.role==="assistant");const l=as[as.length-1];if(!l||l.imgPrompt||/!\[imagen\]\(/.test(String(l.content||"")))return null;const ms=as.filter(x=>x.kp==="mc"&&x.pp);return ms.length?ms[ms.length-1]:null}
 function mcPrompt(c,text){const la=ultAsist(c);
 if(la&&la.role==="assistant"&&la.kp==="mc"&&la.pp&&!/^\s*(?:dame|p[aá]same)\s+el\s+archivo/i.test(text))return la.pp+(/Cambios pedidos ahora:/.test(la.pp)?" | Y además, sin quitar lo anterior: ":". Cambios pedidos ahora: ")+text;
 if(la&&la.role==="assistant"&&la.kp==="mc"&&la.pp)return la.pp;if(/espada|hacha|pico|vara|var[ií]ta|bast[oó]n|cetro|arma|herramienta/i.test(text))return text;
 const prev=(c&&c.msgs?c.msgs:[]).filter(m=>m.role==="user"&&m.content!==text&&/add-?on|minecraft|espada|hacha|pico|vara|bast[oó]n|arma/i.test(m.content||"")).pop();
-var __base=prev?prev.content+". "+text:text;
-if(/\b(?:mundo|mcworld|\.mcworld)\b/i.test(text)||/\b(?:mundo|mcworld|\.mcworld)\b/i.test(prev?prev.content:""))__base+=". IMPORTANTE: el usuario pide un MUNDO de Minecraft (.mcworld), NO un simple add-on. Genera un archivo .mcworld que incluya level.dat, levelname.txt, la carpeta db/ y los behavior_packs/resource_packs DENTRO del mundo con world_behavior_packs.json y world_resource_packs.json. Nombre del archivo: ego-mundo-personalizado.mcworld";
-return __base}
+return prev?prev.content+". "+text:text}
 function fmtKB(n){return n<1024?n+" B":(n/1024).toFixed(n<10240?1:0)+" KB"}
 function fileBtn(d,id){const f=FILES.get(id);if(!f)return;if(d.querySelector(".fcard"))return;
-const ext=(String(f.name).split(".").pop()||"").toUpperCase();const mc=/mcaddon|mcpack|mcworld|mctemplate/i.test(ext);
+const ext=(String(f.name).split(".").pop()||"").toUpperCase();const mc=/mcaddon|mcpack/i.test(ext);
 const h='<div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div><div class="finfo"><b>'+esc(f.name)+'</b><small><em>'+esc(ext||"ARCHIVO")+'</em> \u00b7 '+fmtKB(f.blob.size)+(mc?' \u00b7 listo para Minecraft':'')+'</small></div></div><div class="fbtns"><button class="dlfile" data-id="'+id+'" type="button">Descargar</button><button class="shfile" data-id="'+id+'" type="button">Compartir</button></div>';
 const a=d.querySelector(".act");if(a)a.insertAdjacentHTML("beforebegin",h);else d.insertAdjacentHTML("beforeend",h)}
 function blobB64(b){return new Promise((res,rej)=>{const f=new FileReader();f.onload=()=>res(String(f.result).split(",")[1]||"");f.onerror=()=>rej(new Error("lectura"));f.readAsDataURL(b)})}
@@ -1138,7 +1109,7 @@ if(pro&&!why){return genAddonPro(c,d,text)}
 if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";return}
 let reply,id=null;
 if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:/\.zip$/i.test(name)?"application/zip":"application/octet-stream"});
-reply="✅ Listo, creé tu "+(kind==="mc"?"add-on de Minecraft":"proyecto")+" con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n"+
+reply=(kind==="mc"&&(noap||/Revisión final: no pude confirmar|Validación pendiente|requisitos pendientes/i.test(notas))?"⚠️ Archivo generado, pero tiene requisitos pendientes: ":"✅ Listo, creé tu ")+(kind==="mc"?"add-on de Minecraft":"proyecto")+" con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n"+
 (kind==="mc"?(resumen?"**Qué incluye:** "+resumen+"\n\n":"")+"Pulsa el botón de descarga y abre el archivo **.mcaddon** con Minecraft (si tu teléfono lo guardó como .zip, renómbralo a .mcaddon). Activa el Behavior Pack y el Resource Pack en el mundo y usa `/give @s` con el id del objeto. Si quieres cambios, dímelo (por ejemplo: \"hazlo de fuego\" o \"más daño\") y lo rehago.\n\n"+(noap?"⚠️ **No pude aplicar esto:** "+noap+". Para pedidos más complejos escribe **«hazlo avanzado»** y lo intento con el generador por partes.\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""):"Pulsa el botón de descarga y descomprime el .zip; dentro hay un README.md con las instrucciones.\n\n")+
 "_Revisa y prueba el resultado: lo escribió una IA"+(modelo?" ("+modelo+")":"")+" y puede tener errores. El archivo se guarda solo mientras la app esté abierta._"}
 else reply="No pude crear el archivo."+(why?"\n\nMotivo: "+why:"");
@@ -1201,6 +1172,17 @@ bubble("user").textContent=text;
 const d=bubble("bot");d.innerHTML='<span class="dots">Buscando en internet…</span>';scroll();
 searchAndAsk(searchMatch[1],c,d);
 return}
+// No simular un archivo .mcworld: el generador actual construye add-ons .mcaddon, no mundos con level.dat y chunks.
+const worldChat=cur();
+const worldContext=!!(worldChat&&worldChat.msgs&&worldChat.msgs.some(m=>m.role==="user"&&/\b(?:minecraft|bedrock)\b/i.test(m.content||"")&&/\bmundo\b/i.test(m.content||"")&&!/\b(?:add-?on|mcaddon|mcpack|behavior pack|resource pack)\b/i.test(m.content||"")));
+const worldRequest=/\b(?:minecraft|bedrock)\b/i.test(text)&&/\bmundo\b/i.test(text)&&!/\b(?:add-?on|mcaddon|mcpack|behavior pack|resource pack)\b/i.test(text);
+const worldDownloadFollowup=worldContext&&/\b(?:descargable|descargar|archivo|dame|p[aá]same|desc[aá]rgalo)\b/i.test(text);
+if(worldRequest||worldDownloadFollowup){
+ let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[],proj:newProj||undefined};chats.push(c);curId=c.id}
+ c.msgs.push({role:"user",content:text});saveChats();renderList();if(!chat.querySelector(".msg"))chat.innerHTML="";bubble("user").textContent=text;
+ const r="Puedo crear add-ons de Minecraft Bedrock en formato .mcaddon, pero esta versión de EGO AI todavía no genera mundos .mcworld reales (con level.dat y regiones/chunks). No voy a entregarte un .mcaddon ni un JSON como si fuera un mundo completo. Si quieres, puedo crear un add-on para convertir tu mundo en una experiencia veterana con recursos, estructuras y funciones.";
+ c.msgs.push({role:"assistant",content:r});saveChats();finish(bubble("bot"),r,true);scroll();return;
+}
 {const pk=proyectoIntent(text);
 if(pk){let c=cur();if(!c){c={id:Date.now(),title:text.slice(0,30),msgs:[],proj:newProj||undefined};chats.push(c);curId=c.id}
 if(!chat.querySelector(".msg"))chat.innerHTML="";
@@ -1247,7 +1229,7 @@ if(C&&C.Plugins&&C.Plugins[plugin]&&typeof C.Plugins[plugin][method]==="function
 if(C&&C.nativePromise)return C.nativePromise(plugin,method,args||{});
 return Promise.reject(new Error("not available"))}
 // Pinta las barras del sistema (arriba y abajo) del mismo color que la interfaz
-function applyBars(t){try{if(document.getElementById("egoSplash")){nat("EgoNative","setBars",{dark:true,top:"#06070b",bottom:"#06070b"}).catch(()=>{});return}const d=t==="dark";nat("EgoNative","setBars",{dark:d,top:d?"#0e0e10":"#fcfcfd",bottom:d?"#0b0b0d":"#f4f4f7"}).catch(()=>{})}catch(e){}}
+function applyBars(t){try{const d=t==="dark";const splash=document.getElementById("egoSplash");const showing=!!(splash&&!splash.classList.contains("out"));nat("EgoNative","setBars",{dark:d,top:showing?"#06070b":(d?"#0e0e10":"#fcfcfd"),bottom:d?"#0b0b0d":"#f4f4f7"}).catch(()=>{})}catch(e){}}
 const FBU=n=>"https://www.gstatic.com/firebasejs/10.14.1/firebase-"+n+".js";
 Object.assign(Cloud,{
 timer:null,pending:{},fb:null,
