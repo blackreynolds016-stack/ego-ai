@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.20.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.21.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -36,7 +36,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.20.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.21.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -388,17 +388,19 @@ addEventListener('pointerdown',()=>{if(state!=='play')reset()});requestAnimation
     "manifest.json: format_version 2; header con name, description, uuid, version [1,0,0] y min_engine_version [1,26,50] (ajústalo si el usuario dice su versión). Todos los UUID (headers y módulos) deben ser UUID v4 distintos entre sí. SOLO el BP depende del RP usando el UUID del header del RP; el RP no debe depender del BP.",
     "BP modules: {type:'data'} y, si hay scripts, {type:'script', language:'javascript', entry:'scripts/main.js'} más la dependencia {module_name:'@minecraft/server', version:'<versión estable reciente>'}. No uses módulos beta salvo que haga falta; si usas @minecraft/server-ui o similares, declara también su dependencia.",
     "Ítems personalizados: BP/items/<nombre>.json con format_version '1.21.0', 'minecraft:item' > description.identifier con prefijo propio (ej. ego:espada_trueno) y menu_category {category:'equipment', group:'minecraft:itemGroup.name.sword'}; components típicos: minecraft:icon, minecraft:max_stack_size, minecraft:hand_equipped, minecraft:damage, minecraft:durability, minecraft:enchantable.",
-    "Icono y textura: EGO SÍ genera la textura PNG 16x16 del ítem y el pack_icon.png con su propio código (ítems tipo espada, hacha, pico o vara); nunca digas que no puedes crear texturas. Si hay que describir el ícono, el PNG va en RP/textures/items/<nombre>.png, se registra en RP/textures/item_texture.json (texture_data > nombre > textures: 'textures/items/<nombre>') y el ítem lo usa con minecraft:icon {textures:{default:'<nombre>'}}. No uses minecraft:cooldown en el JSON del ítem; el enfriamiento va en el script.",
+    "Icono y textura: genera PNG individual para cada objeto con silueta acorde al tipo real: pistola/rifle/escopeta no son espadas; botiquín, granada, munición, armadura, herramientas y consumibles tienen iconos diferenciados. Registra cada PNG en RP/textures/item_texture.json y enlázalo desde minecraft:icon. No uses texturas vanilla como sustituto silencioso.",
+    "Cada entidad personalizada necesita su propia entrada RP/entity/<archivo>.entity.json, identificador idéntico al BP, huevo spawn_egg, geometría y textura existentes, más animación locomotora conectada cuando tenga extremidades móviles. No repitas una misma entidad o geometría para todos los huevos.",
     "Nombres visibles: RP/texts/en_US.lang y RP/texts/es_ES.lang con la línea item.<identificador>=Nombre, y RP/texts/languages.json con ['en_US','es_ES']. Sin esto el ítem aparece con el identificador en crudo.",
     "Poderes y efectos (rayos, partículas, sonidos, habilidades) van en BP/scripts/main.js con Script API: import { world, system } from '@minecraft/server'. Eventos útiles: world.afterEvents.itemUse (usar el ítem; ev.source es el jugador, ev.itemStack el ítem) y world.afterEvents.entityHitEntity (golpear; ev.damagingEntity, ev.hitEntity). Comprueba siempre itemStack.typeId === tu identificador.",
     "Rayo: dimension.spawnEntity('minecraft:lightning_bolt', ubicacion). Apuntar: jugador.getEntitiesFromViewDirection({maxDistance:30}) (devuelve lista con .entity) o jugador.getBlockFromViewDirection({maxDistance:30}) (devuelve algo con .block, puede ser undefined). Partículas: dimension.spawnParticle('minecraft:totem_particle', ubicacion) usando solo partículas que existan. Sonido: jugador.playSound('random.explode').",
     "Enfriamiento (cooldown) y control: guarda el último uso por jugador en un Map con system.currentTick; evita que un solo uso dispare mil rayos; usa system.runTimeout / system.runInterval para efectos retardados. Envuelve el código de eventos en try/catch y no uses APIs inventadas: si dudas de una API, usa un comando (jugador.runCommand('summon lightning_bolt ~ ~ ~')) que sí existe.",
-    "Entidades, recetas y loot: BP/entities/*.json (format_version '1.21.0'), BP/recipes/*.json (minecraft:recipe_shaped con pattern, key, result) y BP/loot_tables/. Para mobs nuevos con modelo propio hace falta un RP con geometría y textura; si no puedes crearlas, usa un mob vanilla modificado y dilo.",
+    "Entidades, recetas y loot: BP/entities/*.json (format_version '1.21.0'), BP/recipes/*.json y BP/loot_tables/. Cada entidad personalizada recibe client_entity, huevo, geometría y textura individual mediante el postprocesador; no uses un mob vanilla como sustituto silencioso.",
     "Entrega: lista completa de archivos con su contenido (nada de '...'), un README.md con instalación (abrir el .mcaddon con Minecraft, activar ambos packs en el mundo, activar Experimentos/Funciones creativas solo si algo no aparece), cómo probarlo (/give @s ego:espada_trueno) y qué se puede personalizar."
   ],
   calidad: [
     "Los dos manifest.json son JSON válido, con UUID v4 distintos y dependencias cruzadas correctas.",
-    "Cada ítem tiene identificador con prefijo, icono resuelto a una textura existente y nombre en es_ES y en_US.",
+    "Cada ítem tiene identificador con prefijo, icono específico según su categoría, textura existente y nombre en es_ES y en_US.",
+    "Cada criatura tiene un huevo asociado al identifier correcto, geometría y textura propias, y animación locomotora conectada si tiene extremidades móviles.",
     "El script solo usa APIs reales de @minecraft/server, comprueba el ítem y tiene cooldown.",
     "No hay archivos sueltos en la raíz ni binarios inventados.",
     "El README explica instalación, prueba y personalización en pocos pasos."
@@ -408,7 +410,7 @@ addEventListener('pointerdown',()=>{if(state!=='play')reset()});requestAnimation
 BP/items/espada_trueno.json
 {"format_version":"1.21.0","minecraft:item":{"description":{"identifier":"ego:espada_trueno","menu_category":{"category":"equipment","group":"minecraft:itemGroup.name.sword"}},"components":{"minecraft:icon":{"textures":{"default":"ego_espada_trueno"}},"minecraft:max_stack_size":1,"minecraft:hand_equipped":true,"minecraft:damage":8,"minecraft:durability":{"max_durability":1500}}}}
 RP/textures/item_texture.json
-{"resource_pack_name":"ego","texture_name":"atlas.items","texture_data":{"ego_espada_trueno":{"textures":"textures/items/diamond_sword"}}}
+{"resource_pack_name":"ego","texture_name":"atlas.items","texture_data":{"ego_espada_trueno":{"textures":"textures/items/ego_espada_trueno"}}}
 RP/texts/en_US.lang  ->  item.ego:espada_trueno=Thunder Sword
 BP/scripts/main.js
 import { world, system } from "@minecraft/server";
@@ -1431,7 +1433,7 @@ function limpiarPlan(j,prompt){
   for(const o of (sinObj&&base.poderesJugador.length?[]:(Array.isArray(j.objetos)?j.objetos:[]).slice(0,60))){
     const id=mcId(base.ns,o&&o.id); const tipo=["item","block","entity"].includes(o&&o.tipo)?o.tipo:"item";
     if(!id||vistos.has(id)) continue; vistos.add(id);
-    base.objetos.push({id,tipo,icono:["espada","hacha","pico","vara","reloj","libro","corona","botella","anillo","lingote","orbe","gema"].includes(normMc(o.icono))?normMc(o.icono):"",nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",entrega:["kit","crafteo","creativo","botin","aparece"].includes(normMc(o.entrega))?normMc(o.entrega):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0,poderes:(Array.isArray(o.poderes)?o.poderes:[]).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES[x]).slice(0,8)});
+    base.objetos.push({id,tipo,icono:["arma_fuego","pistola","rifle","escopeta","francotirador","botiquin","granada","municion","armadura","escudo","espada","hacha","pico","vara","reloj","libro","corona","botella","anillo","lingote","orbe","gema"].includes(normMc(o.icono))?normMc(o.icono):"",nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",entrega:["kit","crafteo","creativo","botin","aparece"].includes(normMc(o.entrega))?normMc(o.entrega):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0,poderes:(Array.isArray(o.poderes)?o.poderes:[]).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES[x]).slice(0,8)});
   }
   for(const p of (sinObj&&base.poderesJugador.length?[]:(Array.isArray(j.partes)?j.partes:[])).slice(0,8)){
     if(/^(?:textur|sonid|sound|audio|icon|imagen)/i.test(String(p&&p.titulo||"").trim())&&!/(?:script|logic|comport)/i.test(String(p&&p.titulo||"")))continue; // EGO crea las texturas solo; los sonidos no se pueden generar
@@ -1499,7 +1501,7 @@ async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
-{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","icono":"espada|hacha|pico|vara|reloj|libro|corona|botella|anillo|lingote|orbe|gema: cómo se ve el ítem","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"poderes_jugador":[],"modelos3d":[],"sonidos":[],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
+{"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","icono":"arma_fuego|pistola|rifle|escopeta|francotirador|botiquin|municion|armadura|escudo|espada|hacha|pico|vara|reloj|libro|corona|botella|anillo|lingote|orbe|gema: cómo se ve el ítem","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"poderes_jugador":[],"modelos3d":[],"sonidos":[],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
 ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enumera en "requisitos" TODO lo que pidió (nada más, nada menos). Cada objeto, habilidad y parte del plan debe servir a un requisito. No interpretes a tu gusto: si el usuario no lo dijo, no lo agregues.
 PODERES DEL JUGADOR: si el usuario quiere TENER poderes él mismo (inmortal, vida infinita, volar, velocidad, fuerza, daño infinito, aura, miedo en monstruos, aldeanos que lo adoran, destruir, levantar objetos, visión nocturna, saltar, respirar bajo el agua, sin hambre, inmune al fuego), ponlos en \"poderes_jugador\" usando SOLO estos nombres: inmortal, vida_infinita, vuelo, velocidad, fuerza, dano_infinito, aura, miedo_mobs, adoracion_aldeanos, destruccion, telekinesis, vision_nocturna, salto, respirar_agua, sin_hambre, resistencia_fuego. EGO los programa y se activan solos al entrar al mundo: NO crees ítems, criaturas ni scripts para eso. Si dijo que no quiere objetos, objetos=[] y partes=[].
 MODELOS 3D: si el usuario pide un modelo 3D, un diseño propio, un jefe/criatura grande o que se vea diferente a los mobs del juego, pon en \"modelos3d\" una entrada por criatura: {\"entidad\":\"ns:id de un objeto tipo entity\",\"descripcion\":\"cómo se ve: forma, tamaño, colores, partes\"}. EGO diseña la geometría y la textura por su cuenta. SONIDOS Y VOCES: si pide que algo hable o tenga voz/sonido propio, pon en \"sonidos\" {\"nombre\":\"corto\",\"texto\":\"frase exacta que dirá (máx 240 caracteres)\",\"entidad\":\"ns:id opcional: suena cuando aparece\"}; EGO genera el audio con voz sintética.
@@ -1578,7 +1580,7 @@ function construirModelo3d(geoId,partes){
   const ancho=Math.max(2,Math.ceil(Math.max(Math.abs(minX),Math.abs(maxX),Math.abs(minZ),Math.abs(maxZ))*2/16)+1),alto=Math.max(2,Math.ceil(maxY/16)+1);
   const geo={format_version:"1.12.0","minecraft:geometry":[{description:{identifier:geoId,texture_width:16,texture_height:16,visible_bounds_width:ancho,visible_bounds_height:alto,visible_bounds_offset:[0,alto/2,0]},bones}]};
   const FASE={pierna_i:1,pierna_d:-1,bota_i:1,bota_d:-1,brazo_i:-1,brazo_d:1,manga_i:-1,manga_d:1,hombrera_i:-1,hombrera_d:1,pata_di:1,pata_dd:-1,pata_ti:-1,pata_td:1};
-  const ab={};for(const p of ps){const f=FASE[p.nombre];if(f){const amp=/brazo|manga|hombrera/.test(p.nombre)?28:36;ab[p.nombre]={rotation:["Math.cos(query.modified_distance_moved * 38.17) * "+(f*amp)+" * query.modified_move_speed",0,0]};}}
+  const ab={};for(const p of ps){const f=FASE[p.nombre]??(/^pata_/.test(p.nombre)?((Number((p.nombre.match(/\d+$/)||["0"])[0])%2)?-1:1):0);if(f){const amp=/brazo|manga|hombrera/.test(p.nombre)?28:36;ab[p.nombre]={rotation:["Math.cos(query.modified_distance_moved * 38.17) * "+(f*amp)+" * query.modified_move_speed",0,0]};}}
   return {geo:JSON.stringify(geo,null,2)+"\n",png:pngBytes(16,16,px),cubos:ps.length,colores:cols.length,alto:maxY-minY,ancho:Math.max(maxX-minX,maxZ-minZ),animados:Object.keys(ab).length,bonesAnim:ab};
 }
 // ===== GENERADORES DE MODELOS: proporciones correctas garantizadas por código =====
@@ -1750,7 +1752,18 @@ function colorDeNombre(t){
 }
 function tipoIconoDe(t){
   const n=normMc(t);
-  if(/(espada|sable|katana|lanza|daga|cuchillo|hoja|filo|mandoble|espadon|estoque|cimitarra|machete|cuchilla|guadana|hoz|tridente|blade|sword|dagger|sword)/.test(n))return "espada";
+  // Categorías consumibles antes que el tipo de arma: "munición de rifle" es munición, no un rifle.
+  if(/(botiquin|kit medico|medkit|venda|vendaje|antibiotico|medicina|curacion|primeros auxilios)/.test(n))return "botiquin";
+  if(/(granada|explosivo|bomba)/.test(n))return "granada";
+  if(/(municion|cartucho|bala|balas|ammo)/.test(n))return "municion";
+  if(/(francotirador|sniper|rifle de precision)/.test(n))return "francotirador";
+  if(/(escopeta|shotgun)/.test(n))return "escopeta";
+  if(/(pistola|revolver)/.test(n))return "pistola";
+  if(/(rifle|fusil|subfusil|ametralladora|metralleta|carabina|mosquete|lanzallamas|canon|uzi|ak47)/.test(n))return "rifle";
+  if(/(firearm|gun|arma_fuego|arma de fuego)/.test(n))return "arma_fuego";
+  if(/(armadura|chaleco tactico|casco tactico|proteccion)/.test(n))return "armadura";
+  if(/(escudo|shield)/.test(n))return "escudo";
+  if(/(espada|sable|katana|lanza|daga|cuchillo|hoja|filo|mandoble|espadon|estoque|cimitarra|machete|cuchilla|guadana|hoz|tridente|blade|sword|dagger)/.test(n))return "espada";
   if(/(hacha|martillo|maza|mazo|axe|hammer)/.test(n))return "hacha";
   if(/(pico|pala|azada|pickaxe|shovel)/.test(n))return "pico";
   if(/(vara|baston|cetro|varita|staff|wand|bastón)/.test(n))return "vara";
@@ -1768,7 +1781,57 @@ function dibujarGenerico(tipo,principal,acento){
   const W=16,px=new Uint8Array(W*W*4),P=hexRgb(principal),A=hexRgb(acento),CLARO=mezcla(P,[255,255,255],.55),OSC=mezcla(P,[0,0,0],.38),OUT=[24,20,30];
   const set=(x,y,c)=>{if(x<0||y<0||x>=W||y>=W)return;const i=(y*W+x)*4;px[i]=c[0];px[i+1]=c[1];px[i+2]=c[2];px[i+3]=255;};
   const lleno=(x,y)=>x>=0&&y>=0&&x<W&&y<W&&px[(y*W+x)*4+3]>0;
-  if(tipo==="reloj"){
+  if(["arma_fuego","pistola","rifle","escopeta","francotirador"].includes(tipo)){
+    // Siluetas pixel-art distintas para cada clase de arma; no se sustituyen por espadas.
+    if(tipo==="pistola"){
+      for(let y=6;y<=8;y++)for(let x=4;x<=11;x++)set(x,y,y===6?CLARO:(y===8?OSC:P));
+      for(let y=6;y<=7;y++)for(let x=11;x<=14;x++)set(x,y,OSC);
+      for(let y=8;y<=12;y++)for(let x=7;x<=9;x++)set(x,y,OSC);
+      for(let y=9;y<=11;y++)set(10,y,A);set(4,7,CLARO);
+    } else if(tipo==="francotirador"){
+      for(let y=7;y<=8;y++)for(let x=2;x<=13;x++)set(x,y,y===7?CLARO:P);
+      for(let y=7;y<=8;y++)for(let x=13;x<=15;x++)set(x,y,OSC);
+      for(let y=8;y<=12;y++)for(let x=5;x<=7;x++)set(x,y,OSC);
+      for(let y=4;y<=6;y++)for(let x=8;x<=10;x++)set(x,y,A);
+      for(let x=1;x<=3;x++)set(x,6,OSC);
+    } else if(tipo==="escopeta"){
+      for(let y=6;y<=9;y++)for(let x=3;x<=13;x++)set(x,y,y===6?CLARO:(y===9?OSC:P));
+      for(let y=7;y<=8;y++)for(let x=13;x<=15;x++)set(x,y,OSC);
+      for(let y=8;y<=12;y++)for(let x=6;x<=8;x++)set(x,y,OSC);
+      for(let y=6;y<=9;y++)set(4,y,A);for(let x=9;x<=11;x++)set(x,5,A);
+    } else {
+      // Rifle / arma larga genérica: culata, cuerpo, cañón, mira y empuñadura.
+      for(let y=6;y<=9;y++)for(let x=4;x<=12;x++)set(x,y,y===6?CLARO:(y===9?OSC:P));
+      for(let y=7;y<=8;y++)for(let x=12;x<=15;x++)set(x,y,OSC);
+      for(let y=8;y<=12;y++)for(let x=6;x<=8;x++)set(x,y,OSC);
+      for(let y=4;y<=5;y++)for(let x=8;x<=10;x++)set(x,y,A);
+      for(let y=5;y<=6;y++)set(4,y,CLARO);for(let y=7;y<=8;y++)set(3,y,P);
+    }
+  } else if(tipo==="botiquin"){
+    for(let y=3;y<=13;y++)for(let x=2;x<=13;x++)set(x,y,(x===2||x===13||y===3||y===13)?OSC:P);
+    for(let y=6;y<=10;y++)for(let x=6;x<=9;x++)set(x,y,[245,245,235]);
+    for(let y=4;y<=5;y++)for(let x=6;x<=9;x++)set(x,y,CLARO);
+    for(let y=7;y<=9;y++)for(let x=4;x<=11;x++)set(x,y,[245,245,235]);
+  } else if(tipo==="granada"){
+    for(let y=5;y<=13;y++)for(let x=4;x<=11;x++){const d=Math.hypot(x-7.5,y-9);if(d<4.8)set(x,y,d<2?CLARO:(x<7?P:OSC));}
+    for(let y=3;y<=5;y++)for(let x=6;x<=9;x++)set(x,y,A);
+    set(9,2,A);set(10,2,A);set(11,3,A);
+    for(let y=7;y<=11;y++)set(5,y,CLARO);
+  } else if(tipo==="municion"){
+    for(let y=3;y<=13;y++)for(let x=4;x<=6;x++)set(x,y,y<=5?CLARO:(x===4?P:OSC));
+    for(let y=3;y<=13;y++)for(let x=9;x<=11;x++)set(x,y,y<=5?CLARO:(x===9?P:OSC));
+    for(let x=4;x<=6;x++)set(x,2,A);for(let x=9;x<=11;x++)set(x,2,A);
+    for(let y=10;y<=13;y++){set(3,y,OSC);set(12,y,OSC);}
+  } else if(tipo==="armadura"||tipo==="escudo"){
+    if(tipo==="escudo"){
+      for(let y=2;y<=13;y++){const w=Math.min(6,Math.floor((y-1)*.7)+1);for(let x=0;x<16;x++)if(Math.abs(x-7.5)<=w)set(x,y,y===2?CLARO:(x<7?P:OSC));}
+      for(let y=5;y<=11;y++)set(7,y,A);for(let x=5;x<=10;x++)set(x,8,A);
+    } else {
+      for(let y=3;y<=12;y++)for(let x=3;x<=12;x++){const edge=x===3||x===12||y===3||y===12;set(x,y,edge?OSC:P);}
+      for(let y=5;y<=10;y++)for(let x=6;x<=9;x++)set(x,y,A);
+      set(5,4,CLARO);set(10,4,CLARO);
+    }
+  } else if(tipo==="reloj"){
     for(let y=0;y<W;y++)for(let x=0;x<W;x++){const d=Math.hypot(x-7.5,y-8.5);if(d<=6.2)set(x,y,d<4.9?[245,240,225]:P);}
     for(let a=0;a<12;a++){const t=a/12*Math.PI*2;set(Math.round(7.5+Math.sin(t)*4),Math.round(8.5-Math.cos(t)*4),OSC);}
     for(let k=1;k<=3;k++)set(7,Math.round(8.5-k*1.2),OSC);for(let k=1;k<=3;k++)set(7+k,9,A);
@@ -1841,7 +1904,7 @@ function nombreDeId(id,plan){const o=(plan.objetos||[]).find(x=>x.id===id);retur
 // Arma el paquete final: normaliza, genera lo que falta y devuelve {files, notas, resumen}
 
 // ---- Habilidades de armas: las programa el código (probado), no la IA ----
-const RX_ARMA=/(\bespada|\bsable|\bkatana|\bhacha|\bpico\b|\bpala\b|\bvara\b|\bvarita|\bbaston|\bcetro|\blanza\b|\bmartillo|\bguadana|\bdaga|\barma\b|\btridente|\bsword\b|\baxe\b|\bwand\b|\bstaff\b)/i;
+const RX_ARMA=/(\bespada|\bsable|\bkatana|\bhacha|\bpico\b|\bpala\b|\bvara\b|\bvarita|\bbaston|\bcetro|\blanza\b|\bmartillo|\bguadana|\bdaga|\barma\b|\btridente|\brifle|\bfusil|\bpistola|\bescopeta|\bfrancotirador|\bsubfusil|\bmetralleta|\bsword\b|\baxe\b|\bwand\b|\bstaff\b|\bshotgun\b|\bsniper\b|\bgun\b)/i;
 function habilidadDeObjeto(o){return (o.habilidad&&o.habilidad!=="ninguna")?o.habilidad:null;}
 function tipoArmaDe(o){const t=normMc((o.nombre||"")+" "+(o.id||""));const x=detectarMc(t);return x.tipo||"espada";}
 const LINT_MAL=[[/\bworld\.events\b/,"usa la API antigua world.events"],[/from\s+["']mojang-minecraft/,"importa mojang-minecraft (API antigua)"],[/\brequire\s*\(/,"usa require()"],[/\bsetTimeout\s*\(|\bsetInterval\s*\(/,"usa setTimeout/setInterval"],[/\bnew\s+(Location|BlockLocation)\s*\(/,"usa Location/BlockLocation (API antigua)"],[/\bawait\b(?![^\n]*=>)(?<![ \t]{2})/,""],[/from\s+["'](?!@minecraft\/(server|server-ui)["'])(?!\.\/)[^"']+["']/,"importa un módulo que no existe en Bedrock"],[/:\s*(string|number|boolean)\b\s*[=,)]|\binterface\s+\w+|\bas\s+(string|number|any)\b/,"contiene sintaxis de TypeScript"]];
@@ -2057,6 +2120,43 @@ function scriptPoderesJugador(lista){
   L.push('world.afterEvents.playerSpawn.subscribe((ev) => {','  try { if (ev.initialSpawn) ev.player.sendMessage("§6Poderes divinos activos: §f"+PODERES.join(", ")); } catch (e) {}','});','');
   return L.join("\n");
 }
+function modeloProceduralEntidad(obj, archivo){
+  const nombre=String(obj?.nombre||archivo||"criatura");
+  const texto=normMc(nombre+" "+String(obj?.descripcion||"")+" "+archivo);
+  const base=colorDeNombre(nombre+" "+archivo);
+  const c2=aclararMc(base,-.34),ac=aclararMc(base,.38);
+  if(/arana|aracn|spider|insecto/.test(texto)){
+    const P=[];const add=(n,o,t,c,x)=>P.push(Object.assign({nombre:n,origen:o,tam:t,color:c},x||{}));
+    add("abdomen",[-5,8,1],[10,8,12],base);add("cefalotorax",[-4,9,-8],[8,7,9],c2);add("ojos",[-2,13,-8],[4,2,1],"#ff3322");
+    for(let i=0;i<4;i++)for(const sg of [-1,1]){const n="pata_"+(i*2+(sg>0?1:2));const z=-7+i*4;add(n,[sg>0?4:-7,5,z],[3,2,7],i%2?c2:base,{pivote:[sg>0?4:-4,7,z+2],rot:[0,0,sg*18]});}
+    return P;
+  }
+  if(/slime|gelatina|cubo gelatinoso|magma cube/.test(texto)){
+    const P=[];const add=(n,o,t,c)=>P.push({nombre:n,origen:o,tam:t,color:c});
+    add("cuerpo",[-6,3,-6],[12,12,12],base);add("borde_superior",[-5,14,-5],[10,1,10],ac);
+    add("ojo_i",[-4,10,-6.5],[3,2,1],"#f5f5f5");add("ojo_d",[1,10,-6.5],[3,2,1],"#f5f5f5");
+    add("pupila_i",[-3,10,-7],[1,1,0.5],"#202020");add("pupila_d",[2,10,-7],[1,1,0.5],"#202020");
+    add("boca",[-2,7,-6.7],[4,1,0.6],c2);return P;
+  }
+  const bestia=/(perro|lobo|wolf|dog|dragon|dinosaur|dinosaurio|bestia|animal|oso|bear|felino|tigre|leon|leon|jabal|araña|spider|insecto|serpiente)/.test(texto);
+  if(bestia){
+    const rasgos={cuernos:/dragon|demon|cuerno/.test(texto),alas:/dragon|volador|wing/.test(texto),cola:true};
+    return modeloBestia({altura:/dragon|gigante|jefe/.test(texto)?42:26,colores:{piel:base,armadura:base,armadura2:c2,acento:ac,ojos:/zombi|infect/.test(texto)?"#baff35":"#ffcc33"},rasgos});
+  }
+  const zombi=/zombi|zombie|infect|mutant|mutante/.test(texto),esqueleto=/esquelet|skeleton|hueso/.test(texto),jefe=/jefe|boss|coloso|gigante|reina|rey|titan|devorador/.test(texto),tanque=/tanque|bruto|acorazado/.test(texto);
+  const altura=jefe?72:(tanque?48:(/corredor|rapido|acechador/.test(texto)?36:32));
+  const P=modeloHumanoide({altura,colores:{piel:zombi?"#71934b":(esqueleto?"#d9d1b5":base),armadura:zombi?"#344b3b":c2,armadura2:zombi?"#536b43":base,acento:ac,ojos:zombi?"#d7ff36":"#ff3b36",capa:c2},rasgos:{cuernos:/demon|mutante|coloso/.test(texto),capa:jefe||/nocturno|sombra/.test(texto),alas:/angel|demon|dragon/.test(texto),corona:/reina|rey/.test(texto),cola:/demon|mutante/.test(texto),casco:!zombi&&!esqueleto,hombreras:jefe||tanque,arma:"ninguna"}});
+  // Rasgos de silueta por arquetipo: no basta con cambiar el nombre o el color del mismo mob.
+  const u=altura/32,add=(n,o,t,c)=>P.push({nombre:n,origen:o.map(v=>+(v*u).toFixed(2)),tam:t.map(v=>+(v*u).toFixed(2)),color:c});
+  if(tanque){add("placa_tanque_i",[-8,18,-3],[5,6,7],"#626b78");add("placa_tanque_d",[3,18,-3],[5,6,7],"#626b78");add("rodillera_tanque_i",[-5,4,-2],[4,4,5],"#59616c");add("rodillera_tanque_d",[1,4,-2],[4,4,5],"#59616c");}
+  if(/toxic|tox|venen/.test(texto)){add("nucleo_toxico",[-2,15,-3],[4,5,1],"#b6ff28");add("tubo_toxico_i",[-5,17,2],[2,8,2],"#76a92e");add("tubo_toxico_d",[3,17,2],[2,8,2],"#76a92e");add("espina_toxica",[-1,25,2],[2,5,2],"#c8ff3d");}
+  if(/explos|suicida|bomba/.test(texto)){add("carga_explosiva",[-3,15,-3],[6,6,2],"#ed542f");add("fusible",[-1,22,-1],[2,5,2],"#f4c542");add("placa_roja",[-4,14,-3],[8,1,1],"#a92c26");}
+  if(/devor|come|mandibula|boca/.test(texto)){add("mandibula",[-4,22,-5],[8,3,3],"#49352f");for(let i=0;i<4;i++)add("colmillo_"+i,[-3+i*2,21,-6],[1,2,1],"#eee5d0");}
+  if(/coloso|gigante|titan/.test(texto)){add("placa_pecho",[-6,14,-3],[12,8,2],"#737b8b");add("placa_centro",[-3,16,-4],[6,4,1],ac);}
+  if(/corredor|rapido|acechador/.test(texto)){add("garra_i",[-7,10,-2],[2,4,3],"#d5d8d0");add("garra_d",[5,10,-2],[2,4,3],"#d5d8d0");}
+  return P;
+}
+
 function postprocesarAddon(entrada,plan,verSrv){
   const notas=[],mapa=new Map(),ns=plan.ns||"ego";
   for(const f of entrada){ if(f&&typeof f.path==="string"&&typeof f.content==="string") mapa.set(f.path,f.content); }
@@ -2140,18 +2240,32 @@ function postprocesarAddon(entrada,plan,verSrv){
     mapa.set("RP/textures/terrain_texture.json",JSON.stringify({resource_pack_name:ns,texture_name:"atlas.terrain",padding:8,num_mip_levels:4,texture_data:dat},null,2)+"\n");
     if(!plan._icono){const col=colorDeNombre(nombreDeId(bloques[0].id,plan));plan._icono={px:dibujarBloque(col,"piedra",7),col};}
   }
-  // --- modelos de criaturas (reutilizan modelos del juego)
+  // --- modelos de criaturas: conservar solo client_entity completo, con recursos existentes y sin compartir modelo.
+  const geometriasUsadas=new Set(),texturasUsadas=new Set();
   for(const e of entidades){
     const rutaCli="RP/entity/"+e.archivo+".entity.json";
-    if(mapa.has(rutaCli)){const c=leer(rutaCli);if(c)mapa.set(rutaCli,JSON.stringify(c,null,2)+"\n");continue;}
-    const mod3=(plan._modelos3d||[]).find(q=>q.entidad===e.id);
-    if(mod3){const geoId="geometry."+ns+"_"+e.archivo.replace(/[^a-z0-9_]/g,"_");const b=construirModelo3d(geoId,mod3.partes);
+    if(mapa.has(rutaCli)){
+      const c=leer(rutaCli),d=c?.["minecraft:client_entity"]?.description;
+      const geo=d?.geometry?.default,tx=d?.textures?.default;
+      let geoOk=false;if(geo){for(const [gp,gf] of mapa){if(!/^RP\/models\/entity\/.+\.geo\.json$/i.test(gp))continue;const j=jsonTolerante(gf);if(j.ok&&(j.obj["minecraft:geometry"]||[]).some(g=>g.description?.identifier===geo)){geoOk=true;break;}}}
+      const txClean=String(tx||"").replace(/^\//,"").replace(/\.(png|tga|jpg)$/i,"");
+      const txOk=!!txClean&&["png","tga","jpg"].some(ext=>mapa.has("RP/"+txClean+"."+ext));
+      const completo=!!(d?.identifier===e.id&&d?.spawn_egg&&geoOk&&txOk&&!geometriasUsadas.has(geo)&&!texturasUsadas.has(txClean));
+      if(completo){geometriasUsadas.add(geo);texturasUsadas.add(txClean);mapa.set(rutaCli,JSON.stringify(c,null,2)+"\n");continue;}
+      notas.push("«"+nombreDeId(e.id,plan)+"»: se reconstruyó el recurso visual porque faltaba o estaba compartido/incompleto.");
+    }
+    let mod3=(plan._modelos3d||[]).find(q=>q.entidad===e.id);
+    // Política universal: toda entidad recibe geometría y textura propias aunque el usuario no haya pedido explícitamente "modelo 3D".
+    if(!mod3) mod3={entidad:e.id,partes:modeloProceduralEntidad((plan.objetos||[]).find(x=>x.id===e.id)||{id:e.id,nombre:nombreDeId(e.id,plan)},e.archivo)};
+    if(mod3){const geoId="geometry."+ns+"_"+e.archivo.replace(/[^a-z0-9_]/g,"_");let b=construirModelo3d(geoId,mod3.partes);
+      if(!b){const fallback=modeloProceduralEntidad((plan.objetos||[]).find(x=>x.id===e.id)||{id:e.id,nombre:nombreDeId(e.id,plan)},e.archivo);b=construirModelo3d(geoId,fallback);notas.push("«"+nombreDeId(e.id,plan)+"»: el modelo solicitado no era válido; se generó un modelo procedural de respaldo.");}
       if(b){const col0=colorDeNombre(nombreDeId(e.id,plan));mapa.set("RP/models/entity/"+e.archivo+".geo.json",b.geo);mapa.set("RP/textures/entity/"+e.archivo+".png",b.png);
         const animId="animation."+ns+"_"+e.archivo.replace(/[^a-z0-9_]/g,"_")+".caminar";const conAnim=b.animados>0;
         if(conAnim)mapa.set("RP/animations/"+e.archivo+".animation.json",JSON.stringify({format_version:"1.8.0",animations:{[animId]:{loop:true,bones:b.bonesAnim}}},null,2)+"\n");
         mapa.set(rutaCli,JSON.stringify({format_version:"1.10.0","minecraft:client_entity":{description:{identifier:e.id,materials:{default:"entity_alphatest"},textures:{default:"textures/entity/"+e.archivo},geometry:{default:geoId},render_controllers:["controller.render.default"],...(conAnim?{animations:{caminar:animId},scripts:{animate:["caminar"]}}:{}),spawn_egg:{base_color:col0,overlay_color:"#"+mezcla(hexRgb(col0),[0,0,0],.5).map(v=>v.toString(16).padStart(2,"0")).join("")}}}},null,2)+"\n");
+        geometriasUsadas.add(geoId);texturasUsadas.add("textures/entity/"+e.archivo);
         {const rb="BP/entities/"+e.archivo+".json";const jb=mapa.has(rb)?leer(rb):null;if(jb&&jb["minecraft:entity"]){const cs=jb["minecraft:entity"].components=jb["minecraft:entity"].components||{};cs["minecraft:collision_box"]={width:Math.round(Math.min(8,Math.max(.6,b.ancho/16))*100)/100,height:Math.round(Math.min(10,Math.max(.8,b.alto/16))*100)/100};mapa.set(rb,JSON.stringify(jb,null,2)+"\n");}}
-        notas.push("«"+nombreDeId(e.id,plan)+"» tiene modelo 3D propio ("+b.cubos+" cubos, "+b.colores+" colores, ~"+Math.round(b.alto)+" px de alto). "+(b.animados?"Camina moviendo piernas y brazos. ":"Sin animación de caminar. ")+"La caja de colisión se ajustó al tamaño del modelo.");
+        notas.push("«"+nombreDeId(e.id,plan)+"» tiene modelo 3D propio ("+b.cubos+" cubos, "+b.colores+" colores, ~"+Math.round(b.alto)+" px de alto). "+(b.animados?"Animación locomotora conectada. ":"Sin animación locomotora automática. ")+"La caja de colisión se ajustó al tamaño del modelo.");
         plan._hab3d=(plan._hab3d||[]).concat("Modelo 3D propio de "+nombreDeId(e.id,plan)+" ("+b.cubos+" cubos)");continue;}}
     const nom=nombreDeId(e.id,plan),m=MC_MODELOS_VANILLA[modeloVanillaDe(nom+" "+e.archivo)];
     const col=colorDeNombre(nom);
@@ -2279,7 +2393,7 @@ async function auditarAddon(plan,files,habilidades,env){
   }catch(e){return null;}
 }
 
-function fichaAddon(plan,r,au,validacion,ciclo){
+function fichaAddon(plan,r,au){
   const ids={item:[],block:[],entity:[]};
   for(const f of r.files){let mm;
     if(/^BP\/items\/.+\.json$/.test(f.path)&&(mm=String(f.content).match(/"identifier"\s*:\s*"([^"]+)"/)))ids.item.push(mm[1]);
@@ -2297,7 +2411,7 @@ function fichaAddon(plan,r,au,validacion,ciclo){
   ids.block.forEach(id=>prueba.push("Para tener «"+nom(id)+"»: `/give @s "+id+"`"));
   ids.entity.forEach(id=>prueba.push("Para invocar «"+nom(id)+"»: `/summon "+id+"`"));
   if(r.files.some(f=>/ego_pod_/.test(f.path)&&/volando/.test(String(f.content))))prueba.push("Para volar: lleva el objeto en el inventario y haz clic derecho con él en la mano; salta para subir y agáchate para bajar.");
-  return {nombre:plan.nombre,incluye:incluye.slice(0,16),prueba:prueba.slice(0,12),revision:au?{cumplidos:au.cumplidos,total:au.total,faltan:au.faltan}:null,validacion:validacion?{ok:!!validacion.ok,errores:(validacion.errores||[]).slice(0,12),avisos:(validacion.avisos||[]).slice(0,8),archivos:validacion.archivos}:null,reparacion:ciclo?{estado:ciclo.estado,rondas:ciclo.rondas,cambios:(ciclo.cambios||[]).length,erroresFinales:(ciclo.erroresFinales||[]).slice(0,8),avisosFinales:(ciclo.avisosFinales||[]).slice(0,8)}:null,avisos:[...new Set(r.notas)].filter(x=>!/^Revisión final/.test(x)).slice(0,8)};
+  return {nombre:plan.nombre,incluye:incluye.slice(0,16),prueba:prueba.slice(0,12),revision:au?{cumplidos:au.cumplidos,total:au.total,faltan:au.faltan}:null,avisos:[...new Set(r.notas)].filter(x=>!/^Revisión final/.test(x)).slice(0,6)};
 }
 
 async function generarVocesAddon(plan,env){
@@ -2321,25 +2435,22 @@ async function generarVocesAddon(plan,env){
 async function mcBuild(body,env,request){
   const prompt=String(body.prompt||"").slice(0,2000);
   const plan=limpiarPlan(body.plan,prompt);
-  const entrada=[];const porRuta=new Map();const colisiones=[];
+  const entrada=[];const vistos=new Set();
   for(const f of (Array.isArray(body.files)?body.files:[]).slice(0,400)){
     const path=safeProjectPath(f&&f.path);
     if(!path||!/^(BP|RP)\//.test(path)||typeof f.content!=="string"||f.content.length>400000) continue;
     if(/manifest\.json$|\.(png|jpg|zip|mcaddon)$/i.test(path)) continue;
-    if(porRuta.has(path) && porRuta.get(path)!==f.content) colisiones.push(path);
-    porRuta.set(path,f.content);
+    vistos.add(path);entrada.push({path,content:f.content});
   }
-  for(const [path,content] of porRuta) entrada.push({path,content});
   if(!entrada.length&&!(plan.poderesJugador&&plan.poderesJugador.length)&&!plan.kit) return json({error:"No hay archivos para armar el add-on."},400);
   try{
     plan._prompt=prompt;
     plan._modelos3d=(Array.isArray(body.modelos3d)?body.modelos3d:[]).slice(0,4).map(q=>({entidad:String(q&&q.entidad||""),partes:limpiarModelo3d(q&&q.partes)})).filter(q=>q.entidad&&q.partes.length>=3);
     const vz=await generarVocesAddon(plan,env);plan._voces=vz.out;
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
-    if(colisiones.length)r.notas.push("Se detectaron rutas generadas en más de una parte; se conservó la última versión para: "+[...new Set(colisiones)].slice(0,8).join(", "));
     for(const x of vz.fallos)r.notas.push("Voz: "+x);
     const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
-    const validacion=ciclo.validacion||validarAddonEstructural(r.files,env.MC_SERVER_VERSION);
+    const validacion=ciclo.validacion||validarAddonEstructural(r.files);
     for(const x of ciclo.informe.cambios)r.notas.push(`Auto-reparación ronda ${x.ronda}: ${x.path}`);
     for(const x of ciclo.informe.avisosFinales)r.notas.push("Auto-reparación: "+x);
     for(const x of validacion.errores)r.notas.push("Validación pendiente: "+x);
@@ -2352,7 +2463,7 @@ async function mcBuild(body,env,request){
     const nombre="ego-"+slugAscii(plan.nombre);
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au,validacion,ciclo.informe)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
@@ -2462,7 +2573,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.20.0",
+    version: "14.21.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2710,6 +2821,21 @@ function extractJson(text) {
   return null;
 }
 
+function planDesdeArchivosMinecraft(files, nombre, prompt){
+  const plan={nombre:String(nombre||"Add-on EGO"),ns:"ego",resumen:String(prompt||"").slice(0,400),requisitos:[],objetos:[],partes:[],sonidos:[],_modelos3d:[]};
+  for(const f of files||[]){
+    if(typeof f?.path!=="string"||typeof f.content!=="string")continue;
+    const esEntidad=/^BP\/entities\/.+\.json$/i.test(f.path),esItem=/^BP\/items\/.+\.json$/i.test(f.path),esBloque=/^BP\/blocks\/.+\.json$/i.test(f.path);
+    if(!esEntidad&&!esItem&&!esBloque)continue;
+    try{const j=JSON.parse(f.content);const root=esEntidad?j["minecraft:entity"]:esItem?j["minecraft:item"]:j["minecraft:block"];const id=String(root?.description?.identifier||"");if(!/^[a-z0-9_]+:[a-z0-9_]+$/.test(id))continue;
+      const slug=id.split(":")[1];const nombreObj=tituloCaso(slug.replace(/_/g," "));
+      plan.objetos.push({id,tipo:esEntidad?"entity":esItem?"item":"block",nombre:nombreObj,descripcion:String(root?.description?.menu_category?.group||"")});
+      const ns=id.split(":")[0];if(plan.objetos.length===1)plan.ns=mcNs(ns);
+    }catch{}
+  }
+  return plan;
+}
+
 async function generarProyecto(body, env, minecraft, request) {
   const prompt = String(body.prompt || body.description || "").trim().slice(0, 12000);
   if (!prompt) return respuestaJsonError("Falta prompt del proyecto.");
@@ -2722,7 +2848,7 @@ async function generarProyecto(body, env, minecraft, request) {
       const files = construirAddonItem(spec, env.MC_SERVER_VERSION);
       const reparaciones = repararAddon(files, env.MC_SERVER_VERSION);
       const ciclo = await cicloReparacionAutomatica(files, env, { minecraft: true });
-      const validacion = ciclo.validacion || validarAddonEstructural(files,env.MC_SERVER_VERSION);
+      const validacion = ciclo.validacion || validarAddonEstructural(files);
       const avisos = [...reparaciones, ...ciclo.informe.cambios.map(x=>`Auto-reparación (ronda ${x.ronda}): ${x.path}`), ...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x), ...validacion.errores.map(x=>"Validación pendiente: "+x), ...validacion.avisos.map(x=>"Revisión: "+x)];
       const readme = files.find(f=>/^BP\/README\.md$/i.test(f.path));
       if(readme && avisos.length) readme.content += "\n\n## Revisión de EGO AI\n"+avisos.map(x=>"- "+x).join("\n")+"\n";
@@ -2730,12 +2856,12 @@ async function generarProyecto(body, env, minecraft, request) {
       return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
     } catch(e) { console.error("tpl_addon",String(e?.message||e).slice(0,200)); return json({avanzado:true,motivo:"plantilla no disponible"}); }
   }
-  const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 25 : 35)), 50));
+  const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 50 : 35)), 50));
   const system = minecraft
     ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO.
 Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y carpeta "RP/" (resource pack). Cada uno con su manifest.json (format_version 2, header con name, description, uuid, version [1,0,0], min_engine_version [1,26,50]; modules con su propio uuid distinto; SOLO el BP depende del RP (uuid del header del RP, version [1,0,0]); el RP NO depende de nada; el BP con script añade la dependencia {\"module_name\":\"@minecraft/server\",\"version\":\"${String(env.MC_SERVER_VERSION || "2.10.0")}\"}). Todos los UUID deben ser v4 válidos y DISTINTOS entre sí.
 Ítems personalizados: BP/items/<nombre>.json con formato "minecraft:item" (format_version "1.21.0"), identificador con prefijo propio (por ejemplo ego:espada_trueno), componentes como minecraft:icon, minecraft:max_stack_size, minecraft:damage, minecraft:hand_equipped, minecraft:durability (NO uses minecraft:cooldown; el enfriamiento va en el script). El ícono es "minecraft:icon":{"textures":{"default":"nombre_corto"}} y ese nombre se define en RP/textures/item_texture.json. Textos en RP/texts/es_ES.lang y RP/texts/en_US.lang y RP/texts/languages.json.
-Recursos gráficos: no escribas bytes binarios como texto. Declara las referencias correctas de texturas; el postprocesador de EGO genera PNG de ítems, bloques e iconos de packs cuando reconoce esos recursos. Para geometría/animaciones de entidades, incluye los archivos JSON completos y rutas coherentes; no finjas que existe un PNG si no se generó.
+Recursos gráficos: no escribas bytes binarios como texto. El postprocesador de EGO genera PNG de ítems, bloques e iconos. Cada entidad debe tener su propio client_entity, spawn_egg, geometría, textura y animación locomotora coherentes; no reutilices la misma geometría para criaturas distintas. Los iconos de armas de fuego, botiquines, granadas, munición y armaduras deben ser de su categoría y nunca una espada genérica. No finjas que existe un recurso si no se generó.
 Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script API con "@minecraft/server" en BP/scripts/main.js (módulo "script" en el manifest con language "javascript", entry "scripts/main.js", y dependencia @minecraft/server con una version estable). Para rayos usa dimension.spawnEntity("minecraft:lightning_bolt", ubicacion) o /summon; para partículas dimension.spawnParticle o RP/particles; para sonidos world.playSound o dimension.playSound. Escucha eventos como world.afterEvents.itemUse y world.afterEvents.entityHitEntity y comprueba que el ítem sea el tuyo. Añade cooldown y no uses APIs inventadas. Explica en README.md si hay que activar Experimentos (Beta APIs) y cómo instalarlo.
 Incluye todos los archivos con contenido completo, sin placeholders, sin binarios, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.`
     : `Eres un arquitecto de software senior. Genera un proyecto ejecutable completo. Incluye README.md con instalación y ejecución, archivos de configuración, código completo y pruebas básicas cuando proceda. Elige una estructura simple y consistente con el stack solicitado. Máximo ${maxFiles} archivos. No incluyas placeholders, secretos, ni rutas absolutas.`;
@@ -2797,9 +2923,16 @@ Incluye todos los archivos con contenido completo, sin placeholders, sin binario
     const name=String(parsed.name|| (minecraft?"ego-bedrock-addon":"ego-project")).replace(/[^\w.-]/g,"-").slice(0,60)||"ego-project";
     const readmeExists=files.some(f=>/^README\.md$/i.test(f.path));
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
+    if(minecraft){
+      // El README final lo construye postprocesarAddon dentro del BP; evita duplicarlo al reparar la raíz del .mcaddon.
+      for(let i=files.length-1;i>=0;i--) if(/^README\.md$/i.test(files[i].path)) files.splice(i,1);
+      const planGen=planDesdeArchivosMinecraft(files,name,prompt);
+      const procesado=postprocesarAddon(files,planGen,env.MC_SERVER_VERSION);
+      files.splice(0,files.length,...procesado.files);
+    }
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
     const ciclo=await cicloReparacionAutomatica(files,env,{minecraft});
-    const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files,env.MC_SERVER_VERSION):{ok:true,errores:[],avisos:[],archivos:files.length});
+    const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files):{ok:true,errores:[],avisos:[],archivos:files.length});
     avisos.push(...ciclo.informe.cambios.map(x=>`Auto-reparación ronda ${x.ronda}: ${x.path}`),...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x));
     if(minecraft) avisos.push(...validacion.errores.map(x=>"Validación pendiente: "+x),...validacion.avisos.map(x=>"Revisión: "+x));
     if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos y validación de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n- La validación estática no sustituye la importación y prueba dentro de Minecraft.\n";}
@@ -3162,12 +3295,12 @@ function construirAddonItem(s,version){
 async function cicloReparacionAutomatica(files, env, opciones = {}) {
   const informe = { habilitado: !!routerApiKey(env) && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], erroresFinales: [], avisosFinales: [], estado: "omitido" };
   if (!Array.isArray(files) || !informe.habilitado) {
-    const v = opciones.minecraft ? validarAddonEstructural(files,env.MC_SERVER_VERSION) : null;
+    const v = opciones.minecraft ? validarAddonEstructural(files) : null;
     if (v) { informe.erroresFinales = v.errores; informe.avisosFinales = v.avisos; }
     return { validacion: v, informe };
   }
   const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 2), 2));
-  let validacion = opciones.minecraft ? validarAddonEstructural(files,env.MC_SERVER_VERSION) : { ok: true, errores: [], avisos: [], archivos: files.length };
+  let validacion = opciones.minecraft ? validarAddonEstructural(files) : { ok: true, errores: [], avisos: [], archivos: files.length };
   for (let ronda = 1; ronda <= maxRondas; ronda++) {
     const candidatos = files.filter(f => f && typeof f.content === "string" && (/\.js$/i.test(f.path) || /\.json$/i.test(f.path)));
     if (!candidatos.length) break;
@@ -3180,6 +3313,8 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     objetivo = objetivo.slice(0, 12);
     if (!objetivo.length) break;
     const snapshot = objetivo.map(f => ({ path: f.path, content: f.content.slice(0, 18000) }));
+    const estadoAntes = new Map(files.map(f => [f.path, f.content]));
+    const erroresAntesSet = new Set(validacion?.errores || []);
     const diagnostico = [...validacion.errores.map(x => "ERROR: " + x), ...validacion.avisos.map(x => "AVISO: " + x)].join("\n").slice(0, 9000) || "No hay errores estructurales. Revisa los scripts buscando errores claros de sintaxis, referencias inexistentes, APIs incompatibles y fallos lógicos evidentes. No cambies código correcto.";
     const messages = [
       { role: "system", content: `Eres el reparador de código de EGO AI. Corrige SOLO errores demostrables en los archivos proporcionados. No reescribas el proyecto ni cambies su diseño. Conserva compatibilidad con Minecraft Bedrock y @minecraft/server ${String(env.MC_SERVER_VERSION || "2.10.0")}. Devuelve ÚNICAMENTE JSON válido con esta forma: {"patches":[{"path":"ruta exacta existente","content":"contenido COMPLETO corregido del archivo"}]}. Si no puedes justificar una corrección, devuelve {"patches":[]}. No añadas archivos, no uses Markdown, no inventes APIs ni afirmes haber ejecutado pruebas.` },
@@ -3187,33 +3322,33 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     ];
     informe.rondas = ronda;
     try {
-      const respuesta = await Promise.race([
-        openRouterChat(messages, env, 7000, EGO_TEAM_MODELS.coder),
-        tmoMc(55000)
-      ]);
+      const respuesta = await openRouterChat(messages, env, 7000, EGO_TEAM_MODELS.coder);
       const parsed = extractJson(respuesta.content);
       const patches = Array.isArray(parsed?.patches) ? parsed.patches : [];
-      const erroresAntes = validacion.errores.length;
       let aplicados = 0;
-      const originales = [];
       for (const patch of patches.slice(0, 8)) {
         const path = safeProjectPath(patch && patch.path);
-        if (!path || typeof patch.content !== "string" || patch.content.length > 300000 || !/\\.(?:js|json)$/i.test(path)) continue;
+        if (!path || typeof patch.content !== "string" || patch.content.length > 300000 || !/\.(?:js|json)$/i.test(path)) continue;
         const original = files.find(f => f.path === path);
         if (!original || original.content === patch.content) continue;
-        originales.push({ file: original, content: original.content });
+        // Validación local del parche antes de aceptarlo.
+        if (/\.json$/i.test(path) && !jsonTolerante(patch.content).ok) { informe.avisosFinales.push(`Parche rechazado en ${path}: JSON inválido.`); continue; }
+        if (/\.js$/i.test(path) && (balanceJs(patch.content) || lintScriptApi(patch.content, String(env.MC_SERVER_VERSION||"2.10.0")).length)) { informe.avisosFinales.push(`Parche rechazado en ${path}: sintaxis/API no válida.`); continue; }
+        // No se permite alterar otros archivos ni introducir contenido binario o rutas nuevas.
         original.content = patch.content;
+        informe.cambios.push({ path, ronda, motivo: "parche del modelo reparador" });
         aplicados++;
       }
       if (!aplicados) break;
-      validacion = opciones.minecraft ? validarAddonEstructural(files,env.MC_SERVER_VERSION) : { ok: true, errores: [], avisos: [], archivos: files.length };
-      if (opciones.minecraft && (erroresAntes > 0 ? validacion.errores.length >= erroresAntes : validacion.errores.length > 0)) {
-        for (const x of originales) x.file.content = x.content;
-        validacion = validarAddonEstructural(files,env.MC_SERVER_VERSION);
-        informe.avisosFinales.push("Se descartó un parche que empeoraba la validación.");
+      validacion = opciones.minecraft ? validarAddonEstructural(files) : { ok: true, errores: [], avisos: [], archivos: files.length };
+      const nuevosErrores = opciones.minecraft ? validacion.errores.filter(x => !erroresAntesSet.has(x)) : [];
+      if (opciones.minecraft && nuevosErrores.length) {
+        for (const f of files) if (estadoAntes.has(f.path)) f.content = estadoAntes.get(f.path);
+        informe.cambios = informe.cambios.filter(x => x.ronda !== ronda);
+        informe.avisosFinales.push(`Ronda ${ronda} revertida: el parche introdujo errores nuevos (${nuevosErrores.slice(0,2).join("; ")}).`);
+        validacion = validarAddonEstructural(files);
         break;
       }
-      for (const x of originales) informe.cambios.push({ path: x.file.path, ronda, motivo: "parche del modelo reparador; validado estructuralmente" });
       if (validacion.ok && !validacion.errores.length) break;
     } catch (e) {
       informe.estado = "fallo_reparador";
@@ -3221,7 +3356,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
       break;
     }
   }
-  if (opciones.minecraft) validacion = validarAddonEstructural(files,env.MC_SERVER_VERSION);
+  if (opciones.minecraft) validacion = validarAddonEstructural(files);
   informe.erroresFinales = validacion?.errores || [];
   informe.avisosFinales.push(...(validacion?.avisos || []));
   informe.estado = informe.erroresFinales.length ? (informe.cambios.length ? "reparado_parcial" : "pendiente") : (informe.cambios.length ? "reparado_y_validado" : "sin_cambios_necesarios");
@@ -3230,7 +3365,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
 
 // Valida y repara el add-on: JSON de manifest, UUID v4 únicos y dependencias coherentes.
 // Validación estructural local: no sustituye la prueba dentro de Minecraft.
-function validarAddonEstructural(files, verSrv = "2.10.0") {
+function validarAddonEstructural(files) {
   const errores = [], avisos = [];
   const porRuta = new Map();
   for (const f of Array.isArray(files) ? files : []) {
@@ -3239,16 +3374,16 @@ function validarAddonEstructural(files, verSrv = "2.10.0") {
     if (porRuta.has(path)) errores.push(`Ruta duplicada: ${path}`);
     else porRuta.set(path, f);
     if (typeof f.content !== "string" && !(f.content instanceof Uint8Array)) errores.push(`Contenido inválido: ${path}`);
+    if (/\.png$/i.test(path)) {
+      const b=f.content instanceof Uint8Array?f.content:null;
+      const firma=b&&b.length>=24&&b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71&&b[4]===13&&b[5]===10&&b[6]===26&&b[7]===10;
+      const w=firma?((b[16]<<24)|(b[17]<<16)|(b[18]<<8)|b[19])>>>0:0;
+      const h=firma?((b[20]<<24)|(b[21]<<16)|(b[22]<<8)|b[23])>>>0:0;
+      if(!firma||!w||!h) errores.push(`${path}: no contiene un PNG binario válido con dimensiones correctas.`);
+    }
     if (/\.json$/i.test(path) && typeof f.content === "string") {
       try { JSON.parse(f.content); }
       catch (e) { errores.push(`JSON inválido en ${path}: ${String(e && e.message || e).slice(0, 110)}`); }
-    }
-    if (/\.js$/i.test(path) && typeof f.content === "string") {
-      const balance = balanceJs(f.content);
-      if (balance) errores.push(`JavaScript desbalanceado en ${path}: ${balance}.`);
-      for (const problema of lintScriptApi(f.content, verSrv)) {
-        errores.push(`API Minecraft en ${path}: ${problema}.`);
-      }
     }
   }
   const manifests = [];
@@ -3307,8 +3442,61 @@ function validarAddonEstructural(files, verSrv = "2.10.0") {
       }
     }
   }
+  // Identificadores únicos en todo el Behavior Pack: un ID duplicado puede hacer que Minecraft ignore o mezcle recursos.
+  const idsBP=new Map();
+  for(const [path,f] of porRuta){if(!/^BP\/(items|blocks|entities)\/.+\.json$/i.test(path)||typeof f.content!=="string")continue;try{const j=JSON.parse(f.content);const root=j["minecraft:item"]||j["minecraft:block"]||j["minecraft:entity"];const id=root?.description?.identifier;if(!id)continue;const prev=idsBP.get(id);if(prev)errores.push(`Identificador duplicado ${id} en ${prev} y ${path}.`);else idsBP.set(id,path);}catch{}}
+  // Valida bloques: material_instances -> clave del terrain atlas -> PNG existente.
+  const atlasTerrain = (() => { const f=porRuta.get("RP/textures/terrain_texture.json"); if(!f||typeof f.content!=="string") return {}; try{return JSON.parse(f.content).texture_data||{};}catch{return {};} })();
+  for(const [path,f] of porRuta){if(!/^BP\/blocks\/.+\.json$/i.test(path)||typeof f.content!=="string")continue;let o;try{o=JSON.parse(f.content)["minecraft:block"];}catch{continue;}const mi=o?.components?.["minecraft:material_instances"]||{};for(const [face,entry] of Object.entries(mi)){const key=entry?.texture;if(typeof key!=="string"||!key){errores.push(`${path}: material_instances ${face} no tiene clave de textura.`);continue;}if(!atlasTerrain[key])errores.push(`${path}: textura de bloque ${key} no está registrada en RP/textures/terrain_texture.json.`);}}
+  // Valida iconos de ítems: JSON -> atlas -> PNG real.
+  const atlasItems = (() => { const f=porRuta.get("RP/textures/item_texture.json"); if(!f||typeof f.content!=="string") return {}; try{return JSON.parse(f.content).texture_data||{};}catch{return {};} })();
+  for (const [path,f] of porRuta) {
+    if(!/^BP\/items\/.+\.json$/i.test(path)||typeof f.content!=="string") continue;
+    let o; try{o=JSON.parse(f.content);}catch{continue;}
+    const it=o["minecraft:item"]; const id=it?.description?.identifier; const icon=it?.components?.["minecraft:icon"];
+    const key=typeof icon==="string"?icon:(icon?.textures?.default||icon?.texture||"");
+    if(!key){errores.push(`${path}: el ítem ${id||"sin id"} no tiene icono declarado.`);continue;}
+    const entry=atlasItems[key];
+    if(!entry){errores.push(`${path}: el icono ${key} no está registrado en RP/textures/item_texture.json.`);continue;}
+    const raw=typeof entry==="string"?entry:entry?.textures;
+    const refs=(Array.isArray(raw)?raw:[raw]).filter(x=>typeof x==="string");
+    if(!refs.length){errores.push(`${path}: la entrada de atlas ${key} no tiene ruta de textura.`);continue;}
+    for(const ref of refs){const clean=ref.replace(/^\//,"").replace(/\.(png|tga|jpg)$/i,"");if(!["png","tga","jpg"].some(ext=>porRuta.has(`RP/${clean}.${ext}`)))errores.push(`${path}: falta el PNG de icono ${ref} (${key}).`);}
+  }
+  // Valida entidades de punta a punta: identifier BP == client_entity RP, geometría, textura, huevo y animaciones.
+  const geometriaOwners=new Map(), texturaOwners=new Map();
+  for (const [path,f] of porRuta) {
+    if(!/^BP\/entities\/.+\.json$/i.test(path)||typeof f.content!=="string") continue;
+    let bpEnt; try{bpEnt=JSON.parse(f.content)["minecraft:entity"];}catch{continue;}
+    const id=bpEnt?.description?.identifier; if(!id){errores.push(`${path}: entidad sin identifier.`);continue;}
+    const stem=path.split("/").pop().replace(/\.json$/i,"");
+    const clientPath=`RP/entity/${stem}.entity.json`; const cf=porRuta.get(clientPath);
+    if(!cf||typeof cf.content!=="string"){errores.push(`${path}: falta client_entity ${clientPath}; el huevo/representación visual no está enlazado.`);continue;}
+    let ce; try{ce=JSON.parse(cf.content)["minecraft:client_entity"]?.description;}catch{errores.push(`${clientPath}: JSON de client_entity inválido.`);continue;}
+    if(!ce||ce.identifier!==id) errores.push(`${clientPath}: identifier (${ce?.identifier||"vacío"}) no coincide con ${id}.`);
+    if(!ce?.spawn_egg) errores.push(`${clientPath}: la entidad ${id} no declara spawn_egg.`);
+    const geo=ce?.geometry?.default; const geoRef=typeof geo==="string"?geo:"";
+    if(!geoRef) errores.push(`${clientPath}: no declara geometría propia.`);
+    else {
+      let encontrado=false,geoConExtremidades=false;
+      for(const [gp,gf] of porRuta){if(!/^RP\/models\/entity\/.+\.geo\.json$/i.test(gp)||typeof gf.content!=="string")continue;try{const j=JSON.parse(gf.content);const g=(j["minecraft:geometry"]||[]).find(x=>x.description?.identifier===geoRef);if(g){encontrado=true;const bones=Array.isArray(g.bones)?g.bones:[];if(!bones.length||!bones.some(b=>Array.isArray(b.cubes)&&b.cubes.length))errores.push(`${gp}: geometría ${geoRef} no contiene huesos/cubos utilizables.`);geoConExtremidades=bones.some(b=>/^(pierna|brazo|pata)_/i.test(String(b.name||"")));const prev=geometriaOwners.get(geoRef);if(prev&&prev!==id)errores.push(`Geometría compartida ${geoRef} entre ${prev} y ${id}; cada criatura necesita modelo individual.`);else geometriaOwners.set(geoRef,id);break;}}catch{}}
+      if(!encontrado) errores.push(`${clientPath}: no existe el archivo de geometría ${geoRef}.`);
+      ce.__ego_geo_has_limbs=geoConExtremidades;
+    }
+    const tx=ce?.textures?.default; if(!tx) errores.push(`${clientPath}: falta textura default.`); else {
+      const clean=String(tx).replace(/^\//,"").replace(/\.(png|tga|jpg)$/i,"");
+      const exists=["png","tga","jpg"].some(ext=>porRuta.has(`RP/${clean}.${ext}`));
+      if(!exists) errores.push(`${clientPath}: falta textura ${tx}.`);
+      const prev=texturaOwners.get(clean);if(prev&&prev!==id) avisos.push(`Las entidades ${prev} y ${id} comparten textura ${tx}.`);else texturaOwners.set(clean,id);
+    }
+    const anims=ce?.animations||{}; const used=Array.isArray(ce?.scripts?.animate)?ce.scripts.animate:[];
+    if(ce?.__ego_geo_has_limbs&&!used.length) errores.push(`${clientPath}: la geometría tiene extremidades móviles pero no tiene animación locomotora conectada.`);
+    for(const alias of used){const animId=anims[alias];if(!animId){errores.push(`${clientPath}: script animate usa alias ${alias} sin declarar.`);continue;}let found=false;for(const [ap,af] of porRuta){if(!/^RP\/animations\/.+\.json$/i.test(ap)||typeof af.content!=="string")continue;try{if(JSON.parse(af.content).animations?.[animId]){found=true;break;}}catch{}}if(!found)errores.push(`${clientPath}: animación ${animId} no existe en RP/animations.`);}
+  }
+  // Scripts: errores sintácticos detectables y patrones API incompatibles no deben pasar como éxito.
+  for(const [path,f] of porRuta){if(!/^BP\/scripts\/.+\.js$/i.test(path)||typeof f.content!=="string")continue;const bal=balanceJs(f.content);if(bal)errores.push(`${path}: posible error de sintaxis (${bal}).`);const lint=lintScriptApi(f.content,"2.10.0");for(const msg of lint.slice(0,4))errores.push(`${path}: ${msg}.`);}
   if (!manifests.length) errores.push("No se encontró ningún manifest.json.");
-  return { ok: errores.length === 0, errores: [...new Set(errores)].slice(0, 40), avisos: [...new Set(avisos)].slice(0, 25), archivos: porRuta.size };
+  return { ok: errores.length === 0, errores: [...new Set(errores)].slice(0, 80), avisos: [...new Set(avisos)].slice(0, 40), archivos: porRuta.size };
 }
 
 const RX_UUID4=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -3467,7 +3655,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.20.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.21.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -3496,7 +3684,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.20.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.21.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -3566,7 +3754,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.20.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.21.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
