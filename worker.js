@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.26.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.27.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -36,7 +36,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.25.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.27.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -1157,9 +1157,9 @@ function routerApiKey(env) {
   return String(env.ROUTER_API_KEY || env.OPENROUTER_API_KEY || "").trim();
 }
 
-async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_MODEL) {
+async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_MODEL, timeoutMs = 55000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 55000);
+  const timer = setTimeout(() => controller.abort(), Math.max(5000, Math.min(55000, Number(timeoutMs) || 55000)));
   try {
     const normalized = messages.map(m => ({
       role: ["system", "user", "assistant"].includes(m?.role) ? m.role : "user",
@@ -1194,6 +1194,31 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
     if (!content) throw new Error("respuesta vacía");
     return { content, model: `openrouter:${model}`, maxTokensUsados: usado };
   } finally { clearTimeout(timer); }
+}
+
+// Orquestación real del equipo EGO: cada rol usa su modelo asignado y tiene
+// un fallback explícito. Los fallbacks no sustituyen al modelo principal si este responde.
+const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning" };
+async function egoRoleChat(role, messages, env, maxTokens = 3000) {
+  if (!routerApiKey(env)) throw new Error("Falta ROUTER_API_KEY/OPENROUTER_API_KEY para el equipo EGO.");
+  const task = EGO_ROLE_TASK[role] || "chat";
+  const envName = `EGO_${String(role).toUpperCase()}_MODEL`;
+  const primary = String(env[envName] || EGO_TEAM_MODELS[role] || "").trim();
+  const fallbacks = task === "code"
+    ? [OR_FREE.code, OR_FREE.fallback]
+    : [OR_FREE.reasoning, OR_FREE.fallback];
+  const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
+  const failures = [];
+  for (let i = 0; i < models.length; i++) {
+    try {
+      const r = await openRouterChat(messages, env, maxTokens, models[i], i === 0 ? 36000 : 18000);
+      if (r.content) return { ...r, role, fallos: failures };
+      failures.push(`${models[i]}: respuesta vacía`);
+    } catch (e) {
+      failures.push(`${models[i]}: ${String(e?.message || e).slice(0, 120)}`);
+    }
+  }
+  throw new Error(`${role} no respondió: ${failures.join(" | ").slice(0, 420)}`);
 }
 
 async function visionOpenRouter(messages, env) {
@@ -1489,6 +1514,7 @@ function limpiarPlan(j,prompt){
    if(RX_3D.test(String(prompt||"")))for(const e of ents)if(!pedidos.has(e.id))pedidos.set(e.id,"");
    for(const [id,desc] of [...pedidos].slice(0,12)){const o=ents.find(e=>e.id===id);base.partes.push({titulo:"Modelo 3D: "+o.nombre,tipo:"modelo3d",detalle:desc||o.descripcion||"",archivos:[],entidad:id});}}
   base.sonidos=[];for(const s of (Array.isArray(j.sonidos)?j.sonidos:[]).slice(0,4)){const texto=String(s&&s.texto||"").replace(/[<>]/g," ").trim().slice(0,240);if(texto.length<3)continue;const nom=String(s&&s.nombre||"voz").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9_]/g,"_").slice(0,20)||"voz";const ent=s&&s.entidad?mcId(base.ns,s.entidad):"";base.sonidos.push({nombre:nom+(base.sonidos.length?"_"+base.sonidos.length:""),texto,entidad:ent});}
+  if(j.revisionEquipo&&typeof j.revisionEquipo==="object")base.revisionEquipo={planner:String(j.revisionEquipo.planner||"").slice(0,100),reasoner:String(j.revisionEquipo.reasoner||"").slice(0,2500),auditor:String(j.revisionEquipo.auditor||"").slice(0,2500)};
   return base;
 }
 async function candidatosCodigo(env,rol){
@@ -1553,8 +1579,20 @@ MODELOS 3D: si el usuario pide un modelo 3D, un diseño propio, un jefe/criatura
 REGLA CLAVE: incluye SOLO lo que el usuario pidió, nada más (cero extras de ejemplo). EGO programa por su cuenta, sin que tú lo escribas: (a) las habilidades de armas (campo habilidad), (b) los poderes de un ítem (campo poderes: vuelo, visión nocturna, etc.), (c) el KIT INICIAL: si el usuario pide recibir al crear/entrar al mundo un cofre con armadura, herramientas o recursos, pon en el JSON "kit":{"armadura":true|false,"herramientas":true|false,"recursos":true|false,"encantar":true|false,"material":"netherite|diamond"} (si no lo pidió, "kit":null) y NO crees bloques, ítems ni scripts para eso. Solo crea los objetos personalizados que el usuario nombró (ej. el reloj o el amuleto).
 Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
-    const r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}],6000,0,"razonar");
-    const plan=limpiarPlan(extractJson(r.raw),prompt);
+    const mensajesPlan=[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}];
+    // Planner diseña; reasoner y auditor revisan en paralelo. Sus observaciones
+    // quedan adjuntas al plan para que el generador las respete en cada módulo.
+    const r=await egoRoleChat("planner",mensajesPlan,env,6000);
+    const plan=limpiarPlan(extractJson(r.content),prompt);
+    const revisionMsgs=[
+      {role:"system",content:"Eres el revisor técnico de un plan Minecraft Bedrock. Detecta requisitos omitidos, incompatibilidades y dependencias. Devuelve observaciones concretas y breves; no reescribas el plan."},
+      {role:"user",content:"SOLICITUD:\n"+prompt+"\nPLAN:\n"+JSON.stringify(plan).slice(0,14000)}
+    ];
+    const [revTecnica,revAuditoria]=await Promise.all([
+      egoRoleChat("reasoner",revisionMsgs,env,1600).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
+      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
+    ]);
+    plan.revisionEquipo={planner:r.model,reasoner:revTecnica.content,auditor:revAuditoria.content};
     const inferred=crearPartesRespaldoMinecraft(prompt);
     const tipos=new Set(plan.partes.filter(x=>x.tipo!=="misc").map(x=>x.tipo));
     const titulos=new Set(plan.partes.map(x=>normMc(x.titulo)));
@@ -1730,6 +1768,7 @@ async function mcPart(body,env){
   const sys=MC_GUIA_BASE+"\n\n"+(MC_GUIAS[parte.tipo]||MC_GUIAS.misc)+
     "\n\nPLAN DEL ADD-ON (úsalo tal cual):\n"+JSON.stringify({nombre:plan.nombre,ns:plan.ns,resumen:plan.resumen,objetos:plan.objetos})+MC_FORMATO;
   const user=`Escribe SOLO los archivos de esta parte: "${parte.titulo}" (tipo ${parte.tipo}).\nQué debe contener: ${parte.detalle||plan.resumen}\n`+
+    (plan.revisionEquipo?`\nREVISIONES DEL EQUIPO (resuelve observaciones pertinentes sin inventar requisitos):\n${JSON.stringify(plan.revisionEquipo).slice(0,5000)}\n`:"")+
     (parte.archivos.length?`Archivos esperados: ${parte.archivos.join(", ")}\n`:"Elige tú las rutas dentro de BP/ o RP/.\n")+
     (previos.length?`Archivos que ya existen en otras partes (no los repitas): ${previos.join(", ")}\n`:"")+
     (existentes?`\nARCHIVOS ACTUALES DEL ADD-ON (modifícalos o amplíalos; devuelve completos los que cambies):\n${existentes}\n`:"")+
@@ -1737,7 +1776,7 @@ async function mcPart(body,env){
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   for(let intento=0;intento<2;intento++){
     let r;
-    try{r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],12000,desde);}
+    try{r=await egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,12000);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
     catch(e){ if(mejor) break; return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+String(e&&e.message||e).slice(0,200)},502); }
     modelo=r.model; fallosM=(r.fallos||[]); desde=r.idx+(intento===0?1:0);
     const p=leerProyectoModelo(r.raw);
@@ -1756,24 +1795,36 @@ async function mcPart(body,env){
     if(!mejor||errores.length<mejor.errores.length||(errores.length===mejor.errores.length&&files.length>=mejor.files.length))mejor={files,errores:errores.slice()};
     if(!errores.length) break;
   }
-  // ---- Revisor independiente (otro modelo, de razonamiento) + corrección ----
-  let revisado="";
-  if(mejor&&mejor.files.length&&["script","entities","items","blocks","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
+  // ---- Reasoner + auditor independientes en paralelo; coder repara si hay defectos ----
+  let revisado="", modelosRevision={};
+  if(mejor&&mejor.files.length&&["script","entities","items","blocks","recipes","loot","spawn","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
     try{
       const texto=mejor.files.filter(f=>/\.(js|json)$/.test(f.path)).map(f=>"=== ARCHIVO: "+f.path+" ===\n"+f.content).join("\n").slice(0,16000);
-      const crit=await Promise.race([llamarCodigo(env,[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:"REQUISITOS:\n"+((plan.requisitos||[]).map((x,k)=>(k+1)+". "+x).join("\n")||prompt.slice(0,1500))+"\n\nPLAN:\n"+JSON.stringify({objetos:plan.objetos,poderes_jugador:plan.poderesJugador})+"\n\nARCHIVOS DE LA PARTE «"+parte.titulo+"»:\n"+texto}],1800,0,"razonar"),tmoMc(50000)]);
-      const jc=extractJson(crit.raw);
-      const probs=(jc&&Array.isArray(jc.problemas)?jc.problemas:[]).map(x=>String((x&&x.archivo?x.archivo+": ":"")+((x&&x.problema)||"")+(x&&x.arreglo?" → "+x.arreglo:"")).slice(0,260)).filter(x=>x.length>12).slice(0,6);
+      const reviewUser="REQUISITOS:\n"+((plan.requisitos||[]).map((x,k)=>(k+1)+". "+x).join("\n")||prompt.slice(0,1500))+"\n\nPLAN:\n"+JSON.stringify({objetos:plan.objetos,poderes_jugador:plan.poderesJugador,revisionEquipo:plan.revisionEquipo||null})+"\n\nARCHIVOS DE LA PARTE «"+parte.titulo+"»:\n"+texto;
+      const [crit,razon]=await Promise.all([
+        egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
+        egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
+      ]);
+      modelosRevision={auditor:crit.model||"no disponible",reasoner:razon.model||"no disponible"};
+      const problemas=[];
+      for(const rr of [crit,razon]){
+        const jc=extractJson(rr.content||"");
+        if(jc&&Array.isArray(jc.problemas)) for(const x of jc.problemas){
+          const item=String((x&&x.archivo?x.archivo+": ":"")+((x&&x.problema)||"")+(x&&x.arreglo?" → "+x.arreglo:"" )).slice(0,260);
+          if(item.length>12&&!problemas.includes(item))problemas.push(item);
+        }
+      }
+      const probs=problemas.slice(0,8);
       if(probs.length){
-        const rr=await Promise.race([llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nUN REVISOR ENCONTRÓ ESTOS PROBLEMAS REALES. Corrígelos TODOS y devuelve TODOS los archivos de esta parte completos otra vez:\n- "+probs.join("\n- ")}],12000,0),tmoMc(150000)]);
-        const np=parsearSalidaMc(rr.raw);
-        if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="el revisor ("+String(crit.model).replace(/^.*\//,"")+") encontró "+probs.length+" problema(s) y se corrigieron";}
-        else revisado="el revisor encontró "+probs.length+" problema(s) pero la corrección no pasó la verificación; se dejó la versión original";
-      }else revisado="revisado por "+String(crit.model).replace(/^.*\//,"")+": sin problemas";
-    }catch(e){}
+        const rr=await egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,12000);
+        const np=parsearSalidaMc(rr.content);
+        if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="auditor y reasoner detectaron "+probs.length+" problema(s); coder aplicó una corrección que pasó la validación básica";}
+        else revisado="auditoría detectó "+probs.length+" problema(s), pero la reparación no pasó; se conserva la versión anterior y se informa la limitación";
+      }else revisado="revisado por auditor + reasoner";
+    }catch(e){revisado="revisión colaborativa incompleta: "+String(e&&e.message||e).slice(0,120);}
   }
   if(!mejor||!mejor.files.length) return json({error:"La parte «"+parte.titulo+"» no produjo archivos válidos.",detalle:errores.slice(0,4)},502);
-  return json({ok:true,files:mejor.files,model:modelo,revisado,fallosModelos:fallosM,avisos:mejor.errores.slice(0,6),parte:i,titulo:parte.titulo});
+  return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:mejor.errores.slice(0,6),parte:i,titulo:parte.titulo});
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
 function balanceJs(src){
@@ -2629,7 +2680,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.25.0",
+    version: "14.27.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2640,6 +2691,8 @@ async function runDiag(env, correoUsuario) {
     revisionDeCalidad: REVISAR,
     ensenarSoloConTokenFirebase: true,
     modelos: { codigo: CF_MODELS.codigo[0], razonar: CF_MODELS.razonar[0], vision: CF_MODELS.vision[0] },
+    equipoEgo: { planner: EGO_TEAM_MODELS.planner, reasoner: EGO_TEAM_MODELS.reasoner, coder: EGO_TEAM_MODELS.coder, auditor: EGO_TEAM_MODELS.auditor },
+    colaboracionMinecraft: true,
     generaImagenes: !!(env.AI || (routerApiKey(env) && env.OPENROUTER_IMAGE_MODEL)),
     editaImagenes: !!env.AI,
     generaTexturas: !!env.AI,
@@ -3948,7 +4001,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.25.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.27.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -3977,7 +4030,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.25.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.27.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
