@@ -2857,8 +2857,10 @@ function detectarTipoMinecraft(prompt, body = {}) {
   const explicit = normMc(String(body.minecraftKind || body.artifactType || ""));
   const allowed = new Set(["addon", "world", "behavior_pack", "resource_pack", "functions", "structures", "skin_pack", "command_project", "education_project"]);
   if (allowed.has(explicit)) return explicit;
-  if (/\b(?:mundo|mapa|mapas|mapa de aventura|aventura|survival world|survival|world template|plantilla de mundo|minijuego|parkour|skyblock|oneblock|supervivencia)\b/.test(t)) return "world";
+  // Prioridad: si el usuario pide explícitamente un add-on, "mundo",
+  // "survival" y "supervivencia" describen su temática, no el formato.
   if (/\b(?:add-?on|mcaddon)\b/.test(t)) return "addon";
+  if (/\b(?:mundo|mapa|mapas|mapa de aventura|aventura|survival world|survival|world template|plantilla de mundo|minijuego|parkour|skyblock|oneblock|supervivencia)\b/.test(t)) return "world";
   if (/\b(?:skin pack|paquete de skins|pack de skins|skins personalizadas)\b/.test(t)) return "skin_pack";
   if (/\b(?:estructura|estructuras|mcstructure|schematic|construccion|construcciones|edificio|edificios|casa|casas|castillo|castillos|ciudad|ciudades|base|bases|monumento|monumentos)\b/.test(t)) return "structures";
   if (/\b(?:comandos|command blocks|bloques de comandos|mcfunction|funciones de comandos|functions?|sistema de comandos|comandos personalizados)\b/.test(t)) return "functions";
