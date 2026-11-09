@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.22.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.24.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -36,7 +36,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.22.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.24.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -1037,7 +1037,7 @@ async function veniceImagen(env, prompt, width, height) {
 async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
   if (!routerApiKey(env) || env.EGO_TEAM_MODE === "0") return null;
 
-  const esProyecto = task === "minecraft-bedrock-addon" || task === "software-project";
+  const esProyecto = task === "software-project" || String(task).startsWith("minecraft-bedrock-");
   const roles = esProyecto ? [
     ["planner", "Eres el arquitecto del proyecto. Extrae requisitos, define una estructura mínima completa y señala dependencias/riesgos. No generes archivos; entrega un plan breve y verificable."],
     ["reasoner", "Eres el revisor técnico. Comprueba compatibilidad, APIs, lógica, dependencias y casos límite. No inventes versiones ni APIs; indica incertidumbres concretas."],
@@ -1165,22 +1165,34 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
       role: ["system", "user", "assistant"].includes(m?.role) ? m.role : "user",
       content: typeof m?.content === "string" ? m.content : textOf(m?.content)
     }));
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Authorization": `Bearer ${routerApiKey(env)}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": env.OPENROUTER_SITE_URL || "https://ego-ai.app",
-        "X-Title": "EGO AI"
-      },
-      body: JSON.stringify({ model, messages: normalized, max_tokens: maxTokens, temperature: 0.2 })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(`HTTP ${response.status}: ${String(data?.error?.message || "proveedor rechazó la solicitud").slice(0, 180)}`);
+    const headers = {
+      "Authorization": `Bearer ${routerApiKey(env)}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": env.OPENROUTER_SITE_URL || "https://ego-ai.app",
+      "X-Title": "EGO AI"
+    };
+    let response, data = {}, usado = Math.max(1, Number(maxTokens) || 1024);
+    const presupuestos = [usado];
+    // OpenRouter puede rechazar una solicitud grande aunque el modelo permita responder
+    // con un presupuesto menor. Reintenta SOLO cuando el 402 menciona max_tokens/afford.
+    for (let intento = 0; intento < 2; intento++) {
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST", signal: controller.signal, headers,
+        body: JSON.stringify({ model, messages: normalized, max_tokens: usado, temperature: 0.2 })
+      });
+      data = await response.json().catch(() => ({}));
+      if (response.ok) break;
+      const detalle = String(data?.error?.message || "proveedor rechazó la solicitud");
+      if (response.status === 402 && intento === 0 && /max[_ ]tokens|only afford|can only afford|fewer max_tokens/i.test(detalle)) {
+        usado = Math.max(64, Math.min(255, usado));
+        continue;
+      }
+      throw new Error(`HTTP ${response.status}: ${detalle.slice(0, 180)}`);
+    }
+    if (!response?.ok) throw new Error(`HTTP ${response?.status || 502}: ${String(data?.error?.message || "proveedor rechazó la solicitud").slice(0, 180)}`);
     const content = salida(data);
     if (!content) throw new Error("respuesta vacía");
-    return { content, model: `openrouter:${model}` };
+    return { content, model: `openrouter:${model}`, maxTokensUsados: usado };
   } finally { clearTimeout(timer); }
 }
 
@@ -2577,7 +2589,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.21.0",
+    version: "14.23.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2840,11 +2852,168 @@ function planDesdeArchivosMinecraft(files, nombre, prompt){
   return plan;
 }
 
+function detectarTipoMinecraft(prompt, body = {}) {
+  const t = normMc(String(prompt || ""));
+  const explicit = normMc(String(body.minecraftKind || body.artifactType || ""));
+  const allowed = new Set(["addon", "world", "behavior_pack", "resource_pack", "functions", "structures", "skin_pack", "command_project", "education_project"]);
+  if (allowed.has(explicit)) return explicit;
+  if (/\b(?:mundo|mapa|mapas|mapa de aventura|aventura|survival world|survival|world template|plantilla de mundo|minijuego|parkour|skyblock|oneblock|supervivencia)\b/.test(t)) return "world";
+  if (/\b(?:add-?on|mcaddon)\b/.test(t)) return "addon";
+  if (/\b(?:skin pack|paquete de skins|pack de skins|skins personalizadas)\b/.test(t)) return "skin_pack";
+  if (/\b(?:estructura|estructuras|mcstructure|schematic|construccion|construcciones|edificio|edificios|casa|casas|castillo|castillos|ciudad|ciudades|base|bases|monumento|monumentos)\b/.test(t)) return "structures";
+  if (/\b(?:comandos|command blocks|bloques de comandos|mcfunction|funciones de comandos|functions?|sistema de comandos|comandos personalizados)\b/.test(t)) return "functions";
+  if (/\b(?:resource pack|texture pack|pack de recursos|pack de texturas|texturas|sonidos|audio|ui personalizada|interfaz personalizada)\b/.test(t)) return "resource_pack";
+  if (/\b(?:behavior pack|behaviour pack|pack de comportamiento|scripts? de minecraft|script api|sistema de habilidades|mec[aá]nicas|mecanicas)\b/.test(t)) return "behavior_pack";
+  if (/\b(?:education edition|minecraft education|leccion interactiva|lesson world)\b/.test(t)) return "education_project";
+  return "addon";
+}
+
+function packManifest(nombre, descripcion, tipo, verSrv, rpUuid) {
+  const uuid = nuevoUuid();
+  const modules = tipo === "resources"
+    ? [{ type: "resources", uuid: nuevoUuid(), version: [1, 0, 0] }]
+    : tipo === "skin_pack"
+      ? [{ type: "skin_pack", uuid: nuevoUuid(), version: [1, 0, 0] }]
+      : [{ type: "data", uuid: nuevoUuid(), version: [1, 0, 0] }];
+  const deps = [];
+  if (tipo !== "resources" && rpUuid) deps.push({ uuid: rpUuid, version: [1, 0, 0] });
+  if (tipo !== "resources" && modules[0].type === "data") {
+    // El módulo script se añade únicamente cuando hay JavaScript real en el pack.
+  }
+  return { format_version: 2, header: { name: String(nombre).slice(0, 80), description: String(descripcion).slice(0, 240), uuid, version: [1, 0, 0], min_engine_version: [1, 21, 0] }, modules, dependencies: deps };
+}
+
+function pngDesdeTexto(valor) {
+  if (valor instanceof Uint8Array) return valor.length > 8 && valor[0] === 137 && valor[1] === 80 && valor[2] === 78 && valor[3] === 71 ? valor : null;
+  let s = String(valor || "").trim();
+  const m = s.match(/^data:image\/png;base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (m) s = m[1];
+  s = s.replace(/\s+/g, "");
+  if (s.length < 24 || !/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null;
+  try {
+    const bin = atob(s), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.length > 8 && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71 ? bytes : null;
+  } catch { return null; }
+}
+
+function limpiarArchivosPack(files, prefijo) {
+  const out = [];
+  for (const f of files || []) {
+    if (!f || typeof f.path !== "string" || !(typeof f.content === "string" || f.content instanceof Uint8Array)) continue;
+    let path = f.path.replace(/\\/g, "/");
+    if (path.startsWith(prefijo + "/")) path = path.slice(prefijo.length + 1);
+    if (!safeProjectPath(path) || /^manifest\.json$/i.test(path)) continue;
+    let content = f.content;
+    if (/\.png$/i.test(path) && typeof content === "string") content = pngDesdeTexto(content);
+    out.push({ path, content });
+  }
+  return out;
+}
+
+async function crearMcpack(files, tipo, nombre, descripcion, verSrv, rpUuid) {
+  const arr = limpiarArchivosPack(files, tipo === "resources" || tipo === "skin_pack" ? "RP" : "BP");
+  if (!arr.length) throw new Error("El modelo no generó archivos de contenido para el pack " + tipo + ".");
+  const js = arr.filter(f => /\.js$/i.test(f.path) && /^(?:scripts|script)\//i.test(f.path));
+  const manifest = packManifest(nombre, descripcion, tipo, verSrv, rpUuid);
+  if (js.length && tipo === "data") {
+    manifest.modules.push({ type: "script", language: "javascript", entry: js[0].path, uuid: nuevoUuid(), version: [1, 0, 0] });
+    manifest.dependencies.push({ module_name: "@minecraft/server", version: String(verSrv || "2.10.0") });
+  }
+  arr.unshift({ path: "manifest.json", content: JSON.stringify(manifest, null, 2) });
+  return { bytes: await createZip(arr), manifest, files: arr };
+}
+
+function validarProyectoMinecraftGeneral(files, mcKind) {
+  const errores = [], avisos = [];
+  const rutas = new Set();
+  for (const f of files || []) {
+    if (!f || typeof f.path !== "string" || typeof f.content !== "string" || !safeProjectPath(f.path)) { errores.push("Hay un archivo con ruta o contenido inválido."); continue; }
+    if (rutas.has(f.path)) errores.push("Ruta duplicada: " + f.path);
+    rutas.add(f.path);
+    if (/\.json$/i.test(f.path) && typeof f.content === "string" && !jsonTolerante(f.content).ok) errores.push(f.path + ": JSON inválido.");
+    if (/\.png$/i.test(f.path) && !pngDesdeTexto(f.content)) errores.push(f.path + ": el contenido no es un PNG binario/base64 válido; no se puede importar como textura.");
+    if (/\.js$/i.test(f.path)) {
+      const bal = balanceJs(f.content); if (bal) errores.push(f.path + ": " + bal);
+      for (const e of lintScriptApi(f.content, "2.10.0")) errores.push(f.path + ": " + e);
+    }
+    if (/\b(?:TODO|PLACEHOLDER|IMPLEMENTAR AQUI|YOUR_CODE_HERE)\b/i.test(f.content)) avisos.push(f.path + ": contiene un marcador que debe completarse.");
+  }
+  const tiene = (rx) => (files || []).some(f => rx.test(f.path));
+  if (mcKind === "world" || mcKind === "education_project") {
+    if (!tiene(/^BP\//i)) errores.push("Falta contenido de Behavior Pack (BP/).");
+    if (!tiene(/^RP\//i)) errores.push("Falta contenido de Resource Pack (RP/).");
+    if (!tiene(/^world_blueprint\/(?:world_plan|plan|blueprint)\.json$/i)) errores.push("Falta world_blueprint/world_plan.json.");
+  } else if (mcKind === "resource_pack" || mcKind === "skin_pack") {
+    if (!tiene(/^RP\//i)) errores.push("Falta contenido de Resource Pack (RP/).");
+  } else if (mcKind === "structures") {
+    if (!(files || []).length) errores.push("No se generaron planos de estructuras.");
+  } else if (!tiene(/^BP\//i)) errores.push("Falta contenido de Behavior Pack (BP/).");
+  if (mcKind === "skin_pack") {
+    if (!tiene(/(?:^|\/)skins\.json$/i)) errores.push("Falta skins.json.");
+    if (!(files || []).some(f => /\.png$/i.test(f.path) && !!pngDesdeTexto(f.content))) errores.push("Faltan texturas PNG binarias válidas para las skins.");
+  }
+  return { ok: errores.length === 0, errores: [...new Set(errores)].slice(0, 50), avisos: [...new Set(avisos)].slice(0, 30), archivos: rutas.size };
+}
+
+async function generarPaqueteMinecraftEspecial(files, mcKind, nombre, prompt, env, request) {
+  const rpSource = files.filter(f => /^RP\//i.test(f.path));
+  const bpSource = files.filter(f => /^BP\//i.test(f.path));
+  const direct = files.filter(f => !/^(?:BP|RP)\//i.test(f.path));
+  let bytes, filename, mime = "application/zip", artifact = mcKind, importable = "false", count = files.length;
+  if (mcKind === "world" || mcKind === "education_project") {
+    // Un .mcworld real necesita level.dat y una base LevelDB de chunks. No falsificamos esos binarios.
+    if (!bpSource.length || !rpSource.length) return json({ error: "El kit de mundo quedó incompleto: faltan archivos reales de Behavior Pack o Resource Pack. No se creó un falso .mcworld.", artifact: "world_kit_incomplete" }, 422);
+    const rp = await crearMcpack(rpSource, "resources", nombre + " - Resources", "Pack de recursos para el proyecto de mundo de EGO AI", env.MC_SERVER_VERSION);
+    const bp = await crearMcpack(bpSource, "data", nombre + " - Behavior", "Pack de comportamiento para el proyecto de mundo de EGO AI", env.MC_SERVER_VERSION, rp.manifest.header.uuid);
+    const blueprint = direct.filter(f => /^(?:world_blueprint|world|README)/i.test(f.path));
+    if (!blueprint.some(f => /world_blueprint\/(?:world_plan|plan|blueprint)\.json$/i.test(f.path))) return json({ error: "El plano del mundo no está completo: falta world_blueprint/world_plan.json. No se empaquetó como mundo listo.", artifact: "world_blueprint_incomplete" }, 422);
+    blueprint.push({ path: "README_MUNDO.md", content: `# ${nombre}\n\nEste paquete contiene los packs y el diseño del mundo, pero NO es un archivo .mcworld. Minecraft genera level.dat y la base LevelDB al crear el mundo desde el juego.\n\n1. Importa ${slugAscii(nombre)}_behavior.mcpack y ${slugAscii(nombre)}_resources.mcpack.\n2. Crea un mundo nuevo en Minecraft Bedrock.\n3. Activa ambos packs en ese mundo.\n4. Sigue el diseño, semilla, comandos y pasos de world_blueprint incluidos.\n\nSolicitud original: ${String(prompt).slice(0, 1500)}\n` });
+    bytes = await createZip([
+      { path: slugAscii(nombre) + "_behavior.mcpack", content: bp.bytes },
+      { path: slugAscii(nombre) + "_resources.mcpack", content: rp.bytes },
+      ...blueprint
+    ]);
+    filename = "ego-" + slugAscii(nombre) + "-world-kit.zip";
+    artifact = mcKind === "education_project" ? "education_world_kit" : "world_kit";
+    count = bp.files.length + rp.files.length + blueprint.length;
+  } else if (mcKind === "resource_pack") {
+    if (!rpSource.length) return json({ error: "El pack de recursos está incompleto: el modelo no generó archivos dentro de RP/. No se creó un .mcpack vacío.", artifact: "resource_pack_incomplete" }, 422);
+    const rp = await crearMcpack(rpSource, "resources", nombre, "Pack de recursos generado por EGO AI", env.MC_SERVER_VERSION);
+    bytes = rp.bytes; filename = "ego-" + slugAscii(nombre) + ".mcpack"; mime = "application/zip"; importable = "true"; count = rp.files.length;
+  } else if (mcKind === "skin_pack") {
+    const skinFiles = rpSource;
+    if (!skinFiles.some(f => /(?:^|\/)skins\.json$/i.test(f.path)) || !skinFiles.some(f => /\.(?:png)$/i.test(f.path))) return json({ error: "El pack de skins no está completo: requiere skins.json y texturas PNG reales. No se entregó como importable.", artifact: "skin_pack_incomplete" }, 422);
+    const rp = await crearMcpack(skinFiles, "skin_pack", nombre, "Pack de skins generado por EGO AI", env.MC_SERVER_VERSION);
+    bytes = rp.bytes; filename = "ego-" + slugAscii(nombre) + "-skins.mcpack"; mime = "application/zip"; importable = "true"; count = rp.files.length;
+  } else if (mcKind === "structures") {
+    const blueprint = files.filter(f => !/\.(?:png|jpg|ogg|mcstructure)$/i.test(f.path));
+    if (!blueprint.length) return json({ error: "No se generó ningún plano de estructura verificable.", artifact: "structure_blueprints_incomplete" }, 422);
+    blueprint.push({ path: "README_ESTRUCTURAS.md", content: `# ${nombre}\n\nIncluye planos, medidas, materiales y/o comandos de construcción. Los archivos JSON descriptivos NO son binarios .mcstructure importables; para obtener una estructura .mcstructure, constrúyela en Minecraft y expórtala con un bloque de estructura.\n\nSolicitud: ${String(prompt).slice(0, 1500)}\n` });
+    bytes = await createZip(blueprint); filename = "ego-" + slugAscii(nombre) + "-structures.zip"; count = blueprint.length; artifact = "structure_blueprints";
+  } else {
+    if (!bpSource.length) return json({ error: "El Behavior Pack está incompleto: el modelo no generó archivos dentro de BP/. No se creó un .mcpack vacío.", artifact: "behavior_pack_incomplete" }, 422);
+    const bp = await crearMcpack(bpSource, "data", nombre, "Pack de comportamiento generado por EGO AI", env.MC_SERVER_VERSION);
+    bytes = bp.bytes; filename = "ego-" + slugAscii(nombre) + ".mcpack"; mime = "application/zip"; importable = "true"; count = bp.files.length;
+    artifact = mcKind === "functions" || mcKind === "command_project" ? "behavior_pack_functions" : "behavior_pack";
+  }
+  return new Response(bytes, { status: 200, headers: {
+    ...corsPara(request, env), "Content-Type": mime,
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "X-EGO-Files": String(count), "X-EGO-Artifact": artifact,
+    "X-EGO-Importable": importable,
+    "X-EGO-Model": "minecraft-project-generator",
+    "X-EGO-Resumen": encodeURIComponent(`${nombre}: tipo ${artifact}. ${importable === "true" ? "Paquete .mcpack importable en Minecraft Bedrock." : mcKind === "world" ? "Kit de mundo con dos packs importables y plano; no es .mcworld." : "Paquete de planos y recursos auxiliares; no es un .mcstructure binario."}`),
+    "Cache-Control": "no-store"
+  }});
+}
+
 async function generarProyecto(body, env, minecraft, request) {
   const prompt = String(body.prompt || body.description || "").trim().slice(0, 12000);
   if (!prompt) return respuestaJsonError("Falta prompt del proyecto.");
   const kind = minecraft ? String(body.packType || "behavior").slice(0, 30) : String(body.kind || "web").slice(0, 40);
-  if (minecraft && body.libre!==true) {
+  const mcKind = minecraft ? detectarTipoMinecraft(prompt, body) : "";
+  if (minecraft && mcKind === "addon" && body.libre!==true) {
     if (body.avanzado===true || !(body.spec || esAddonSimple(prompt))) return json({avanzado:true,motivo:"El pedido necesita el generador por partes."});
     try {
       const r0 = await especificarAddon(prompt, env, body.spec);
@@ -2862,15 +3031,23 @@ async function generarProyecto(body, env, minecraft, request) {
   }
   const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 50 : 35)), 50));
   const system = minecraft
-    ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO.
+    ? (mcKind === "addon" ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO.
 Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y carpeta "RP/" (resource pack). Cada uno con su manifest.json (format_version 2, header con name, description, uuid, version [1,0,0], min_engine_version [1,26,50]; modules con su propio uuid distinto; SOLO el BP depende del RP (uuid del header del RP, version [1,0,0]); el RP NO depende de nada; el BP con script añade la dependencia {\"module_name\":\"@minecraft/server\",\"version\":\"${String(env.MC_SERVER_VERSION || "2.10.0")}\"}). Todos los UUID deben ser v4 válidos y DISTINTOS entre sí.
 Ítems personalizados: BP/items/<nombre>.json con formato "minecraft:item" (format_version "1.21.0"), identificador con prefijo propio (por ejemplo ego:espada_trueno), componentes como minecraft:icon, minecraft:max_stack_size, minecraft:damage, minecraft:hand_equipped, minecraft:durability (NO uses minecraft:cooldown; el enfriamiento va en el script). El ícono es "minecraft:icon":{"textures":{"default":"nombre_corto"}} y ese nombre se define en RP/textures/item_texture.json. Textos en RP/texts/es_ES.lang y RP/texts/en_US.lang y RP/texts/languages.json.
 Recursos gráficos: no escribas bytes binarios como texto. El postprocesador de EGO genera PNG de ítems, bloques e iconos. Cada entidad debe tener su propio client_entity, spawn_egg, geometría, textura y animación locomotora coherentes; no reutilices la misma geometría para criaturas distintas. Los iconos de armas de fuego, botiquines, granadas, munición y armaduras deben ser de su categoría y nunca una espada genérica. No finjas que existe un recurso si no se generó.
 Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script API con "@minecraft/server" en BP/scripts/main.js (módulo "script" en el manifest con language "javascript", entry "scripts/main.js", y dependencia @minecraft/server con una version estable). Para rayos usa dimension.spawnEntity("minecraft:lightning_bolt", ubicacion) o /summon; para partículas dimension.spawnParticle o RP/particles; para sonidos world.playSound o dimension.playSound. Escucha eventos como world.afterEvents.itemUse y world.afterEvents.entityHitEntity y comprueba que el ítem sea el tuyo. Añade cooldown y no uses APIs inventadas. Explica en README.md si hay que activar Experimentos (Beta APIs) y cómo instalarlo.
-Incluye todos los archivos con contenido completo, sin placeholders, sin binarios, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.`
+Incluye todos los archivos con contenido completo, sin placeholders, sin binarios, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.` : `Eres un ingeniero especializado en Minecraft BEDROCK. Tipo de entrega: ${mcKind}. Nunca Java, Forge ni Fabric.
+
+Reglas de salida según tipo:
+- world/education_project: crea un KIT DE MUNDO, no finjas un .mcworld. Genera BP/ y RP/ con packs completos y enlazables, más world_blueprint/world_plan.json con nombre, bioma, semilla sugerida, spawn, reglas, zonas, estructuras, progresión, objetivos y pasos de montaje. Añade world_blueprint/README.md. El Worker empaquetará los dos packs como .mcpack dentro de un ZIP junto con el plano. No generes level.dat falso ni afirmes que es un mundo importable.
+- behavior_pack/functions/command_project: crea un Behavior Pack Bedrock con manifest.json en BP/manifest.json, funciones .mcfunction en BP/functions/, scripts solo si se necesitan y JSON válidos. Comandos exclusivamente Bedrock.
+- resource_pack: crea un Resource Pack en RP/ con manifest.json, texturas y referencias coherentes. No inventes binarios; describe los recursos binarios ausentes.
+- skin_pack: crea la estructura del pack de skins Bedrock, manifest y skins.json; no declares PNG inexistentes.
+- structures: crea planos verificables en JSON/Markdown y comandos Bedrock de construcción. No llames .mcstructure a un JSON de texto ni inventes el formato binario.
+Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y archivos completos. Si hay JavaScript, declara módulo script y dependencia @minecraft/server con versión ${String(env.MC_SERVER_VERSION || "2.10.0")}. No uses APIs inventadas. Incluye README de instalación, compatibilidad y limitaciones. Máximo ${maxFiles} archivos. Solicitud exacta: ${prompt}`)
     : `Eres un arquitecto de software senior. Genera un proyecto ejecutable completo. Incluye README.md con instalación y ejecución, archivos de configuración, código completo y pruebas básicas cuando proceda. Elige una estructura simple y consistente con el stack solicitado. Máximo ${maxFiles} archivos. No incluyas placeholders, secretos, ni rutas absolutas.`;
   const FORMATO = `\n\nFORMATO DE RESPUESTA (obligatorio, sin Markdown, sin explicaciones antes ni después): la primera línea es "PROYECTO: nombre-corto-sin-espacios". Después, para CADA archivo, escribe una línea exacta "=== ARCHIVO: ruta/relativa.ext ===", luego el contenido completo del archivo tal cual (sin comillas ni escapes, sin bloques de código) y termina con la línea exacta "=== FIN ===". Incluye README.md.`;
-  const guiaLec = BASE_LECCIONES.find(l => l.titulo.startsWith(minecraft ? "Minecraft Bedrock" : "Apps y webs completas"));
+  const guiaLec = minecraft && mcKind !== "addon" ? null : BASE_LECCIONES.find(l => l.titulo.startsWith(minecraft ? "Minecraft Bedrock" : "Apps y webs completas"));
   const guiaTxt = guiaLec ? "\n\nGUÍA TÉCNICA OBLIGATORIA (síguela):\n- " + guiaLec.reglas.join("\n- ") + (guiaLec.original ? "\n\n" + guiaLec.original : "") : "";
   const system2 = system + guiaTxt + FORMATO;
   const user = `Crea este proyecto con calidad profesional, funcional y adaptado a móvil cuando aplique. Solicitud: ${prompt}`;
@@ -2880,7 +3057,7 @@ Incluye todos los archivos con contenido completo, sin placeholders, sin binario
     // En proyectos grandes el equipo genera y revisa una propuesta unificada antes del fallback legado.
     if (routerApiKey(env) && env.EGO_TEAM_MODE !== "0") {
       try {
-        const equipo = await egoTeamChat(mensajes, env, 16000, minecraft ? "minecraft-bedrock-addon" : "software-project");
+        const equipo = await egoTeamChat(mensajes, env, 16000, minecraft ? `minecraft-bedrock-${mcKind}` : "software-project");
         if (equipo?.content) {
           const p = leerProyectoModelo(equipo.content);
           const valido = p && p.files.length && (!minecraft || p.files.some(f => /manifest\.json$/i.test(f.path)));
@@ -2905,10 +3082,8 @@ Incluye todos los archivos con contenido completo, sin placeholders, sin binario
       try {
         if (c.tipo==="cf") { const r=await cfChat(c.id,mensajes,env,12000); raw=r.content; }
         else {
-          const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Authorization":`Bearer ${routerApiKey(env)}`,"Content-Type":"application/json","HTTP-Referer":env.OPENROUTER_SITE_URL||"https://ego-ai.app","X-Title":"EGO AI"},body:JSON.stringify({model:c.id,messages:mensajes,temperature:0.15,max_tokens:16000})});
-          const data=await r.json().catch(()=>({}));
-          if(!r.ok) throw new Error(`HTTP ${r.status} ${String(data?.error?.message||"").slice(0,80)}`);
-          raw=salida(data);
+          const r=await openRouterChat(mensajes,env,16000,c.id);
+          raw=r.content;
         }
       } catch(err) { intentos.push(`${etiqueta.split("/").pop()}: ${String(err?.message||err).slice(0,90)}`); continue; }
       const p=leerProyectoModelo(raw);
@@ -2927,6 +3102,12 @@ Incluye todos los archivos con contenido completo, sin placeholders, sin binario
     const name=String(parsed.name|| (minecraft?"ego-bedrock-addon":"ego-project")).replace(/[^\w.-]/g,"-").slice(0,60)||"ego-project";
     const readmeExists=files.some(f=>/^README\.md$/i.test(f.path));
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
+    if(minecraft && mcKind !== "addon") {
+      const cicloGeneral = await cicloReparacionAutomatica(files, env, { minecraft: false });
+      const revisionGeneral = validarProyectoMinecraftGeneral(files, mcKind);
+      if (!revisionGeneral.ok) return json({ error: "El proyecto Minecraft no superó la revisión; no se empaquetó como terminado.", artifact: mcKind, validacion: revisionGeneral, reparacion: cicloGeneral.informe }, 422);
+      return await generarPaqueteMinecraftEspecial(files, mcKind, name, prompt, env, request);
+    }
     if(minecraft){
       // El README final lo construye postprocesarAddon dentro del BP; evita duplicarlo al reparar la raíz del .mcaddon.
       for(let i=files.length-1;i>=0;i--) if(/^README\.md$/i.test(files[i].path)) files.splice(i,1);
@@ -2941,7 +3122,7 @@ Incluye todos los archivos con contenido completo, sin placeholders, sin binario
     if(minecraft) avisos.push(...validacion.errores.map(x=>"Validación pendiente: "+x),...validacion.avisos.map(x=>"Revisión: "+x));
     if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos y validación de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n- La validación estática no sustituye la importación y prueba dentro de Minecraft.\n";}
     const zip=await createZip(files);
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),...(minecraft?{"X-EGO-Artifact":"addon","X-EGO-Importable":"true"}:{}),"Cache-Control":"no-store"}});
   } catch(e) {
     console.error("project_generate",String(e?.message||e).slice(0,250));
     return json({error:"No se pudo generar el proyecto. Revisa la configuración del proveedor y los logs.",detail:String(e?.message||e).slice(0,180)},503);
@@ -3659,7 +3840,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.21.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.23.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -3688,7 +3869,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.21.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.24.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -3758,7 +3939,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({ 
-    ok: true, v: "14.21.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+    ok: true, v: "14.23.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
   });
 
   if (body.recall || body.action === "recall") {
