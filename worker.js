@@ -30,13 +30,13 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, X-Usuario-Correo, Authorization",
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas, X-EGO-Validacion, X-EGO-Reparacion"
+  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas, X-EGO-Validacion, X-EGO-Reparacion, X-EGO-Cobertura"
 };
 
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.24.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.25.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -2589,7 +2589,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.23.0",
+    version: "14.25.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -3010,6 +3010,65 @@ async function generarPaqueteMinecraftEspecial(files, mcKind, nombre, prompt, en
   }});
 }
 
+function auditarCoberturaAddon(files, prompt) {
+  const paths = (files || []).map(f => String(f.path || "").toLowerCase());
+  const contents = (files || []).filter(f => /\.(?:js|json|mcfunction)$/i.test(f.path)).map(f => String(f.content || "")).join("\n").toLowerCase();
+  const count = (rx) => paths.filter(p => rx.test(p)).length;
+  const requested = String(prompt || "").toLowerCase();
+  const missing = [];
+  const m = requested.match(/\b(\d{1,2})\s+(?:tipos?\s+de\s+)?(?:zombis?|criaturas?|entidades?|monstruos?)\b/i);
+  const wantedEntities = m ? Math.min(30, Number(m[1])) : (/(zombi|zombie|criatura|mutante|jefe)/i.test(requested) ? 1 : 0);
+  const entities = count(/^bp\/entities\/.*\.json$/);
+  if (wantedEntities && entities < wantedEntities) missing.push(`Entidades: se solicitaron ${wantedEntities} y solo hay ${entities} archivos BP/entities/*.json.`);
+  if (wantedEntities) {
+    const clients = count(/^rp\/entity\/.*\.json$/);
+    const geometries = count(/^rp\/models\/entity\/.*\.json$/);
+    if (clients < entities || clients < wantedEntities) missing.push(`Client entities: hay ${clients}; se necesitan al menos ${Math.min(wantedEntities, entities)} conectadas a las entidades.`);
+    if (geometries < wantedEntities) missing.push(`Geometrías 3D: hay ${geometries}; se solicitaron al menos ${wantedEntities} modelos distintos.`);
+    const anims = count(/^rp\/animations\/.*\.json$/);
+    if (anims < wantedEntities) missing.push(`Animaciones: hay ${anims}; se solicitaron criaturas animadas y faltan recursos de animación.`);
+  }
+  if (/(arma|armas|pistola|escopeta|rifle|munici[oó]n)/i.test(requested)) {
+    if (!count(/^bp\/items\/.*\.json$/)) missing.push("Armas: no hay definiciones BP/items/*.json.");
+    if (!/(itemuse|item_use|entityhit|entity_hit|minecraft:damage|minecraft:projectile)/i.test(contents)) missing.push("Armas: no se detecta lógica de uso, daño o proyectil conectada.");
+  }
+  if (/(misi[oó]n|misiones|quest|progresi[oó]n)/i.test(requested) && !/(mission|quest|misi[oó]n|objetivo|objective|progress|progreso)/i.test(contents)) missing.push("Misiones: no se detecta lógica de objetivos/progreso en scripts o funciones.");
+  if (/(supervivencia|sed|infecci[oó]n|hambre|herida|hemorragia)/i.test(requested) && !/(thirst|sed|infection|infecci[oó]n|hunger|hambre|bleed|hemorrag|wound|herida)/i.test(contents)) missing.push("Supervivencia: no se detecta implementación de los estados solicitados.");
+  if (/(npc|superviviente|supervivientes|comerciante)/i.test(requested) && !/(minecraft:npc|minecraft:behavior|villager|superviviente|survivor|trader)/i.test(contents)) missing.push("NPCs: no se detecta entidad o comportamiento de supervivientes/comerciantes.");
+  if (/(estructura|hospital|laboratorio|comisar[ií]a|refugio|base militar)/i.test(requested) && !count(/^bp\/(?:structures|functions)\//)) missing.push("Estructuras: no hay estructuras ni funciones de construcción en el paquete.");
+  return { ok: missing.length === 0, requestedEntities: wantedEntities, generatedEntities: entities, missing };
+}
+
+async function completarAddonPorCobertura(files, prompt, env, maxFiles, intentos) {
+  const audit = auditarCoberturaAddon(files, prompt);
+  if (audit.ok || !routerApiKey(env) || env.EGO_ADDON_COMPLETION === "0") return audit;
+  const remaining = Math.max(0, maxFiles - files.length);
+  if (!remaining) { audit.missing.push("Se alcanzó el límite de archivos antes de completar los requisitos."); return audit; }
+  const inventory = files.map(f => `${f.path} (${String(f.content || "").length} caracteres)`).join("\n").slice(0, 9000);
+  const messages = [
+    { role: "system", content: `Eres un ingeniero de Minecraft Bedrock que completa proyectos incompletos. Añade SOLO archivos nuevos que implementen los requisitos faltantes; no repitas rutas existentes, no escribas README promocional, no inventes APIs ni binarios. Cada archivo debe tener contenido completo y coherente con los identificadores/rutas ya existentes. Si un recurso binario PNG no puede generarse como bytes reales, no lo simules ni lo declares existente. Responde con el formato exacto PROYECTO: nombre y bloques === ARCHIVO: ruta === contenido === FIN ===. Máximo ${remaining} archivos. Usa @minecraft/server ${String(env.MC_SERVER_VERSION || "2.10.0")} si hace falta.` },
+    { role: "user", content: `PROYECTO ORIGINAL:\n${String(prompt).slice(0,7000)}\n\nINVENTARIO EXISTENTE (NO DUPLICAR):\n${inventory}\n\nREQUISITOS FALTANTES DETECTADOS:\n- ${audit.missing.join("\n- ")}\n\nAñade los archivos que realmente puedas implementar y conecta las referencias con los recursos existentes. No afirmes que algo está completo si no lo está.` }
+  ];
+  try {
+    const r = await openRouterChat(messages, env, 10000, EGO_TEAM_MODELS.coder);
+    const extra = leerProyectoModelo(r.content);
+    if (extra?.files?.length) {
+      const seen = new Set(files.map(f => f.path.toLowerCase()));
+      let added = 0;
+      for (const f of extra.files) {
+        const path = safeProjectPath(f.path);
+        if (!path || seen.has(path.toLowerCase()) || typeof f.content !== "string" || added >= remaining) continue;
+        if (/\.json$/i.test(path) && !jsonTolerante(f.content).ok) continue;
+        if (/\.js$/i.test(path) && balanceJs(f.content)) continue;
+        files.push({ path, content: f.content.slice(0, 300000) });
+        seen.add(path.toLowerCase()); added++;
+      }
+      intentos.push(`completitud-addon: ${added} archivos nuevos añadidos`);
+    } else intentos.push("completitud-addon: el modelo no devolvió archivos adicionales válidos");
+  } catch (e) { intentos.push("completitud-addon: " + String(e?.message || e).slice(0, 100)); }
+  return auditarCoberturaAddon(files, prompt);
+}
+
 async function generarProyecto(body, env, minecraft, request) {
   const prompt = String(body.prompt || body.description || "").trim().slice(0, 12000);
   if (!prompt) return respuestaJsonError("Falta prompt del proyecto.");
@@ -3031,14 +3090,16 @@ async function generarProyecto(body, env, minecraft, request) {
       return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
     } catch(e) { console.error("tpl_addon",String(e?.message||e).slice(0,200)); return json({avanzado:true,motivo:"plantilla no disponible"}); }
   }
-  const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 50 : 35)), 50));
+  const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 90 : 35)), minecraft ? 100 : 50));
   const system = minecraft
     ? (mcKind === "addon" ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO.
 Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y carpeta "RP/" (resource pack). Cada uno con su manifest.json (format_version 2, header con name, description, uuid, version [1,0,0], min_engine_version [1,26,50]; modules con su propio uuid distinto; SOLO el BP depende del RP (uuid del header del RP, version [1,0,0]); el RP NO depende de nada; el BP con script añade la dependencia {\"module_name\":\"@minecraft/server\",\"version\":\"${String(env.MC_SERVER_VERSION || "2.10.0")}\"}). Todos los UUID deben ser v4 válidos y DISTINTOS entre sí.
 Ítems personalizados: BP/items/<nombre>.json con formato "minecraft:item" (format_version "1.21.0"), identificador con prefijo propio (por ejemplo ego:espada_trueno), componentes como minecraft:icon, minecraft:max_stack_size, minecraft:damage, minecraft:hand_equipped, minecraft:durability (NO uses minecraft:cooldown; el enfriamiento va en el script). El ícono es "minecraft:icon":{"textures":{"default":"nombre_corto"}} y ese nombre se define en RP/textures/item_texture.json. Textos en RP/texts/es_ES.lang y RP/texts/en_US.lang y RP/texts/languages.json.
 Recursos gráficos: no escribas bytes binarios como texto. El postprocesador de EGO genera PNG de ítems, bloques e iconos. Cada entidad debe tener su propio client_entity, spawn_egg, geometría, textura y animación locomotora coherentes; no reutilices la misma geometría para criaturas distintas. Los iconos de armas de fuego, botiquines, granadas, munición y armaduras deben ser de su categoría y nunca una espada genérica. No finjas que existe un recurso si no se generó.
-Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script API con "@minecraft/server" en BP/scripts/main.js (módulo "script" en el manifest con language "javascript", entry "scripts/main.js", y dependencia @minecraft/server con una version estable). Para rayos usa dimension.spawnEntity("minecraft:lightning_bolt", ubicacion) o /summon; para partículas dimension.spawnParticle o RP/particles; para sonidos world.playSound o dimension.playSound. Escucha eventos como world.afterEvents.itemUse y world.afterEvents.entityHitEntity y comprueba que el ítem sea el tuyo. Añade cooldown y no uses APIs inventadas. Explica en README.md si hay que activar Experimentos (Beta APIs) y cómo instalarlo.
-Incluye todos los archivos con contenido completo, sin placeholders, sin binarios, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.` : `Eres un ingeniero especializado en Minecraft BEDROCK. Tipo de entrega: ${mcKind}. Nunca Java, Forge ni Fabric.
+Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script API con "@minecraft/server" en BP/scripts/main.js (módulo "script" en el manifest con language "javascript", entry "scripts/main.js", y dependencia @minecraft/server con una version estable). Para rayos usa APIs verificadas; escucha eventos soportados y comprueba el identificador del objeto. Añade cooldown y no uses APIs inventadas.
+REGLA DE IMPLEMENTACIÓN: cada característica solicitada debe existir como archivo y lógica conectada, no basta con mencionarla en README. Para cada criatura: BP/entities/<id>.json + RP/entity/<id>.entity.json + geometría propia en RP/models/entity/ + textura real PNG en RP/textures/entity/ + animación/controlador cuando se solicite + spawn egg/registro cuando aplique. Los identificadores y rutas deben coincidir exactamente. Para armas: item JSON, icono registrado, receta y lógica real de uso/ataque/recarga si se prometió; no llames arma de fuego a un objeto de combate cuerpo a cuerpo. Para misiones: estado persistente, objetivos/eventos, progreso y recompensas en scripts. Para botín: loot tables referenciadas por entidades/cofres. Para estructuras: solo declara estructuras importables si entregas el archivo binario real; los planos y comandos deben etiquetarse como planos, no como estructuras listas. No incluyas referencias a archivos que no estén presentes.
+Si el usuario solicita una cantidad explícita de criaturas, genera esa cantidad de entidades distintas o declara claramente que no alcanzaste la cantidad. No reduzcas silenciosamente los requisitos. No entregues un README que afirme sistemas no implementados.
+Incluye todos los archivos con contenido completo, sin placeholders, sin binarios falsos, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.` : `Eres un ingeniero especializado en Minecraft BEDROCK. Tipo de entrega: ${mcKind}. Nunca Java, Forge ni Fabric.
 
 Reglas de salida según tipo:
 - world/education_project: crea un KIT DE MUNDO, no finjas un .mcworld. Genera BP/ y RP/ con packs completos y enlazables, más world_blueprint/world_plan.json con nombre, bioma, semilla sugerida, spawn, reglas, zonas, estructuras, progresión, objetivos y pasos de montaje. Añade world_blueprint/README.md. El Worker empaquetará los dos packs como .mcpack dentro de un ZIP junto con el plano. No generes level.dat falso ni afirmes que es un mundo importable.
@@ -3101,6 +3162,10 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
       seen.add(path); files.push({path,content:f.content.slice(0,300000)});
     }
     if(!files.length) return json({error:"El proyecto no contiene archivos válidos.",model},502);
+    let coberturaAddon = null;
+    if (minecraft && mcKind === "addon") {
+      coberturaAddon = await completarAddonPorCobertura(files, prompt, env, maxFiles, intentos);
+    }
     const name=String(parsed.name|| (minecraft?"ego-bedrock-addon":"ego-project")).replace(/[^\w.-]/g,"-").slice(0,60)||"ego-project";
     const readmeExists=files.some(f=>/^README\.md$/i.test(f.path));
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
@@ -3122,9 +3187,10 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files):{ok:true,errores:[],avisos:[],archivos:files.length});
     avisos.push(...ciclo.informe.cambios.map(x=>`Auto-reparación ronda ${x.ronda}: ${x.path}`),...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x));
     if(minecraft) avisos.push(...validacion.errores.map(x=>"Validación pendiente: "+x),...validacion.avisos.map(x=>"Revisión: "+x));
+    if (coberturaAddon && !coberturaAddon.ok) avisos.push("Cobertura funcional incompleta: " + coberturaAddon.missing.join(" | "));
     if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos y validación de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n- La validación estática no sustituye la importación y prueba dentro de Minecraft.\n";}
     const zip=await createZip(files);
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),...(minecraft?{"X-EGO-Artifact":"addon","X-EGO-Importable":"true"}:{}),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),...(minecraft?{"X-EGO-Artifact":"addon","X-EGO-Importable":"true",...(coberturaAddon?{"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(coberturaAddon).slice(0,4000))}:{})}:{}),"Cache-Control":"no-store"}});
   } catch(e) {
     console.error("project_generate",String(e?.message||e).slice(0,250));
     return json({error:"No se pudo generar el proyecto. Revisa la configuración del proveedor y los logs.",detail:String(e?.message||e).slice(0,180)},503);
@@ -3842,7 +3908,7 @@ async function manejar(request, env) {
     return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
   }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.23.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.25.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -3871,7 +3937,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.24.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.25.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
