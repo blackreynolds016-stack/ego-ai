@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.24.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.26.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1429,6 +1429,35 @@ MC_GUIAS.misc=[MC_GUIAS.items,MC_GUIAS.blocks,MC_GUIAS.entities,MC_GUIAS.script,
 function mcNs(v){const s=String(v||"").toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,12);return /^[a-z][a-z0-9_]{1,11}$/.test(s)?s:"ego";}
 function mcId(ns,v){const x=String(v||"").toLowerCase().replace(/^[^:]*:/,"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,40);return x?ns+":"+x:"";}
 const MC_TIPOS_PARTE=["items","blocks","entities","script","recipes","loot","spawn","misc"];
+
+// Plan de respaldo granular: evita enviar un proyecto grande como una única parte "Add-on completo".
+function crearPartesRespaldoMinecraft(prompt){
+  const t=normMc(String(prompt||""));
+  const partes=[];
+  const add=(titulo,tipo,detalle)=>partes.push({titulo,tipo,detalle:String(prompt||"").slice(0,1800)+"\n\nAlcance de esta parte: "+detalle,archivos:[]});
+  if(/zombi|zombie|criatura|mutante|monstruo|jefe|boss|npc|superviviente|supervivientes/.test(t)){
+    add("Entidades y criaturas","entities","Genera las entidades personalizadas pedidas, con identificadores consistentes, comportamiento Bedrock y recursos visuales conectados cuando correspondan.");
+  }
+  if(/arma|armas|pistola|rifle|escopeta|munici[oó]n|botiqu[ií]n|objeto|objetos|[ií]tem|bloque|bloques|equipo/.test(t)){
+    add("Objetos, armas y bloques","items","Genera definiciones reales de objetos/bloques solicitados, iconos registrados, recetas y comportamiento coherente; no simules armas de fuego con golpes cuerpo a cuerpo.");
+  }
+  if(/supervivencia|sed|hambre|infecci[oó]n|herida|hemorragia|misi[oó]n|misiones|progresi[oó]n|habilidad|sistema|npc|superviviente|veh[ií]culo|evento|oleada|comercio/.test(t)){
+    add("Sistemas y lógica de juego","script","Implementa los sistemas solicitados con estados, eventos, persistencia apropiada y conexión real con entidades/objetos. No incluyas funciones vacías ni afirmaciones no implementadas.");
+  }
+  if(/receta|crafteo|fabricaci[oó]n/.test(t)) add("Recetas","recipes","Implementa las recetas pedidas con IDs que existan en el proyecto.");
+  if(/bot[ií]n|cofre|recompensa|loot|suministro/.test(t)) add("Botín y recompensas","loot","Implementa tablas de botín y conecta sus rutas a las entidades/cofres correspondientes.");
+  if(/aparici[oó]n|spawn|oleada|noche|zombi|zombie|criatura|mutante/.test(t)) add("Aparición y progresión","spawn","Implementa reglas de aparición Bedrock compatibles y coherentes con la dificultad solicitada.");
+  if(/estructura|hospital|laboratorio|comisar[ií]a|refugio|base militar|ciudad|edificio|mapa/.test(t)) add("Construcciones y estructuras","misc","Entrega estructuras únicamente en formatos realmente disponibles; si solo puedes crear planos o funciones de construcción, identifícalos como tales.");
+  if(/textura|modelo|animaci[oó]n|sonido|voz|visual|apariencia/.test(t)) add("Recursos visuales y audio","misc","Conecta modelos, texturas, animaciones y sonidos reales; no declares recursos que no existan.");
+  if(!partes.length) {
+    add("Contenido principal","entities","Implementa el contenido principal solicitado con archivos completos.");
+    add("Lógica y configuración","script","Conecta el comportamiento del proyecto mediante lógica Bedrock compatible.");
+  }
+  // Siempre separar los archivos base de recursos/registro del código de gameplay.
+  if(partes.length<12 && !partes.some(x=>x.tipo==="misc")) add("Integración y recursos","misc","Conecta manifests, referencias, idioma, recursos y documentación del contenido generado.");
+  return partes.slice(0,12);
+}
+
 const RX_3D=/(?:modelo\s*(?:3\s*d|propio|grande|personalizado|custom)|\b3\s*d\b|geometr[ií]a|jefe\s+(?:gigante|enorme|grande)|boss\s+gigante|dise[nñ]o\s+propio)/i;
 function limpiarPlan(j,prompt){
   const base={nombre:"Add-on EGO",ns:"ego",resumen:String(prompt||"").slice(0,300),objetos:[],partes:[]};
@@ -1447,18 +1476,18 @@ function limpiarPlan(j,prompt){
     if(!id||vistos.has(id)) continue; vistos.add(id);
     base.objetos.push({id,tipo,icono:["arma_fuego","pistola","rifle","escopeta","francotirador","botiquin","granada","municion","armadura","escudo","espada","hacha","pico","vara","reloj","libro","corona","botella","anillo","lingote","orbe","gema"].includes(normMc(o.icono))?normMc(o.icono):"",nombre:tituloCaso(String(o.nombre||id.split(":")[1].replace(/_/g," "))).slice(0,40),descripcion:String(o.descripcion||"").slice(0,300),habilidad:["rayo","fuego","hielo","explosion","veneno","viento","curacion","ninguna"].includes(normMc(o.habilidad))?normMc(o.habilidad):"",entrega:["kit","crafteo","creativo","botin","aparece"].includes(normMc(o.entrega))?normMc(o.entrega):"",rayos:Number(o.rayos)||0,espera:Number(o.espera)||0,poderes:(Array.isArray(o.poderes)?o.poderes:[]).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES[x]).slice(0,8)});
   }
-  for(const p of (sinObj&&base.poderesJugador.length?[]:(Array.isArray(j.partes)?j.partes:[])).slice(0,8)){
+  for(const p of (sinObj&&base.poderesJugador.length?[]:(Array.isArray(j.partes)?j.partes:[])).slice(0,12)){
     if(/^(?:textur|sonid|sound|audio|icon|imagen)/i.test(String(p&&p.titulo||"").trim())&&!/(?:script|logic|comport)/i.test(String(p&&p.titulo||"")))continue; // EGO crea las texturas solo; los sonidos no se pueden generar
     if(p&&p.tipo==="modelo3d")continue;
     const tipo=MC_TIPOS_PARTE.includes(p&&p.tipo)?p.tipo:"misc";
     const arch=(Array.isArray(p&&p.archivos)?p.archivos:[]).map(x=>safeProjectPath(x)).filter(x=>x&&/^(BP|RP)\//.test(x)&&!/manifest\.json$|\.png$/i.test(x)).slice(0,12);
     base.partes.push({titulo:String((p&&p.titulo)||"Parte "+(base.partes.length+1)).slice(0,60),tipo,detalle:String((p&&p.detalle)||"").slice(0,1500),archivos:arch});
   }
-  if(!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes.push({titulo:"Add-on completo",tipo:"misc",detalle:String(prompt||"").slice(0,1500),archivos:[]});
+  if(!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes=crearPartesRespaldoMinecraft(prompt);
   {const ents=base.objetos.filter(o=>o.tipo==="entity");const pedidos=new Map();
-   for(const q of (Array.isArray(j.modelos3d)?j.modelos3d:[]).slice(0,6)){const id=mcId(base.ns,q&&(q.entidad||q.id));if(ents.some(e=>e.id===id))pedidos.set(id,String((q&&q.descripcion)||"").slice(0,500));}
+   for(const q of (Array.isArray(j.modelos3d)?j.modelos3d:[]).slice(0,12)){const id=mcId(base.ns,q&&(q.entidad||q.id));if(ents.some(e=>e.id===id))pedidos.set(id,String((q&&q.descripcion)||"").slice(0,500));}
    if(RX_3D.test(String(prompt||"")))for(const e of ents)if(!pedidos.has(e.id))pedidos.set(e.id,"");
-   for(const [id,desc] of [...pedidos].slice(0,4)){const o=ents.find(e=>e.id===id);base.partes.push({titulo:"Modelo 3D: "+o.nombre,tipo:"modelo3d",detalle:desc||o.descripcion||"",archivos:[],entidad:id});}}
+   for(const [id,desc] of [...pedidos].slice(0,12)){const o=ents.find(e=>e.id===id);base.partes.push({titulo:"Modelo 3D: "+o.nombre,tipo:"modelo3d",detalle:desc||o.descripcion||"",archivos:[],entidad:id});}}
   base.sonidos=[];for(const s of (Array.isArray(j.sonidos)?j.sonidos:[]).slice(0,4)){const texto=String(s&&s.texto||"").replace(/[<>]/g," ").trim().slice(0,240);if(texto.length<3)continue;const nom=String(s&&s.nombre||"voz").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9_]/g,"_").slice(0,20)||"voz";const ent=s&&s.entidad?mcId(base.ns,s.entidad):"";base.sonidos.push({nombre:nom+(base.sonidos.length?"_"+base.sonidos.length:""),texto,entidad:ent});}
   return base;
 }
@@ -1522,14 +1551,25 @@ ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enu
 PODERES DEL JUGADOR: si el usuario quiere TENER poderes él mismo (inmortal, vida infinita, volar, velocidad, fuerza, daño infinito, aura, miedo en monstruos, aldeanos que lo adoran, destruir, levantar objetos, visión nocturna, saltar, respirar bajo el agua, sin hambre, inmune al fuego), ponlos en \"poderes_jugador\" usando SOLO estos nombres: inmortal, vida_infinita, vuelo, velocidad, fuerza, dano_infinito, aura, miedo_mobs, adoracion_aldeanos, destruccion, telekinesis, vision_nocturna, salto, respirar_agua, sin_hambre, resistencia_fuego. EGO los programa y se activan solos al entrar al mundo: NO crees ítems, criaturas ni scripts para eso. Si dijo que no quiere objetos, objetos=[] y partes=[].
 MODELOS 3D: si el usuario pide un modelo 3D, un diseño propio, un jefe/criatura grande o que se vea diferente a los mobs del juego, pon en \"modelos3d\" una entrada por criatura: {\"entidad\":\"ns:id de un objeto tipo entity\",\"descripcion\":\"cómo se ve: forma, tamaño, colores, partes\"}. EGO diseña la geometría y la textura por su cuenta. SONIDOS Y VOCES: si pide que algo hable o tenga voz/sonido propio, pon en \"sonidos\" {\"nombre\":\"corto\",\"texto\":\"frase exacta que dirá (máx 240 caracteres)\",\"entidad\":\"ns:id opcional: suena cuando aparece\"}; EGO genera el audio con voz sintética.
 REGLA CLAVE: incluye SOLO lo que el usuario pidió, nada más (cero extras de ejemplo). EGO programa por su cuenta, sin que tú lo escribas: (a) las habilidades de armas (campo habilidad), (b) los poderes de un ítem (campo poderes: vuelo, visión nocturna, etc.), (c) el KIT INICIAL: si el usuario pide recibir al crear/entrar al mundo un cofre con armadura, herramientas o recursos, pon en el JSON "kit":{"armadura":true|false,"herramientas":true|false,"recursos":true|false,"encantar":true|false,"material":"netherite|diamond"} (si no lo pidió, "kit":null) y NO crees bloques, ítems ni scripts para eso. Solo crea los objetos personalizados que el usuario nombró (ej. el reloj o el amuleto).
-Reglas: máximo 8 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
+Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
     const r=await llamarCodigo(env,[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}],6000,0,"razonar");
     const plan=limpiarPlan(extractJson(r.raw),prompt);
+    const inferred=crearPartesRespaldoMinecraft(prompt);
+    const tipos=new Set(plan.partes.filter(x=>x.tipo!=="misc").map(x=>x.tipo));
+    const titulos=new Set(plan.partes.map(x=>normMc(x.titulo)));
+    for(const parte of inferred){
+      if(plan.partes.length>=12) break;
+      const titulo=normMc(parte.titulo);
+      if(parte.tipo==="misc" ? !titulos.has(titulo) : !tipos.has(parte.tipo)){
+        plan.partes.push(parte); titulos.add(titulo); tipos.add(parte.tipo);
+      }
+    }
     return json({ok:true,plan,model:r.model,fallosModelos:r.fallos||[]});
   }catch(e){
     const plan=limpiarPlan(null,prompt);
-    return json({ok:true,plan,model:"plan-basico",aviso:String(e&&e.message||e).slice(0,160)});
+    plan.partes=crearPartesRespaldoMinecraft(prompt);
+    return json({ok:true,plan,model:"plan-basico-granular",aviso:"El planificador IA no respondió; se creó un plan de respaldo dividido en módulos. Cada módulo debe validarse por separado.",detalle:String(e&&e.message||e).slice(0,160)});
   }
 }
 
