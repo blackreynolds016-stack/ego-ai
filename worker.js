@@ -1,5 +1,15 @@
+/*
+ * EGO AI Worker v14.29.0 — cambios sobre v14.28.0
+ *  - balanceJs reescrito: entiende regex literales, plantillas anidadas y comentarios (0 falsos positivos en 281 JS reales; el anterior daba 16).
+ *  - Validador estructural con severidades: CRITICO (bloquea), ADVERTENCIA, INFORMATIVO. Solo lo crítico impide exportar.
+ *  - Spawn rules de mobs vanilla (minecraft:*) aceptadas; client_entity se busca por identificador; eventos system.* reconocidos.
+ *  - Reparación: paso determinista previo (JSON, entry del manifest, rutas de atlas, spawn_egg) + modelos reparadores con respaldo,
+ *    creación de archivos faltantes permitidos, rechazo de parches destructivos, reversión si no hay progreso, historial y modelos usados.
+ *  - Respuesta 422 con criticos[] {archivo, problema, causa, solucion}, advertencias[] y reparacion{}; cabeceras compactas (JSON válido).
+ *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
+ */
 // ============================================================
-// EGO AI WORKER v14.28.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.29.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -36,7 +46,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.28.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.29.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -1170,7 +1180,7 @@ function lintScriptApi(texto, verSrv="2.10.0"){
   for(const m of sin.matchAll(/\.\s*(afterEvents|beforeEvents)\s*\.\s*([A-Za-z_$][\w$]*)/g)){
     const lista=api.events[m[1]==="afterEvents"?"after":"before"];
     if(es210 && apiNo210.has(m[2])){prob.push("el evento "+m[1]+"."+m[2]+" requiere @minecraft/server 2.11.0 o superior");continue;}
-    if(!lista.includes(m[2]))prob.push("el evento "+m[1]+"."+m[2]+" no existe"+(m[1]==="beforeEvents"&&api.events.after.includes(m[2])?" (existe en afterEvents)":""));
+    if(!lista.includes(m[2])&&!["startup","shutdown","scriptEventReceive"].includes(m[2]))prob.push("el evento "+m[1]+"."+m[2]+" no existe"+(m[1]==="beforeEvents"&&api.events.after.includes(m[2])?" (existe en afterEvents)":""));
   }
   // 3) métodos llamados que no existen en la API ni en JavaScript ni en el propio script
   const vistos=new Set();
@@ -1664,19 +1674,47 @@ async function mcPart(body,env){
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
 function balanceJs(src){
-  const pila=[],par={"}":"{",")":"(","]":"["};let i=0,n=src.length;
+  // Comprueba llaves, paréntesis, corchetes, comillas y plantillas. Entiende comentarios, regex literales y ${...} anidados.
+  src=String(src);
+  const st=[],par={"}":"{",")":"(","]":"["},n=src.length,RXKW=new Set(["return","typeof","case","of","in","delete","void","throw","new","else","do","yield","await","instanceof"]);
+  let i=0,pc="",pw="";
+  const plantilla=()=>{ // i apunta justo después de ` o de } que cierra un ${...}
+    while(i<n){const ch=src[i];
+      if(ch==="\\"){i+=2;continue;}
+      if(ch==="`"){i++;return true;}
+      if(ch==="$"&&src[i+1]==="{"){i+=2;st.push("${");return true;}
+      i++;}
+    return false;
+  };
   while(i<n){
     const c=src[i],d=src[i+1];
+    if(c===" "||c==="\t"||c==="\n"||c==="\r"){i++;continue;}
     if(c==="/"&&d==="/"){while(i<n&&src[i]!=="\n")i++;continue;}
     if(c==="/"&&d==="*"){i=src.indexOf("*/",i+2);if(i<0)return "comentario sin cerrar";i+=2;continue;}
-    if(c==="'"||c==='"'){const q=c;i++;while(i<n&&src[i]!==q&&src[i]!=="\n"){if(src[i]==="\\")i++;i++;}if(src[i]!==q)return "comillas sin cerrar";i++;continue;}
-    if(c==="`"){i++;while(i<n&&src[i]!=="`"){if(src[i]==="\\")i++;i++;}if(i>=n)return "plantilla ` sin cerrar";i++;continue;}
-    if("{([".includes(c))pila.push(c);
-    else if("})]".includes(c)){if(pila.pop()!==par[c])return "llaves o paréntesis desbalanceados";}
-    i++;
+    if(c==="'"||c==='"'){const q=c;i++;while(i<n&&src[i]!==q&&src[i]!=="\n"){if(src[i]==="\\")i++;i++;}if(src[i]!==q)return "comillas sin cerrar";i++;pc=q;pw="";continue;}
+    if(c==="`"){i++;const r=plantilla();if(!r&&i>=n)return "plantilla ` sin cerrar";if(!r)return "plantilla ` sin cerrar";pc="`";pw="";continue;}
+    if(c==="/"){
+      const esRegex=pc===""||"(,=:[!&|?{;+-*%<>~^".includes(pc)||(/[A-Za-z_$]/.test(pc)&&RXKW.has(pw));
+      if(esRegex){let j=i+1,cls=false,ok=false;
+        while(j<n&&src[j]!=="\n"){const ch=src[j];if(ch==="\\"){j+=2;continue;}if(ch==="[")cls=true;else if(ch==="]")cls=false;else if(ch==="/"&&!cls){ok=true;break;}j++;}
+        if(ok){i=j+1;while(i<n&&/[a-z]/i.test(src[i]))i++;pc="/";pw="";continue;}
+      }
+      pc="/";pw="";i++;continue;
+    }
+    if(c==="{"||c==="("||c==="["){st.push(c);pc=c;pw="";i++;continue;}
+    if(c==="}"||c===")"||c==="]"){
+      const top=st.pop();
+      if(c==="}"&&top==="${"){i++;if(!plantilla())return "plantilla ` sin cerrar";pc="`";pw="";continue;}
+      if(top!==par[c])return "llaves o paréntesis desbalanceados";
+      pc=c;pw="";i++;continue;
+    }
+    if(/[A-Za-z_$]/.test(c)){let j=i+1;while(j<n&&/[\w$]/.test(src[j]))j++;pw=src.slice(i,j);pc=src[j-1];i=j;continue;}
+    if(/[0-9]/.test(c)){let j=i+1;while(j<n&&/[\w.]/.test(src[j]))j++;pc="0";pw="";i=j;continue;}
+    pc=c;pw="";i++;
   }
-  return pila.length?"falta cerrar "+pila.length+" llave(s) o paréntesis":"";
+  return st.length?"falta cerrar "+st.length+" llave(s) o paréntesis":"";
 }
+
 
 // ---------- Texturas generadas por código (PNG reales) ----------
 function semillaDe(t){let h=2166136261;for(const c of String(t)){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;}
@@ -2396,7 +2434,7 @@ async function mcBuild(body,env,request){
     const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
     const validacion=ciclo.validacion||validarAddonEstructural(r.files);
     if (!validacion.ok || validacion.errores.length) {
-      return json({ error: "El add-on no superó la validación estructural y no se exportó como terminado.", estado: "validacion_fallida", archivos: validacion.archivos, errores: validacion.errores.slice(0,40), avisos: validacion.avisos.slice(0,30), reparacion: ciclo.informe }, 422);
+      return respuestaValidacionFallida(validacion, ciclo);
     }
     for(const x of ciclo.informe.cambios)r.notas.push(`Auto-reparación ronda ${x.ronda}: ${x.path}`);
     for(const x of ciclo.informe.avisosFinales)r.notas.push("Auto-reparación: "+x);
@@ -2410,7 +2448,7 @@ async function mcBuild(body,env,request){
     const nombre="ego-"+slugAscii(plan.nombre);
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
@@ -2519,7 +2557,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.28.0",
+    version: "14.29.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -3010,12 +3048,12 @@ async function generarProyecto(body, env, minecraft, request) {
       const reparaciones = repararAddon(files, env.MC_SERVER_VERSION);
       const ciclo = await cicloReparacionAutomatica(files, env, { minecraft: true });
       const validacion = ciclo.validacion || validarAddonEstructural(files);
-      if (!validacion.ok || validacion.errores.length) return json({ error: "El add-on no superó la validación estructural y no se exportó como terminado.", estado: "validacion_fallida", errores: validacion.errores.slice(0,40), avisos: validacion.avisos.slice(0,30), reparacion: ciclo.informe }, 422);
+      if (!validacion.ok || validacion.errores.length) return respuestaValidacionFallida(validacion, ciclo);
       const avisos = [...reparaciones, ...ciclo.informe.cambios.map(x=>`Auto-reparación (ronda ${x.ronda}): ${x.path}`), ...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x), ...validacion.errores.map(x=>"Validación pendiente: "+x), ...validacion.avisos.map(x=>"Revisión: "+x)];
       const readme = files.find(f=>/^BP\/README\.md$/i.test(f.path));
       if(readme && avisos.length) readme.content += "\n\n## Revisión de EGO AI\n"+avisos.map(x=>"- "+x).join("\n")+"\n";
       const zip = await createZip(files);
-      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
+      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
     } catch(e) { console.error("tpl_addon",String(e?.message||e).slice(0,200)); return json({avanzado:true,motivo:"plantilla no disponible"}); }
   }
   const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 90 : 35)), minecraft ? 100 : 50));
@@ -3114,13 +3152,13 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
     const ciclo=await cicloReparacionAutomatica(files,env,{minecraft});
     const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files):{ok:true,errores:[],avisos:[],archivos:files.length});
-    if (minecraft && (!validacion.ok || validacion.errores.length)) return json({ error: "El proyecto Minecraft no superó la validación estructural y no se exportó como terminado.", estado: "validacion_fallida", errores: validacion.errores.slice(0,40), avisos: validacion.avisos.slice(0,30), reparacion: ciclo.informe }, 422);
+    if (minecraft && (!validacion.ok || validacion.errores.length)) return respuestaValidacionFallida(validacion, ciclo);
     avisos.push(...ciclo.informe.cambios.map(x=>`Auto-reparación ronda ${x.ronda}: ${x.path}`),...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x));
     if(minecraft) avisos.push(...validacion.errores.map(x=>"Validación pendiente: "+x),...validacion.avisos.map(x=>"Revisión: "+x));
     if (coberturaAddon && !coberturaAddon.ok) avisos.push("Cobertura funcional incompleta: " + coberturaAddon.missing.join(" | "));
     if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos y validación de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n- La validación estática no sustituye la importación y prueba dentro de Minecraft.\n";}
     const zip=await createZip(files);
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacion).slice(0,5000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify(ciclo.informe).slice(0,3000)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),...(minecraft?{"X-EGO-Artifact":"addon","X-EGO-Importable":"true",...(coberturaAddon?{"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(coberturaAddon).slice(0,4000))}:{})}:{}),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),...(minecraft?{"X-EGO-Artifact":"addon","X-EGO-Importable":"true",...(coberturaAddon?{"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(coberturaAddon).slice(0,4000))}:{})}:{}),"Cache-Control":"no-store"}});
   } catch(e) {
     console.error("project_generate",String(e?.message||e).slice(0,250));
     return json({error:"No se pudo generar el proyecto. Revisa la configuración del proveedor y los logs.",detail:String(e?.message||e).slice(0,180)},503);
@@ -3475,75 +3513,220 @@ function construirAddonItem(s,version){
 
 // Ciclo de reparación asistida: revisa JS/JSON, aplica parches acotados y vuelve a validar.
 // Solo modifica archivos existentes; máximo tres rondas. No ejecuta Minecraft ni simula pruebas reales.
-async function cicloReparacionAutomatica(files, env, opciones = {}) {
-  const informe = { habilitado: !!routerApiKey(env) && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], erroresFinales: [], avisosFinales: [], estado: "omitido" };
-  if (!Array.isArray(files) || !informe.habilitado) {
-    const v = opciones.minecraft ? validarAddonEstructural(files) : null;
-    if (v) { informe.erroresFinales = v.errores; informe.avisosFinales = v.avisos; }
-    return { validacion: v, informe };
+// ============================================================
+// Clasificación de hallazgos: CRÍTICO bloquea la exportación; ADVERTENCIA se informa; INFORMATIVO es una recomendación.
+// ============================================================
+const GEO_VANILLA_RX = /geometry\.(?:humanoid|zombie|skeleton|creeper|spider|pig|cow|chicken|sheep|villager|irongolem|enderman|witch|wolf|cat|horse|bat|blaze|ghast|slime|squid|dragon|wither|player)/i;
+const HALLAZGO_ADVERTENCIA = [
+  /falta el PNG de icono/, /no tiene icono declarado/, /no está registrado en RP\/textures\/item_texture/, /la entrada de atlas/,
+  /falta el archivo de textura/, /: falta textura /, /no declara spawn_egg/, /extremidades móviles/,
+  /referencia a objeto inexistente/, /ingrediente inexistente/, /spawn_rule .* no tiene definición/,
+  /material_instances/, /textura de bloque .* no está registrada/,
+  /: (?:llama a \.|usa new |el evento |importa «)/, /no existe el archivo de geometría geometry\.(?:humanoid|zombie|skeleton|creeper|spider|pig|cow|chicken|sheep|villager|irongolem|enderman|witch|wolf|cat|horse|bat|blaze|ghast|slime|squid|dragon|wither|player)/i
+];
+const DIAGNOSTICOS = [
+  [/JSON inválido/, "sintaxis JSON rota (coma, comilla o llave mal puesta)", "EGO normaliza comas y comentarios; si persiste, el reparador reescribe ese archivo"],
+  [/posible error de sintaxis/, "el script tiene llaves, paréntesis o comillas sin cerrar", "el reparador corrige el script y se vuelve a validar"],
+  [/UUID repetido/, "dos packs o módulos comparten el mismo UUID", "se genera un UUID nuevo para uno de ellos"],
+  [/UUID/, "UUID ausente o con formato inválido", "se reemplaza por un UUID v4 válido"],
+  [/entry de script/, "el manifest apunta a un script que no existe", "se enlaza al script real (scripts/main.js) o se crea el faltante"],
+  [/dependencia versionada/, "el pack con scripts no declara @minecraft/server", "se añade la dependencia con la versión del servidor"],
+  [/Dependencia circular|no declara dependencia del Resource Pack/, "las dependencias entre Behavior Pack y Resource Pack están mal enlazadas", "el BP debe depender del RP (nunca al revés); se corrige el manifest"],
+  [/Identificador duplicado/, "dos archivos definen el mismo identificador", "se renombra o elimina el duplicado"],
+  [/client_entity|huevo/, "la entidad del BP no tiene su definición visual (client_entity) enlazada", "se crea o se enlaza el client_entity con el mismo identificador"],
+  [/spawn_egg/, "la entidad no tiene huevo de aparición", "se añade spawn_egg con colores por defecto"],
+  [/geometr/, "la geometría 3D referenciada no existe o está vacía", "se genera o se enlaza el modelo .geo.json"],
+  [/animaci/, "la animación referenciada no existe o no está conectada", "se declara el alias y se conecta la animación"],
+  [/textura|PNG|icono|atlas|material_instances/, "una textura o icono referenciado no existe o no está registrado", "se registra en el atlas o se genera el PNG que falta"],
+  [/spawn_rule/, "la regla de aparición apunta a una entidad que no está en el add-on", "se crea la entidad o se corrige el identificador"],
+  [/objeto inexistente|ingrediente inexistente/, "la receta usa un objeto que no existe", "se corrige el identificador o se crea el objeto"],
+  [/llama a \.|usa new |el evento |importa «/, "el script usa una API que no existe en @minecraft/server de esta versión", "el reparador la sustituye por una API vigente"],
+  [/manifest/, "el manifest.json está ausente o incompleto", "se reconstruye con header, módulos y UUID válidos"]
+];
+function diagnosticarHallazgo(msg, severidad) {
+  const m = String(msg || "");
+  const archivo = (m.match(/((?:BP|RP)\/[^\s:]+?\.(?:json|js|png|lang|mcfunction|mcstructure|ogg|wav))/i) || [])[1] || "";
+  let causa = "validación estructural fallida", solucion = "revisar el archivo y volver a generar la parte afectada";
+  for (const [rx, c, s] of DIAGNOSTICOS) if (rx.test(m)) { causa = c; solucion = s; break; }
+  return { severidad, archivo, problema: m.replace(/^((?:BP|RP)\/[^\s:]+:\s*)/, "").slice(0, 240), causa, solucion };
+}
+function clasificarHallazgos(errores, avisos, archivos) {
+  const criticos = [], advertencias = [...new Set(avisos || [])];
+  for (const e of [...new Set(errores || [])]) {
+    if (HALLAZGO_ADVERTENCIA.some(rx => rx.test(e))) advertencias.push(e); else criticos.push(e);
   }
+  const informativos = ["Esta revisión es estática: no sustituye importar y probar el add-on dentro de Minecraft."];
+  const detalle = [...criticos.map(x => diagnosticarHallazgo(x, "CRITICO")), ...advertencias.map(x => diagnosticarHallazgo(x, "ADVERTENCIA"))];
+  return { ok: criticos.length === 0, errores: criticos.slice(0, 80), avisos: advertencias.slice(0, 60), criticos: criticos.slice(0, 80), advertencias: advertencias.slice(0, 60), informativos, detalle: detalle.slice(0, 120), archivos };
+}
+function validacionCompacta(v) {
+  const c = x => String(x).slice(0, 180);
+  return { ok: !!v?.ok, archivos: v?.archivos || 0, errores: (v?.criticos || v?.errores || []).slice(0, 8).map(c), avisos: (v?.advertencias || v?.avisos || []).slice(0, 10).map(c), nCriticos: (v?.criticos || v?.errores || []).length, nAdvertencias: (v?.advertencias || v?.avisos || []).length };
+}
+function respuestaValidacionFallida(validacion, ciclo) {
+  const crit = (validacion.detalle || []).filter(d => d.severidad === "CRITICO");
+  const resumen = crit.slice(0, 3).map(d => `${d.archivo || "proyecto"}: ${d.problema} (causa: ${d.causa}; intento: ${d.solucion})`).join(" | ");
+  const inf = ciclo?.informe || {};
+  return json({
+    error: `El add-on no superó la validación estructural y no se exportó como terminado. ${crit.length} problema(s) crítico(s): ${resumen}`.slice(0, 900),
+    estado: "validacion_fallida",
+    archivos: validacion.archivos,
+    criticos: crit.slice(0, 40),
+    advertencias: (validacion.detalle || []).filter(d => d.severidad === "ADVERTENCIA").slice(0, 30),
+    informativos: validacion.informativos || [],
+    errores: (validacion.errores || []).slice(0, 40),
+    avisos: (validacion.avisos || []).slice(0, 30),
+    reparacion: { estado: inf.estado, rondas: inf.rondas, modelos: inf.modelos || [], cambios: (inf.historial || []).slice(0, 40), noCorregidos: (inf.noCorregidos || []).slice(0, 20), avisos: (inf.avisosFinales || []).slice(0, 20) }
+  }, 422);
+}
+
+// Reparaciones deterministas (sin IA): solo cambios seguros y demostrables.
+function repararDeterministico(files) {
+  const cambios = [];
+  const por = new Map(files.map(f => [f.path, f]));
+  const hecho = (path, motivo) => cambios.push({ path, motivo });
+  for (const f of files) {
+    if (!/\.json$/i.test(f.path) || typeof f.content !== "string") continue;
+    try { JSON.parse(f.content); continue; } catch {}
+    const t = jsonTolerante(f.content);
+    if (t.ok) { f.content = JSON.stringify(t.obj, null, 2); hecho(f.path, "JSON con comas o comentarios sobrantes normalizado"); }
+  }
+  for (const f of files) {
+    if (!/(^|\/)manifest\.json$/i.test(f.path) || typeof f.content !== "string") continue;
+    let o; try { o = JSON.parse(f.content); } catch { continue; }
+    const root = f.path.split("/")[0]; let ch = false;
+    for (const m of (Array.isArray(o.modules) ? o.modules : [])) {
+      if (!m || m.type !== "script") continue;
+      const e = String(m.entry || "").replace(/^\/+/, "");
+      if (e && por.has(`${root}/${e}`)) continue;
+      const cand = files.filter(x => x.path.startsWith(root + "/scripts/") && /\.js$/i.test(x.path));
+      const pick = cand.find(x => /\/main\.js$/i.test(x.path)) || (cand.length === 1 ? cand[0] : null);
+      if (pick) { m.entry = pick.path.slice(root.length + 1); ch = true; hecho(f.path, `entry de script corregido a ${m.entry}`); }
+    }
+    if (ch) f.content = JSON.stringify(o, null, 2);
+  }
+  for (const atlasPath of ["RP/textures/item_texture.json", "RP/textures/terrain_texture.json"]) {
+    const f = por.get(atlasPath); if (!f || typeof f.content !== "string") continue;
+    let a; try { a = JSON.parse(f.content); } catch { continue; }
+    let ch = false;
+    for (const [key, entry] of Object.entries(a.texture_data || {})) {
+      const arr = typeof entry === "string" ? null : (Array.isArray(entry?.textures) ? entry.textures : (typeof entry?.textures === "string" ? [entry.textures] : null));
+      if (!arr) continue;
+      arr.forEach((t, i) => {
+        if (typeof t !== "string") return;
+        const clean = t.replace(/^\//, "").replace(/\.(png|tga|jpg)$/i, "");
+        if (["png", "tga", "jpg"].some(ext => por.has(`RP/${clean}.${ext}`))) return;
+        const base = clean.split("/").pop();
+        const cands = [...por.keys()].filter(p => /^RP\/textures\/.+\.png$/i.test(p) && p.split("/").pop().replace(/\.png$/i, "") === base);
+        if (cands.length === 1) { arr[i] = cands[0].slice(3).replace(/\.png$/i, ""); ch = true; hecho(atlasPath, `textura ${key}: ruta corregida a ${arr[i]}`); }
+      });
+      if (ch && typeof entry?.textures === "string") entry.textures = arr[0];
+    }
+    if (ch) f.content = JSON.stringify(a, null, 2);
+  }
+  for (const [p, f] of por) {
+    if (!/^RP\/entit(?:y|ies)\/.+\.json$/i.test(p) || typeof f.content !== "string") continue;
+    let j; try { j = JSON.parse(f.content); } catch { continue; }
+    const d = j["minecraft:client_entity"]?.description; if (!d || d.spawn_egg) continue;
+    d.spawn_egg = { base_color: "#3a3a4a", overlay_color: "#8a8aa0" };
+    f.content = JSON.stringify(j, null, 2); hecho(p, "se añadió spawn_egg (huevo de aparición) con colores por defecto");
+  }
+  return cambios;
+}
+
+async function cicloReparacionAutomatica(files, env, opciones = {}) {
+  const mc = !!opciones.minecraft;
+  const informe = { habilitado: !!routerApiKey(env) && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], historial: [], modelos: [], erroresFinales: [], avisosFinales: [], noCorregidos: [], estado: "omitido" };
+  if (!Array.isArray(files)) return { validacion: null, informe };
+  const vacia = () => ({ ok: true, errores: [], avisos: [], criticos: [], advertencias: [], informativos: [], detalle: [], archivos: files.length });
+  const validar = () => mc ? validarAddonEstructural(files) : vacia();
+  // 0) Reparación determinista (sin IA): cambios seguros y demostrables.
+  if (mc) {
+    try { for (const c of repararDeterministico(files)) { informe.cambios.push({ path: c.path, ronda: 0, motivo: c.motivo, tipo: "determinista" }); informe.historial.push({ ronda: 0, tipo: "determinista", path: c.path, motivo: c.motivo }); } }
+    catch (e) { informe.avisosFinales.push("Reparación determinista omitida: " + String(e?.message || e).slice(0, 100)); }
+  }
+  let validacion = validar();
+  const cerrar = () => {
+    if (mc) validacion = validar();
+    informe.erroresFinales = validacion?.errores || [];
+    for (const a of (validacion?.avisos || [])) if (!informe.avisosFinales.includes(a)) informe.avisosFinales.push(a);
+    informe.noCorregidos = (validacion?.detalle || []).filter(d => d.severidad === "CRITICO");
+    informe.estado = informe.erroresFinales.length ? (informe.cambios.length ? "reparado_parcial" : "pendiente") : (informe.cambios.length ? "reparado_y_validado" : "sin_cambios_necesarios");
+    return { validacion, informe };
+  };
+  if (!informe.habilitado) { if (validacion.errores.length || validacion.avisos.length) informe.avisosFinales.push("Reparación con IA desactivada (falta ROUTER_API_KEY/OPENROUTER_API_KEY o EGO_AUTO_REPAIR=0): solo se aplicaron reparaciones deterministas."); return cerrar(); }
   const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 3), 3));
-  let validacion = opciones.minecraft ? validarAddonEstructural(files) : { ok: true, errores: [], avisos: [], archivos: files.length };
+  const modelosReparador = [...new Set([EGO_TEAM_MODELS.coder, EGO_TEAM_MODELS.reasoner, EGO_TEAM_MODELS.planner].filter(Boolean))];
+  const rutaCreable = p => /^(?:BP|RP)\/(?:entities|entity|items|blocks|recipes|loot_tables|spawn_rules|animations|animation_controllers|render_controllers|models\/entity|texts|sounds|scripts|functions|trading)\/.+\.(?:json|js|lang|mcfunction)$/i.test(p) && !/manifest\.json$/i.test(p);
   for (let ronda = 1; ronda <= maxRondas; ronda++) {
+    if (!validacion.errores.length && !validacion.avisos.some(a => /BP\/scripts\/.+\.js: /.test(a))) break;
+    const hallazgos = [...validacion.errores, ...validacion.avisos];
+    const rutasError = hallazgos.map(x => { const m = String(x).match(/(?:^|[\s:])((?:BP|RP)\/[^\s:]+?\.(?:json|js))/i); return m && m[1]; }).filter(Boolean);
     const candidatos = files.filter(f => f && typeof f.content === "string" && (/\.js$/i.test(f.path) || /\.json$/i.test(f.path)));
     if (!candidatos.length) break;
-    // Enfoca los archivos citados por el validador; si no hay errores, revisa los scripts generados.
-    const rutasError = [...validacion.errores, ...validacion.avisos].map(x => {
-      const m = String(x).match(/(?:en |: )((?:BP|RP)\/[^ :]+\.(?:json|js))/i); return m && m[1];
-    }).filter(Boolean);
-    let objetivo = rutasError.length ? candidatos.filter(f => rutasError.includes(f.path)) : candidatos.filter(f => /\.js$/i.test(f.path) && (!opciones.minecraft || /(^|\/)scripts?\//i.test(f.path)));
-    if (!objetivo.length && validacion.errores.length) objetivo = candidatos.filter(f => /\.json$/i.test(f.path));
-    objetivo = objetivo.slice(0, 12);
-    if (!objetivo.length) break;
+    let objetivo = rutasError.length ? candidatos.filter(f => rutasError.includes(f.path)) : candidatos.filter(f => /\.js$/i.test(f.path) && (!mc || /(^|\/)scripts?\//i.test(f.path)));
+    if (!objetivo.length && validacion.errores.length) objetivo = candidatos.filter(f => /\.json$/i.test(f.path) && !/manifest\.json$/i.test(f.path)).slice(0, 8);
+    objetivo = [...new Map(objetivo.map(f => [f.path, f])).values()].slice(0, 12);
+    if (!objetivo.length && !validacion.errores.length) break;
     const snapshot = objetivo.map(f => ({ path: f.path, content: f.content.slice(0, 18000) }));
+    const inventario = files.map(f => f.path).slice(0, 300);
     const estadoAntes = new Map(files.map(f => [f.path, f.content]));
-    const erroresAntesSet = new Set(validacion?.errores || []);
-    const diagnostico = [...validacion.errores.map(x => "ERROR: " + x), ...validacion.avisos.map(x => "AVISO: " + x)].join("\n").slice(0, 9000) || "No hay errores estructurales. Revisa los scripts buscando errores claros de sintaxis, referencias inexistentes, APIs incompatibles y fallos lógicos evidentes. No cambies código correcto.";
+    const erroresAntesSet = new Set(validacion.errores);
+    const scoreAntes = validacion.errores.length * 10 + validacion.avisos.length;
+    const diagnostico = hallazgos.map(x => (validacion.errores.includes(x) ? "CRÍTICO: " : "ADVERTENCIA: ") + x).join("\n").slice(0, 9000);
     const messages = [
-      { role: "system", content: `Eres el reparador de código de EGO AI. Corrige SOLO errores demostrables en los archivos proporcionados. No reescribas el proyecto ni cambies su diseño. Conserva compatibilidad con Minecraft Bedrock y @minecraft/server ${String(env.MC_SERVER_VERSION || "2.10.0")}. Devuelve ÚNICAMENTE JSON válido con esta forma: {"patches":[{"path":"ruta exacta existente","content":"contenido COMPLETO corregido del archivo"}]}. Si no puedes justificar una corrección, devuelve {"patches":[]}. No añadas archivos, no uses Markdown, no inventes APIs ni afirmes haber ejecutado pruebas.` },
-      { role: "user", content: `RONDA ${ronda}. DIAGNÓSTICO:\n${diagnostico}\n\nARCHIVOS ACTUALES:\n${JSON.stringify(snapshot)}` }
+      { role: "system", content: `Eres el reparador de código de EGO AI. Corrige SOLO problemas demostrables. No reescribas el proyecto ni cambies su diseño; no borres código válido. Conserva compatibilidad con Minecraft Bedrock y @minecraft/server ${String(env.MC_SERVER_VERSION || "2.10.0")} (no uses APIs eliminadas como runCommandAsync ni eventos que no existan). Puedes corregir archivos existentes y CREAR archivos que falten SOLO si el diagnóstico lo exige (JSON/JS/lang en BP/ o RP/, nunca manifest ni PNG). Devuelve ÚNICAMENTE JSON válido: {"patches":[{"path":"ruta","content":"contenido COMPLETO del archivo"}]}. Si no puedes justificar una corrección devuelve {"patches":[]}. No uses Markdown, no inventes APIs ni afirmes haber ejecutado pruebas.` },
+      { role: "user", content: `RONDA ${ronda}. DIAGNÓSTICO:\n${diagnostico}\n\nARCHIVOS DEL PROYECTO (inventario):\n${inventario.join("\n")}\n\nARCHIVOS A CORREGIR:\n${JSON.stringify(snapshot)}` }
     ];
     informe.rondas = ronda;
-    try {
-      const respuesta = await openRouterChat(messages, env, 7000, EGO_TEAM_MODELS.coder);
-      const parsed = extractJson(respuesta.content);
-      const patches = Array.isArray(parsed?.patches) ? parsed.patches : [];
-      let aplicados = 0;
-      for (const patch of patches.slice(0, 8)) {
-        const path = safeProjectPath(patch && patch.path);
-        if (!path || typeof patch.content !== "string" || patch.content.length > 300000 || !/\.(?:js|json)$/i.test(path)) continue;
-        const original = files.find(f => f.path === path);
-        if (!original || original.content === patch.content) continue;
-        // Validación local del parche antes de aceptarlo.
-        if (/\.json$/i.test(path) && !jsonTolerante(patch.content).ok) { informe.avisosFinales.push(`Parche rechazado en ${path}: JSON inválido.`); continue; }
-        if (/\.js$/i.test(path) && (balanceJs(patch.content) || lintScriptApi(patch.content, String(env.MC_SERVER_VERSION||"2.10.0")).length)) { informe.avisosFinales.push(`Parche rechazado en ${path}: sintaxis/API no válida.`); continue; }
-        // No se permite alterar otros archivos ni introducir contenido binario o rutas nuevas.
-        original.content = patch.content;
-        informe.cambios.push({ path, ronda, motivo: "parche del modelo reparador" });
-        aplicados++;
+    let parsed = null, usado = "";
+    for (const modelo of modelosReparador) {
+      try {
+        const respuesta = await openRouterChat(messages, env, 7000, modelo, ronda === 1 ? 40000 : 25000);
+        const p = extractJson(respuesta.content);
+        if (p && Array.isArray(p.patches)) { parsed = p; usado = respuesta.model; break; }
+        informe.avisosFinales.push(`Reparador ${modelo}: respuesta sin formato válido; se probó otro modelo.`);
+      } catch (e) {
+        informe.avisosFinales.push(`Reparador ${modelo} no disponible: ${String(e?.message || e).slice(0, 110)}`);
       }
-      if (!aplicados) break;
-      validacion = opciones.minecraft ? validarAddonEstructural(files) : { ok: true, errores: [], avisos: [], archivos: files.length };
-      const nuevosErrores = opciones.minecraft ? validacion.errores.filter(x => !erroresAntesSet.has(x)) : [];
-      if (opciones.minecraft && nuevosErrores.length) {
-        for (const f of files) if (estadoAntes.has(f.path)) f.content = estadoAntes.get(f.path);
-        informe.cambios = informe.cambios.filter(x => x.ronda !== ronda);
-        informe.avisosFinales.push(`Ronda ${ronda} revertida: el parche introdujo errores nuevos (${nuevosErrores.slice(0,2).join("; ")}).`);
-        validacion = validarAddonEstructural(files);
-        break;
-      }
-      if (validacion.ok && !validacion.errores.length) break;
-    } catch (e) {
-      informe.estado = "fallo_reparador";
-      informe.avisosFinales.push("No se pudo ejecutar la reparación IA: " + String(e?.message || e).slice(0, 140));
-      break;
     }
+    if (!parsed) { informe.estado = "fallo_reparador"; break; }
+    if (usado && !informe.modelos.includes(usado)) informe.modelos.push(usado);
+    const creados = [], tocados = [];
+    let nuevos = 0;
+    for (const patch of parsed.patches.slice(0, 10)) {
+      const path = safeProjectPath(patch && patch.path);
+      if (!path || typeof patch.content !== "string" || patch.content.length > 300000 || !/\.(?:js|json|lang|mcfunction)$/i.test(path) || /manifest\.json$/i.test(path)) continue;
+      if (/\.json$/i.test(path) && !jsonTolerante(patch.content).ok) { informe.avisosFinales.push(`Parche rechazado en ${path}: JSON inválido.`); continue; }
+      if (/\.js$/i.test(path) && (balanceJs(patch.content) || (mc && /^BP\/scripts\//i.test(path) && /\bfrom\s*["']@minecraft\/server["']/.test(patch.content) === false && /@minecraft\/server/.test(String(estadoAntes.get(path) || "")) ))) { informe.avisosFinales.push(`Parche rechazado en ${path}: sintaxis no válida o pierde imports.`); continue; }
+      const original = files.find(f => f.path === path);
+      if (original) {
+        if (original.content === patch.content) continue;
+        if (patch.content.length < original.content.length * 0.35 && original.content.length > 800) { informe.avisosFinales.push(`Parche rechazado en ${path}: eliminaba más del 65% del archivo (reparación destructiva).`); continue; }
+        original.content = /\.json$/i.test(path) ? JSON.stringify(jsonTolerante(patch.content).obj, null, 2) : patch.content; tocados.push(path);
+      } else {
+        if (!rutaCreable(path) || creados.length >= 4) continue;
+        files.push({ path, content: /\.json$/i.test(path) ? JSON.stringify(jsonTolerante(patch.content).obj, null, 2) : patch.content }); creados.push(path);
+      }
+      nuevos++;
+    }
+    if (!nuevos) { informe.avisosFinales.push(`Ronda ${ronda}: el reparador no propuso correcciones aplicables.`); break; }
+    const despues = validar();
+    const nuevosErrores = despues.errores.filter(x => !erroresAntesSet.has(x));
+    const scoreDespues = despues.errores.length * 10 + despues.avisos.length;
+    const revertir = (motivo) => {
+      for (const f of files) if (estadoAntes.has(f.path)) f.content = estadoAntes.get(f.path);
+      for (const p of creados) { const k = files.findIndex(f => f.path === p); if (k >= 0) files.splice(k, 1); }
+      informe.avisosFinales.push(motivo); validacion = validar();
+    };
+    if (mc && nuevosErrores.length) { revertir(`Ronda ${ronda} revertida: el parche introdujo errores nuevos (${nuevosErrores.slice(0, 2).join("; ").slice(0, 200)}).`); break; }
+    if (mc && scoreDespues >= scoreAntes) { revertir(`Ronda ${ronda} revertida: no hubo progreso (${scoreAntes} → ${scoreDespues} hallazgos).`); break; }
+    for (const p of tocados) { informe.cambios.push({ path: p, ronda, motivo: "parche del modelo reparador" }); informe.historial.push({ ronda, tipo: "modelo", path: p, motivo: "archivo corregido", modelo: usado }); }
+    for (const p of creados) { informe.cambios.push({ path: p, ronda, motivo: "archivo faltante creado por el reparador" }); informe.historial.push({ ronda, tipo: "modelo", path: p, motivo: "archivo creado", modelo: usado }); }
+    validacion = despues;
+    if (validacion.ok && !validacion.avisos.length) break;
   }
-  if (opciones.minecraft) validacion = validarAddonEstructural(files);
-  informe.erroresFinales = validacion?.errores || [];
-  informe.avisosFinales.push(...(validacion?.avisos || []));
-  informe.estado = informe.erroresFinales.length ? (informe.cambios.length ? "reparado_parcial" : "pendiente") : (informe.cambios.length ? "reparado_y_validado" : "sin_cambios_necesarios");
-  return { validacion, informe };
+  return cerrar();
 }
 
 // Valida y repara el add-on: JSON de manifest, UUID v4 únicos y dependencias coherentes.
@@ -3653,7 +3836,8 @@ function validarAddonEstructural(files) {
     let bpEnt; try{bpEnt=JSON.parse(f.content)["minecraft:entity"];}catch{continue;}
     const id=bpEnt?.description?.identifier; if(!id){errores.push(`${path}: entidad sin identifier.`);continue;}
     const stem=path.split("/").pop().replace(/\.json$/i,"");
-    const clientPath=`RP/entity/${stem}.entity.json`; const cf=porRuta.get(clientPath);
+    let clientPath=`RP/entity/${stem}.entity.json`; let cf=porRuta.get(clientPath);
+    if(!cf){for(const [cp,cff] of porRuta){if(!/^RP\/entit(?:y|ies)\/.+\.json$/i.test(cp)||typeof cff.content!=="string")continue;try{if(JSON.parse(cff.content)["minecraft:client_entity"]?.description?.identifier===id){cf=cff;clientPath=cp;break}}catch{}}}
     if(!cf||typeof cf.content!=="string"){errores.push(`${path}: falta client_entity ${clientPath}; el huevo/representación visual no está enlazado.`);continue;}
     let ce; try{ce=JSON.parse(cf.content)["minecraft:client_entity"]?.description;}catch{errores.push(`${clientPath}: JSON de client_entity inválido.`);continue;}
     if(!ce||ce.identifier!==id) errores.push(`${clientPath}: identifier (${ce?.identifier||"vacío"}) no coincide con ${id}.`);
@@ -3700,12 +3884,12 @@ function validarAddonEstructural(files) {
     try { const id = JSON.parse(f.content)["minecraft:entity"]?.description?.identifier; if (id) entityIds.add(id); } catch {}
   }
   for (const [path,f] of porRuta) if (/^BP\/spawn_rules\/.+\.json$/i.test(path) && typeof f.content === "string") {
-    try { const id = JSON.parse(f.content)["minecraft:spawn_rules"]?.description?.identifier; if (id && !entityIds.has(id)) errores.push(`${path}: spawn_rule ${id} no tiene definición correspondiente en BP/entities.`); } catch {}
+    try { const id = JSON.parse(f.content)["minecraft:spawn_rules"]?.description?.identifier; if (id && !entityIds.has(id) && !/^minecraft:/.test(id)) errores.push(`${path}: spawn_rule ${id} no tiene definición correspondiente en BP/entities.`); } catch {}
   }
   // Scripts: errores sintácticos detectables y patrones API incompatibles no deben pasar como éxito.
   for(const [path,f] of porRuta){if(!/^BP\/scripts\/.+\.js$/i.test(path)||typeof f.content!=="string")continue;const bal=balanceJs(f.content);if(bal)errores.push(`${path}: posible error de sintaxis (${bal}).`);const lint=lintScriptApi(f.content,"2.10.0");for(const msg of lint.slice(0,4))errores.push(`${path}: ${msg}.`);}
   if (!manifests.length) errores.push("No se encontró ningún manifest.json.");
-  return { ok: errores.length === 0, errores: [...new Set(errores)].slice(0, 80), avisos: [...new Set(avisos)].slice(0, 40), archivos: porRuta.size };
+  return clasificarHallazgos(errores, avisos, porRuta.size);
 }
 
 const RX_UUID4=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -3855,7 +4039,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.28.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.29.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -3884,7 +4068,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.28.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.29.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
