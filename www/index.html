@@ -547,6 +547,13 @@ const libres=chats.slice().reverse().filter(c=>!(c.proj&&projOf(c.proj)));
 const h2=document.createElement("div");h2.className="sgh";h2.innerHTML="<span>Chats</span>";list.appendChild(h2);
 libres.forEach(c=>list.appendChild(chatRow(c,false)))}
 const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+function diagMd(j,fallback){try{const c=j.criticos||[],a=j.advertencias||[],r=j.reparacion||{};let t="**El add-on no pasó la validación y NO se exportó como terminado.** Esto es lo que encontré:\n\n";
+if(c.length){t+="### ⛔ Problemas críticos ("+c.length+")\n";c.slice(0,8).forEach(function(d){t+="- `"+(d.archivo||"proyecto")+"` — "+d.problema+"\n  - **Causa:** "+d.causa+"\n  - **Solución intentada:** "+d.solucion+"\n"})}
+if(a.length){t+="\n### ⚠️ Advertencias ("+a.length+")\n";a.slice(0,5).forEach(function(d){t+="- `"+(d.archivo||"proyecto")+"` — "+d.problema+"\n"});if(a.length>5)t+="- … y "+(a.length-5)+" más\n"}
+const cam=(r.cambios||[]).length;t+="\n### 🔧 Reparación automática\n- Estado: **"+(r.estado||"sin datos")+"**"+(r.rondas?" · rondas: "+r.rondas:"")+(cam?" · cambios aplicados: "+cam:"")+"\n";
+if((r.modelos||[]).length)t+="- Modelos que participaron: "+r.modelos.join(", ")+"\n";else t+="- Ningún modelo reparador participó (reparación con IA no disponible o sin propuestas)\n";
+(r.avisos||[]).slice(0,3).forEach(function(x){t+="- "+x+"\n"});
+t+="\nPuedes reintentar: el generador vuelve a intentarlo desde cero con estos datos.";return t}catch(e){return fallback}}
 const inl=t=>{const cs=[];t=t.replace(/`([^`]+)`/g,(m,c)=>{cs.push(c);return"\u0001"+(cs.length-1)+"\u0001"});
 t=t.replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g,"<b>$1</b>").replace(/(^|[^\w])__(?=\S)(.+?)(?<=\S)__(?!\w)/g,"$1<b>$2</b>").replace(/~~(?=\S)(.+?)(?<=\S)~~/g,"<s>$1</s>").replace(/(^|[^\w*])\*(?![\s*])([^*\n]+?)(?<![\s*])\*(?![\w*])/g,"$1<i>$2</i>").replace(/(^|[^\w])_(?![\s_])([^_\n]+?)(?<![\s_])_(?!\w)/g,"$1<i>$2</i>")
 .replace(/!\[([^\]]*)\]\((https?:[^)\s]+|data:image\/[a-z+]+;base64,[A-Za-z0-9+\/=]+)\)/g,'<img src="$2" alt="$1" loading="lazy">').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')
@@ -1093,7 +1100,7 @@ const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u
 function guardarArchivo(id,name,blob){try{if(blob.size>300000)return;const fr=new FileReader();fr.onload=()=>{try{const b64=String(fr.result).split(",")[1]||"";localStorage.setItem("ego_f_"+id,JSON.stringify({n:name,b:b64}));let ks=JSON.parse(localStorage.getItem("ego_fkeys")||"[]");ks.push(id);while(ks.length>6){try{localStorage.removeItem("ego_f_"+ks.shift())}catch(e){}}localStorage.setItem("ego_fkeys",JSON.stringify(ks))}catch(e){}};fr.readAsDataURL(blob)}catch(e){}}
 function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.parse(localStorage.getItem("ego_f_"+id)||"null");if(!o||!o.b)return false;const bin=atob(o.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);FILES.set(id,{name:o.n||name,blob:new Blob([u],{type:"application/octet-stream"}),mime:/\.zip$/i.test(o.n||name)?"application/zip":"application/octet-stream"});return true}catch(e){return false}}
 async function genAddonPro(c,d,text){
-const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null;const modelos=new Set(),fm=new Set(),modelos3d=[];
+const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null,diag=null;const modelos=new Set(),fm=new Set(),modelos3d=[];
 const prog=t=>{d.removeAttribute("data-err");d.innerHTML='<span class="dots">'+t+'</span>';scroll()};
 async function pedir(o,ms){const ac=new AbortController();ctrl=ac;const tm=setTimeout(()=>ac.abort(),ms);try{const r=await wPost(Object.assign({usuario:usuario},o),ac.signal);return r}finally{clearTimeout(tm)}}
 try{
@@ -1108,7 +1115,7 @@ while(!stop){const i=sig++;if(i>=plan.partes.length)return;
 let ok=false,err="";
 for(let t=0;t<2&&!ok&&!stop;t++){
 try{const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:i,previos:[]},170000);const jj=await rr.json().catch(()=>null);
-if(rr.ok&&jj&&((jj.files&&jj.files.length)||jj.modelo3d)){res[i]=jj.files||[];if(jj.modelo3d)modelos3d.push(jj.modelo3d);(jj&&jj.fallosModelos||[]).forEach(function(x){fm.add(String(x))});if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
+if(rr.ok&&jj&&((jj.files&&jj.files.length)||jj.modelo3d)){res[i]=jj.files||[];if(jj.modelo3d)modelos3d.push(jj.modelo3d);(jj&&jj.fallosModelos||[]).forEach(function(x){fm.add(String(x))});if(jj.model)modelos.add(String(jj.model).split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
 catch(e){err=(e&&e.name==="AbortError")?"tiempo agotado":"sin conexión"}}
 if(!ok&&!stop)fallos.push(plan.partes[i].titulo+" ("+err+")");hechas++;pintar()}}
 await Promise.all([trabajador(),trabajador(),trabajador()]);
@@ -1120,7 +1127,7 @@ r=await pedir({action:"mc_build",prompt:text,plan:plan,files:files,modelos3d:mod
 if(r.ok&&/zip|octet-stream/.test(r.headers.get("content-type")||"")){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
 try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}try{ficha=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Ficha")||"null"))}catch(e){ficha=null}
 const m=(r.headers.get("content-disposition")||"").match(/filename="?([^";]+)"?/i);if(m)name=m[1]}
-else{const jb=await r.json().catch(()=>null);throw new Error((jb&&jb.error)||"no se pudo armar el paquete")}
+else{const jb=await r.json().catch(()=>null);diag=jb&&(jb.criticos||jb.advertencias)?jb:null;throw new Error((jb&&jb.error)||"no se pudo armar el paquete")}
 if(ficha&&ficha.revision&&ficha.revision.faltan&&ficha.revision.faltan.length&&!stop){
 try{prog("🔧 Revisión final: completando lo que faltó…");
 const ex=files.filter(function(f){return /\.(js|json)$/.test(f.path)&&!/manifest/.test(f.path)}).map(function(f){return "=== "+f.path+" ===\n"+f.content}).join("\n").slice(0,14000);
@@ -1130,12 +1137,12 @@ if(rr.ok&&jj&&jj.files&&jj.files.length){const nf=files.filter(function(f){retur
 const r2=await pedir({action:"mc_build",prompt:text,plan:plan,files:nf,modelos3d:modelos3d},90000);
 if(r2.ok&&/zip|octet-stream/.test(r2.headers.get("content-type")||"")){const b2=await r2.blob();let f2=null;try{f2=JSON.parse(decodeURIComponent(r2.headers.get("X-EGO-Ficha")||"null"))}catch(e){}
 const antes=ficha.revision.faltan.length,desp=f2&&f2.revision?f2.revision.faltan.length:antes;
-if(f2&&desp<=antes){blob=b2;ficha=f2;nfiles=Number(r2.headers.get("X-EGO-Files"))||nfiles;if(jj.model)modelos.add(String(jj.model).replace(/^venice:/,"Venice · ").split("/").pop())}}}}catch(e){}}
+if(f2&&desp<=antes){blob=b2;ficha=f2;nfiles=Number(r2.headers.get("X-EGO-Files"))||nfiles;if(jj.model)modelos.add(String(jj.model).split("/").pop())}}}}catch(e){}}
 }catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":String((e&&e.message)||"error")}
 ctrl=null;let reply,id=null;
 if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:"application/octet-stream"});
-reply=ficha?fichaMc(ficha,name,nfiles,fallos,(modelos.size?"**Generado con:** "+[...modelos].slice(0,3).join(", "):"")+([...fm].filter(function(x){return /venice/i.test(x)}).length?"\n\n⚠️ **Venice no respondió:** "+[...fm].filter(function(x){return /venice/i.test(x)})[0]:"")):("✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\n"+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+".\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""))}
-else reply="No pude crear el add-on.\n\nMotivo: "+why;
+reply=ficha?fichaMc(ficha,name,nfiles,fallos,(modelos.size?"**Generado con:** "+[...modelos].slice(0,3).join(", "):"")):("✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\n"+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+".\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""))}
+else reply="No pude crear el add-on.\n\n"+(diag?diagMd(diag,why):"Motivo: "+why);
 const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp="mc";am.pro=true;am.pp=text;guardarArchivo(id,name,blob)}
 c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);
 busy=false;stop=false;send.textContent="➤";scroll()}
@@ -1158,7 +1165,7 @@ try{const r=await wPost({action:kind==="mc"?"minecraft_generate":"project_genera
 const ct=r.headers.get("content-type")||"";
 if(r.ok&&/zip|octet-stream/.test(ct)){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;artifact=r.headers.get("X-EGO-Artifact")||"";importable=r.headers.get("X-EGO-Importable")||"false";modelo=(r.headers.get("X-EGO-Model")||"").split("/").pop();try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){resumen=""}try{spec=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Spec")||"null"))}catch(e){spec=null}try{noap=decodeURIComponent(r.headers.get("X-EGO-NoAplicado")||"")}catch(e){noap=""}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){notas=""}
 const cd=r.headers.get("content-disposition")||"";const m=cd.match(/filename="?([^";]+)"?/i);name=m?m[1]:(kind==="mc"?"ego-addon.mcaddon":"ego-proyecto.zip")}
-else{let j=null;try{j=await r.json()}catch(x){}if(j&&j.avanzado)pro=true;else why=(j&&j.error)?String(j.error):"el Worker respondió con error "+r.status}}finally{clearTimeout(tm)}}
+else{let j=null;try{j=await r.json()}catch(x){}if(j&&j.avanzado)pro=true;else{why=(j&&j.error)?String(j.error):"el Worker respondió con error "+r.status;if(j&&j.criticos)why=diagMd(j,why)}}}finally{clearTimeout(tm)}}
 catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":"sin conexión con el Worker"}
 ctrl=null;
 if(pro&&!why){return genAddonPro(c,d,text)}
