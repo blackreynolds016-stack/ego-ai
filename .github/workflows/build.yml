@@ -583,6 +583,35 @@ jobs:
               static void releaseBars(Activity act) {
                   lock = false;
                   paintSaved(act);
+                  applyBg(act, -1);
+              }
+
+              // Fondo de ventana y de WebView = color de la interfaz (evita ver negro al abrir el teclado)
+              static void applyBg(final Activity act, final int forced) {
+                  try {
+                      int c = forced;
+                      if (c == -1) {
+                          SharedPreferences sp = act.getSharedPreferences("ego_bars", Context.MODE_PRIVATE);
+                          if (sp.contains("bottom")) c = sp.getInt("bottom", 0xFFF4F4F7);
+                          else {
+                              int id = act.getResources().getIdentifier("app_bg", "color", act.getPackageName());
+                              c = id != 0 ? ContextCompat.getColor(act, id) : 0xFFF4F4F7;
+                          }
+                      }
+                      final int col = c;
+                      act.runOnUiThread(new Runnable() {
+                          @Override
+                          public void run() {
+                              try {
+                                  act.getWindow().getDecorView().setBackgroundColor(col);
+                                  if (act instanceof com.getcapacitor.BridgeActivity) {
+                                      WebView wv = ((com.getcapacitor.BridgeActivity) act).getBridge().getWebView();
+                                      if (wv != null) wv.setBackgroundColor(col);
+                                  }
+                              } catch (Exception e) {}
+                          }
+                      });
+                  } catch (Exception e) {}
               }
 
               static void paint(final Activity act, final boolean dark, final int top, final int bottom) {
@@ -634,6 +663,7 @@ jobs:
                           try {
                               WebView wv = getBridge().getWebView();
                               if (wv != null) wv.setBackgroundColor(bg);
+                              getActivity().getWindow().getDecorView().setBackgroundColor(bg);
                           } catch (Exception e) {}
                       }
                   });
@@ -745,8 +775,8 @@ jobs:
                       if ("\\"1\\"".equals(value) || SystemClock.uptimeMillis() - t0 > 4000) {
                           ready = true;
                           handler.postDelayed(() -> startOverlay(), 160);
-                          // la animacion dura ~1.3 s + 0.5 s de salida: despues se pintan las barras normales
-                          handler.postDelayed(() -> EgoNativePlugin.releaseBars(MainActivity.this), 2300);
+                          // sin animacion en la pagina: al quitarse el splash se pintan las barras y el fondo normales
+                          handler.postDelayed(() -> EgoNativePlugin.releaseBars(MainActivity.this), 250);
                       } else {
                           handler.postDelayed(() -> poll(wv), 30);
                       }
