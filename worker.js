@@ -1,5 +1,5 @@
 /*
- * EGO AI Worker v14.29.0 — cambios sobre v14.28.0
+ * EGO AI Worker v14.30.0 — cambios sobre v14.28.0
  *  - balanceJs reescrito: entiende regex literales, plantillas anidadas y comentarios (0 falsos positivos en 281 JS reales; el anterior daba 16).
  *  - Validador estructural con severidades: CRITICO (bloquea), ADVERTENCIA, INFORMATIVO. Solo lo crítico impide exportar.
  *  - Spawn rules de mobs vanilla (minecraft:*) aceptadas; client_entity se busca por identificador; eventos system.* reconocidos.
@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.29.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.30.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -46,7 +46,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.29.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.30.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -1069,7 +1069,7 @@ function pausa(ms) { return new Promise(resolve => setTimeout(resolve, Math.max(
 
 async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_MODEL, timeoutMs = 55000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Math.max(5000, Math.min(55000, Number(timeoutMs) || 55000)));
+  const timer = setTimeout(() => controller.abort(), Math.max(5000, Math.min(110000, Number(timeoutMs) || 55000)));
   try {
     const normalized = messages.map(m => ({
       role: ["system", "user", "assistant"].includes(m?.role) ? m.role : "user",
@@ -1125,7 +1125,9 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000) {
   const failures = [];
   for (let i = 0; i < models.length; i++) {
     try {
-      const r = await openRouterChat(messages, env, maxTokens, models[i], i === 0 ? 36000 : 18000);
+      // El tiempo de espera crece con el tamaño de la respuesta: 10 000 tokens no caben en 36 s (causa real de "tiempo agotado").
+      const tPrim = Math.min(100000, 25000 + Number(maxTokens || 3000) * 8);
+      const r = await openRouterChat(messages, env, maxTokens, models[i], i === 0 ? tPrim : Math.round(tPrim * 0.6));
       if (r.content) return { ...r, role, fallos: failures };
       failures.push(`${models[i]}: respuesta vacía`);
     } catch (e) {
@@ -1361,6 +1363,7 @@ function limpiarPlan(j,prompt){
     base.partes.push({titulo:String((p&&p.titulo)||"Parte "+(base.partes.length+1)).slice(0,60),tipo,detalle:String((p&&p.detalle)||"").slice(0,1500),archivos:arch});
   }
   if(!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes=crearPartesRespaldoMinecraft(prompt);
+
   {const ents=base.objetos.filter(o=>o.tipo==="entity");const pedidos=new Map();
    for(const q of (Array.isArray(j.modelos3d)?j.modelos3d:[]).slice(0,12)){const id=mcId(base.ns,q&&(q.entidad||q.id));if(ents.some(e=>e.id===id))pedidos.set(id,String((q&&q.descripcion)||"").slice(0,500));}
    if(RX_3D.test(String(prompt||"")))for(const e of ents)if(!pedidos.has(e.id))pedidos.set(e.id,"");
@@ -1412,6 +1415,24 @@ function jsonTolerante(t){
   }catch(e){return {ok:false,error:String(e&&e.message||e).slice(0,100)};}
 }
 
+// Pedido grande: varias partes pequeñas y paralelas (una parte gigante agota el tiempo). Solo la llama mcPlan, para que los índices del plan no cambien después.
+function dividirTrabajoGrande(base,prompt){
+  const grande=String(prompt||"").length>2200||(base.requisitos||[]).length>=8;
+  if(!grande||!Array.isArray(base.partes))return base;
+  const antes3d=base.partes.filter(p=>p.tipo==="modelo3d");
+  base.partes=base.partes.filter(p=>p.tipo!=="modelo3d");
+  for(const r of crearPartesRespaldoMinecraft(prompt)) if(!base.partes.some(p=>p.tipo===r.tipo)) base.partes.push(r);
+  const si=base.partes.findIndex(p=>p.tipo==="script");
+  if(si>=0&&base.partes.filter(p=>p.tipo==="script").length<2){
+    const orig=base.partes[si];
+    const contrato="ARQUITECTURA OBLIGATORIA DE SCRIPTS: BP/scripts/main.js SOLO contiene imports de efecto lateral (import \"./sistemas.js\"; import \"./eventos.js\";). Cada módulo se auto-registra al cargarse (suscribe sus propios eventos) y NO depende de exports de otros módulos; comparten datos solo con world/entity.getDynamicProperty y setDynamicProperty.";
+    base.partes.splice(si,1,
+      {titulo:"Núcleo: main.js y eventos base",tipo:"script",detalle:String(orig.detalle||"").slice(0,900)+"\n\n"+contrato+"\nEsta parte escribe BP/scripts/main.js y BP/scripts/eventos.js (eventos de jugador/entidad, daño y muerte).",archivos:["BP/scripts/main.js","BP/scripts/eventos.js"]},
+      {titulo:"Sistemas de juego (módulo)",tipo:"script",detalle:String(orig.detalle||"").slice(0,900)+"\n\n"+contrato+"\nEsta parte escribe SOLO BP/scripts/sistemas.js (supervivencia, progresión, misiones y estados). NO escribas main.js.",archivos:["BP/scripts/sistemas.js"]});
+  }
+  base.partes=[...base.partes,...antes3d].slice(0,14);
+  return base;
+}
 async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
@@ -1447,10 +1468,12 @@ Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (í
         plan.partes.push(parte); titulos.add(titulo); tipos.add(parte.tipo);
       }
     }
+    dividirTrabajoGrande(plan,prompt);
     return json({ok:true,plan,model:r.model,fallosModelos:r.fallos||[]});
   }catch(e){
     const plan=limpiarPlan(null,prompt);
     plan.partes=crearPartesRespaldoMinecraft(prompt);
+    dividirTrabajoGrande(plan,prompt);
     return json({ok:true,plan,model:"plan-basico-granular",aviso:"El planificador IA no respondió; se creó un plan de respaldo dividido en módulos. Cada módulo debe validarse por separado.",detalle:String(e&&e.message||e).slice(0,160)});
   }
 }
@@ -1619,10 +1642,12 @@ async function mcPart(body,env){
     (existentes?`\nARCHIVOS ACTUALES DEL ADD-ON (modifícalos o amplíalos; devuelve completos los que cambies):\n${existentes}\n`:"")+
     `\nPedido original del usuario (para mantener fidelidad):\n${prompt}`;
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
+  const t0=Date.now(),ligero=!!body.ligero,restante=(tope)=>Math.max(5000,tope-(Date.now()-t0));
   for(let intento=0;intento<2;intento++){
+    if(intento===1&&Date.now()-t0>70000)break;
     let r;
-    try{r=await egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,12000);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
-    catch(e){ if(mejor) break; return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+String(e&&e.message||e).slice(0,200)},502); }
+    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,ligero?7000:10000),tmoMc(restante(ligero?110000:150000))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
+    catch(e){ if(mejor) break; const tm=String(e&&e.message||e);return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+(tm==="tiempo"||/abort|tiempo/i.test(tm)?"el modelo tardó demasiado en responder (la parte es muy grande o el proveedor está lento)":tm.slice(0,200)),codigo:/tiempo|abort/i.test(tm)?"tiempo":"modelo"},502); }
     modelo=r.model; fallosM=(r.fallos||[]); desde=r.idx+(intento===0?1:0);
     const p=leerProyectoModelo(r.raw);
     errores=[]; const files=[];
@@ -1643,13 +1668,13 @@ async function mcPart(body,env){
   }
   // ---- Reasoner + auditor independientes en paralelo; coder repara si hay defectos ----
   let revisado="", modelosRevision={};
-  if(mejor&&mejor.files.length&&["script","entities","items","blocks","recipes","loot","spawn","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
+  if(mejor&&mejor.files.length&&!ligero&&Date.now()-t0<85000&&["script","entities","items","blocks","recipes","loot","spawn","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
     try{
       const texto=mejor.files.filter(f=>/\.(js|json)$/.test(f.path)).map(f=>"=== ARCHIVO: "+f.path+" ===\n"+f.content).join("\n").slice(0,16000);
       const reviewUser="REQUISITOS:\n"+((plan.requisitos||[]).map((x,k)=>(k+1)+". "+x).join("\n")||prompt.slice(0,1500))+"\n\nPLAN:\n"+JSON.stringify({objetos:plan.objetos,poderes_jugador:plan.poderesJugador,revisionEquipo:plan.revisionEquipo||null})+"\n\nARCHIVOS DE LA PARTE «"+parte.titulo+"»:\n"+texto;
       const [crit,razon]=await Promise.all([
-        egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
-        egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
+        Promise.race([egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800),tmoMc(30000)]).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
+        Promise.race([egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800),tmoMc(30000)]).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
       ]);
       modelosRevision={auditor:crit.model||"no disponible",reasoner:razon.model||"no disponible"};
       const problemas=[];
@@ -1661,8 +1686,9 @@ async function mcPart(body,env){
         }
       }
       const probs=problemas.slice(0,8);
-      if(probs.length){
-        const rr=await egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,12000);
+      if(probs.length&&Date.now()-t0>130000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
+      else if(probs.length){
+        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,10000),tmoMc(restante(160000))]);
         const np=parsearSalidaMc(rr.content);
         if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="auditor y reasoner detectaron "+probs.length+" problema(s); coder aplicó una corrección que pasó la validación básica";}
         else revisado="auditoría detectó "+probs.length+" problema(s), pero la reparación no pasó; se conserva la versión anterior y se informa la limitación";
@@ -2557,7 +2583,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.29.0",
+    version: "14.30.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -3682,7 +3708,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     let parsed = null, usado = "";
     for (const modelo of modelosReparador) {
       try {
-        const respuesta = await openRouterChat(messages, env, 7000, modelo, ronda === 1 ? 40000 : 25000);
+        const respuesta = await openRouterChat(messages, env, 7000, modelo, ronda === 1 ? 90000 : 70000);
         const p = extractJson(respuesta.content);
         if (p && Array.isArray(p.patches)) { parsed = p; usado = respuesta.model; break; }
         informe.avisosFinales.push(`Reparador ${modelo}: respuesta sin formato válido; se probó otro modelo.`);
@@ -4039,7 +4065,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.29.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.30.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -4068,7 +4094,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.29.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.30.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
