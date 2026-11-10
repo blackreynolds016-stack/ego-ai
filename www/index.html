@@ -1114,7 +1114,7 @@ async function trabajador(){
 while(!stop){const i=sig++;if(i>=plan.partes.length)return;
 let ok=false,err="";
 for(let t=0;t<2&&!ok&&!stop;t++){
-try{const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:i,previos:[]},170000);const jj=await rr.json().catch(()=>null);
+try{const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:i,previos:[],ligero:t>0},175000);const jj=await rr.json().catch(()=>null);
 if(rr.ok&&jj&&((jj.files&&jj.files.length)||jj.modelo3d)){res[i]=jj.files||[];if(jj.modelo3d)modelos3d.push(jj.modelo3d);(jj&&jj.fallosModelos||[]).forEach(function(x){fm.add(String(x))});if(jj.model)modelos.add(String(jj.model).split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
 catch(e){err=(e&&e.name==="AbortError")?"tiempo agotado":"sin conexión"}}
 if(!ok&&!stop)fallos.push(plan.partes[i].titulo+" ("+err+")");hechas++;pintar()}}
