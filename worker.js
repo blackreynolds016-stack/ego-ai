@@ -1,5 +1,5 @@
 // ============================================================
-// EGO AI WORKER v14.27.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.28.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -36,7 +36,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.27.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.28.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -904,133 +904,6 @@ async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}) {
 }
 
 // Prueba los modelos de la cadena en orden; si uno falla o responde vacío, pasa al siguiente.
-// ---------- Venice AI (opcional: secreto VENICE_API_KEY) ----------
-// El Worker descubre en vivo los modelos que tu clave puede usar (GET /models) y elige los mejores por tarea.
-function veniceKey(env) { return String(env.VENICE_API_KEY || "").trim(); }
-let _venCache = { t: 0, lista: null };
-async function veniceCatalogo(env) {
-  if (_venCache.lista && Date.now() - _venCache.t < 600000) return _venCache.lista;
-  try {
-    const pedir = async (t) => { try { const r = await fetch("https://api.venice.ai/api/v1/models?type=" + t, { headers: { "Authorization": `Bearer ${veniceKey(env)}` } }); const j = await r.json().catch(() => ({})); return Array.isArray(j && j.data) ? j.data : []; } catch (e) { return []; } };
-    const [texto, imagen] = await Promise.all([pedir("text"), pedir("image")]);
-    const vistos = new Set(), data = [];
-    for (const m of texto.concat(imagen)) { const id = m && m.id; if (id && !vistos.has(id)) { vistos.add(id); data.push(m); } }
-    if (data.length) _venCache = { t: Date.now(), lista: data };
-    return data.length ? data : (_venCache.lista || []);
-  } catch (e) { return _venCache.lista || []; }
-}
-function veniceInfo(m) {
-  const spec = (m && m.model_spec) || {}, cap = spec.capabilities || {};
-  return { id: String((m && m.id) || ""), tipo: String((m && m.type) || spec.type || "").toLowerCase(),
-    vision: !!cap.supportsVision, razona: !!cap.supportsReasoning, codigo: !!cap.optimizedForCode,
-    ctx: Number(spec.availableContextTokens || 0), offline: !!spec.offline };
-}
-const VEN_EXCLUIR = /(uncensored|embed|whisper|tts|speech|asr|image|flux|sd3|sdxl|stable|upscal|video|lustify|inpaint|background|ocr|moderation)/i;
-const VEN_PREF = {
-  code:      [/coder/, /glm-?5/, /kimi/, /deepseek/, /qwen3-?(235|next|max)/, /gpt-oss/, /glm/, /qwen/, /llama-3\.3/],
-  reasoning: [/kimi/, /deepseek/, /glm-?5/, /qwen3-?235/, /gpt-oss/, /glm/, /qwen/],
-  chat:      [/glm-?5/, /llama-3\.3/, /qwen/, /mistral/, /glm/, /gemma/],
-  vision:    [/qwen.*vl/, /vl\b|vision/, /gemma/, /mistral/, /glm.*v/]
-};
-function veniceRanking(catalogo, task) {
-  const pref = VEN_PREF[task] || VEN_PREF.chat;
-  const out = [];
-  for (const m of catalogo) {
-    const i = veniceInfo(m);
-    if (!i.id || i.offline) continue;
-    if (i.tipo && i.tipo !== "text") continue;
-    if (task === "vision") { if (!i.vision && !/vl\b|vision/i.test(i.id)) continue; }
-    else if (VEN_EXCLUIR.test(i.id)) continue;
-    let p = pref.findIndex(rx => rx.test(i.id.toLowerCase()));
-    let score = p < 0 ? 0 : (pref.length - p) * 10;
-    if (task === "code" && i.codigo) score += 25;
-    if (task === "reasoning" && i.razona) score += 15;
-    if (task === "vision" && i.vision) score += 20;
-    score += Math.min(8, Math.floor(i.ctx / 32000));
-    if (/^e2ee-/i.test(i.id)) score -= 5;
-    out.push({ id: i.id, score });
-  }
-  return out.sort((a, b) => b.score - a.score).map(x => x.id);
-}
-async function veniceModelos(env, task) {
-  const cfg = String((task === "code" ? env.VENICE_CODE_MODELS : task === "reasoning" ? env.VENICE_REASONING_MODELS : env.VENICE_CHAT_MODELS) || env.VENICE_MODELS || "").split(",").map(x => x.trim()).filter(Boolean);
-  if (cfg.length) return cfg;
-  const rank = veniceRanking(await veniceCatalogo(env), task).slice(0, 3);
-  if (rank.length) return rank;
-  return task === "reasoning" ? ["kimi-k2-6", "zai-org-glm-5"] : ["zai-org-glm-5", "kimi-k2-6"];
-}
-async function veniceChat(messages, env, maxTokens, model) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90000);
-  try {
-    const normalized = messages.map(m => ({ role: ["system", "user", "assistant"].includes(m && m.role) ? m.role : "user", content: typeof (m && m.content) === "string" ? m.content : textOf(m && m.content) }));
-    const llamar = async (extra) => fetch("https://api.venice.ai/api/v1/chat/completions", {
-      method: "POST", signal: controller.signal,
-      headers: { "Authorization": `Bearer ${veniceKey(env)}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages: normalized, max_tokens: maxTokens, temperature: 0.2, ...extra })
-    });
-    let r = await llamar({ venice_parameters: { include_venice_system_prompt: false } });
-    if (r.status === 400) r = await llamar({});
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(`Venice HTTP ${r.status}: ${String((data && data.error && data.error.message) || (data && data.error) || (data && data.message) || "rechazó la solicitud").slice(0, 160)}`);
-    const content = salida(data);
-    if (!content) throw new Error("Venice respuesta vacía");
-    return { content, model: `venice:${model}` };
-  } finally { clearTimeout(timer); }
-}
-async function intentarVenice(task, messages, env, maxTokens, fallos) {
-  if (!veniceKey(env)) return null;
-  for (const m of await veniceModelos(env, task)) {
-    try { const r = await veniceChat(messages, env, maxTokens, m); if (r.content) return { ...r, fallos }; fallos.push(`venice:${m}: respuesta vacía`); }
-    catch (e) { fallos.push(`venice:${m}: ${String(e && e.message || e).slice(0, 140)}`); }
-  }
-  return null;
-}
-// Visión: reenvía el mensaje con imágenes tal cual (formato OpenAI) a un modelo de Venice con visión.
-async function veniceVision(messages, env) {
-  if (!veniceKey(env)) throw new Error("sin clave de Venice");
-  const cfg = String(env.VENICE_VISION_MODELS || "").split(",").map(x => x.trim()).filter(Boolean);
-  const modelos = cfg.length ? cfg : veniceRanking(await veniceCatalogo(env), "vision").slice(0, 2);
-  if (!modelos.length) throw new Error("Venice no lista modelos con visión");
-  let ultimo = null;
-  for (const model of modelos) {
-    try {
-      const r = await fetch("https://api.venice.ai/api/v1/chat/completions", { method: "POST",
-        headers: { "Authorization": `Bearer ${veniceKey(env)}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages, max_tokens: 3000, temperature: 0.2, venice_parameters: { include_venice_system_prompt: false } }) });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(`Venice HTTP ${r.status}`);
-      const content = salida(data); if (content) return { content, model: `venice:${model}` };
-    } catch (e) { ultimo = e; }
-  }
-  throw ultimo || new Error("Venice visión sin respuesta");
-}
-// Imágenes: prueba el endpoint compatible con OpenAI y luego el nativo de Venice.
-async function veniceImagen(env, prompt, width, height) {
-  if (!veniceKey(env)) return null;
-  const cat = await veniceCatalogo(env);
-  const cfg = String(env.VENICE_IMAGE_MODEL || "").split(",").map(x => x.trim()).filter(Boolean);
-  const auto = cat.map(veniceInfo).filter(i => i.tipo === "image" && !i.offline && !/(upscal|edit|inpaint|background|lustify|uncensored|nsfw)/i.test(i.id))
-    .sort((a, b) => ((/flux|qwen-image|z-image|hidream|seedream|imagine|gpt-image|nano/i.test(b.id) ? 1 : 0) - (/flux|qwen-image|z-image|hidream|seedream|imagine|gpt-image|nano/i.test(a.id) ? 1 : 0))).map(i => i.id);
-  const modelos = (cfg.length ? cfg : auto).slice(0, 2);
-  const w = Math.max(256, Math.min(1280, Math.round(width / 16) * 16)), h = Math.max(256, Math.min(1280, Math.round(height / 16) * 16));
-  for (const model of modelos) {
-    const intentos = [
-      ["https://api.venice.ai/api/v1/images/generations", { model, prompt: prompt.slice(0, 1400), n: 1, size: `${w}x${h}`, response_format: "b64_json" }, d => d && d.data && d.data[0] && d.data[0].b64_json],
-      ["https://api.venice.ai/api/v1/image/generate", { model, prompt: prompt.slice(0, 1400), width: w, height: h, format: "png", hide_watermark: true }, d => d && d.images && d.images[0]]
-    ];
-    for (const [u, cuerpo, sacar] of intentos) {
-      try {
-        const r = await fetch(u, { method: "POST", headers: { "Authorization": `Bearer ${veniceKey(env)}`, "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
-        const d = await r.json().catch(() => ({}));
-        const b64 = r.ok ? sacar(d) : "";
-        if (b64) { const out = imagenResultado({ image: b64 }, `venice:${model}`); if (out) return out; }
-      } catch (e) { console.warn("venice_image", model, String(e && e.message || e).slice(0, 120)); }
-    }
-  }
-  return null;
-}
-
 // Cuatro especialistas trabajan en paralelo y un coordinador integra sus respuestas.
 // Si uno o varios proveedores fallan, el equipo continúa con los que sí respondan;
 // si falla la síntesis, se devuelve la mejor respuesta individual disponible.
@@ -1058,20 +931,37 @@ async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
   const contextoNoImplementador = esProyecto
     ? [{ role: "system", content: `Analiza la solicitud de proyecto como especialista de EGO AI. Requisitos y restricciones originales:\n${systemOriginal.slice(0, 12000)}\nNo generes archivos ni repitas el formato de salida; entrega solo tu análisis técnico breve.` }, ...base.filter(m => m.role !== "system")]
     : base;
-  const results = await Promise.all(roles.map(async ([key, rolePrompt]) => {
+  const ejecutarRol = async ([key, rolePrompt], contextoExtra = "") => {
     const model = EGO_TEAM_MODELS[key];
-    const mensajesRol = esProyecto && key !== "coder" ? contextoNoImplementador : base;
+    const mensajesRol = esProyecto
+      ? (key === "coder" ? base : contextoNoImplementador).map(m => ({...m}))
+      : base.map(m => ({...m}));
+    if (esProyecto && contextoExtra) mensajesRol.push({ role: "user", content: `RESULTADOS DE ETAPAS ANTERIORES (úsalos como contexto, no los contradigas sin explicar):\n${contextoExtra.slice(0,18000)}` });
     const tokensRol = esProyecto ? (key === "coder" ? Math.max(5000, Math.min(14000, Math.floor(maxTokens * 0.78))) : 1800) : memberTokens;
     try {
       const r = await openRouterChat([
         { role: "system", content: `${rolePrompt}\nTarea: ${task}. No inventes pruebas ni APIs.` },
         ...mensajesRol
-      ], env, tokensRol, model);
+      ], env, tokensRol, model, esProyecto ? 24000 : 55000);
       return { key, model, content: String(r.content || "").trim() };
     } catch (e) {
       return { key, model, content: "", error: String(e?.message || e).slice(0, 150) };
     }
-  }));
+  };
+  let results;
+  if (esProyecto) {
+    // Secuencia real: plan -> revisión técnica -> implementación -> auditoría del resultado del implementador.
+    results = [];
+    let acumulado = "";
+    for (const role of roles) {
+      const r = await ejecutarRol(role, acumulado);
+      results.push(r);
+      if (r.content) acumulado += `\n\nETAPA ${r.key.toUpperCase()}:\n${r.content}`;
+      // Si falla un rol, los demás continúan con el contexto disponible.
+    }
+  } else {
+    results = await Promise.all(roles.map(role => ejecutarRol(role)));
+  }
 
   const ok = results.filter(x => x.content);
   if (!ok.length) return null;
@@ -1124,7 +1014,6 @@ async function cfChatSeguro(cadena, messages, env, maxTokens) {
       fallos.push(`ego-team: ${String(e?.message || e).slice(0, 120)}`);
     }
   }
-  if ((tarea === "code" || tarea === "reasoning") && env.VENICE_FIRST !== "0") { const v = await intentarVenice(tarea, messages, env, maxTokens, fallos); if (v) return v; }
   for (const m of cadena) {
     try {
       const extra = /deepseek-v4/.test(m) ? { reasoning_effort: "high" } : {};
@@ -1133,7 +1022,6 @@ async function cfChatSeguro(cadena, messages, env, maxTokens) {
       fallos.push(m + ": respuesta vacía");
     } catch (e) { fallos.push(m + ": " + String(e && e.message || e).slice(0, 120)); }
   }
-  if (tarea === "chat" || env.VENICE_FIRST === "0") { const v = await intentarVenice(tarea, messages, env, maxTokens, fallos); if (v) return v; }
   // Fallback por tarea: modelo gratuito específico y luego router dinámico.
   const task = cadena === CF_MODELS.razonar ? "reasoning" : cadena === CF_MODELS.codigo ? "code" : "chat";
   if (routerApiKey(env)) {
@@ -1157,6 +1045,18 @@ function routerApiKey(env) {
   return String(env.ROUTER_API_KEY || env.OPENROUTER_API_KEY || "").trim();
 }
 
+function clasificarErrorProveedor(status, detalle = "") {
+  const s = Number(status)||0, d=String(detalle||"");
+  if (s===400) return { tipo:"parametros", reintentar:false };
+  if (s===401 || s===403) return { tipo:"autenticacion_permisos", reintentar:false };
+  if (s===402) return { tipo:/max[_ ]tokens|only afford|fewer max_tokens|token budget/i.test(d)?"presupuesto_tokens":"creditos", reintentar:/max[_ ]tokens|only afford|fewer max_tokens|token budget/i.test(d) };
+  if (s===404) return { tipo:"modelo_o_ruta", reintentar:false };
+  if (s===408 || s===429 || s===500 || s===502 || s===503 || s===504) return { tipo:"temporal", reintentar:true };
+  if (s===413) return { tipo:"solicitud_grande", reintentar:false };
+  return { tipo:"proveedor", reintentar:false };
+}
+function pausa(ms) { return new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(2500, ms)))); }
+
 async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_MODEL, timeoutMs = 55000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(5000, Math.min(55000, Number(timeoutMs) || 55000)));
@@ -1172,9 +1072,7 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
       "X-Title": "EGO AI"
     };
     let response, data = {}, usado = Math.max(1, Number(maxTokens) || 1024);
-    const presupuestos = [usado];
-    // OpenRouter puede rechazar una solicitud grande aunque el modelo permita responder
-    // con un presupuesto menor. Reintenta SOLO cuando el 402 menciona max_tokens/afford.
+    // Un único reintento controlado para límites temporales; 402 solo se reduce si el proveedor menciona tokens.
     for (let intento = 0; intento < 2; intento++) {
       response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", signal: controller.signal, headers,
@@ -1182,12 +1080,18 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
       });
       data = await response.json().catch(() => ({}));
       if (response.ok) break;
-      const detalle = String(data?.error?.message || "proveedor rechazó la solicitud");
-      if (response.status === 402 && intento === 0 && /max[_ ]tokens|only afford|can only afford|fewer max_tokens/i.test(detalle)) {
-        usado = Math.max(64, Math.min(255, usado));
+      const detalle = String(data?.error?.message || data?.message || "proveedor rechazó la solicitud");
+      const clase = clasificarErrorProveedor(response.status, detalle);
+      if (intento === 0 && response.status === 402 && clase.tipo === "presupuesto_tokens") {
+        usado = Math.max(64, Math.min(255, Math.floor(usado * 0.35)));
         continue;
       }
-      throw new Error(`HTTP ${response.status}: ${detalle.slice(0, 180)}`);
+      if (intento === 0 && clase.reintentar && response.status !== 402) {
+        const retryAfter = Number(response.headers.get("Retry-After")) * 1000;
+        await pausa(retryAfter || 650);
+        continue;
+      }
+      throw new Error(`HTTP ${response.status} [${clase.tipo}]: ${detalle.slice(0, 180)}`);
     }
     if (!response?.ok) throw new Error(`HTTP ${response?.status || 502}: ${String(data?.error?.message || "proveedor rechazó la solicitud").slice(0, 180)}`);
     const content = salida(data);
@@ -1282,7 +1186,7 @@ function lintScriptApi(texto, verSrv="2.10.0"){
 }
 // ============================================================
 // 🌐 BÚSQUEDA EN INTERNET (varias fuentes a la vez, sin clave obligatoria)
-//   Opcionales: TAVILY_API_KEY, BRAVE_API_KEY (más calidad). Con VENICE_API_KEY también usa la búsqueda web de Venice.
+//   Opcionales: TAVILY_API_KEY, BRAVE_API_KEY (más calidad). 
 //   Siempre: DuckDuckGo, Wikipedia, Microsoft Learn (documentación de Minecraft), GitHub y Stack Overflow.
 // ============================================================
 const WEB_UA = "Mozilla/5.0 (compatible; EGO-AI/1.0)";
@@ -1354,68 +1258,6 @@ async function webNpm(q) {
     } catch (e) {}
   }
   return out;
-}
-async function veniceBuscar(q, env) {
-  if (!veniceKey(env)) return null;
-  const modelo = (await veniceModelos(env, "chat"))[0];
-  const r = await webFetch("https://api.venice.ai/api/v1/chat/completions", { method: "POST", headers: { "Authorization": "Bearer " + veniceKey(env), "Content-Type": "application/json" },
-    body: JSON.stringify({ model: modelo, max_tokens: 1200, temperature: 0.1,
-      messages: [{ role: "system", content: "Busca en internet y responde con datos actuales y verificables en español. Cita la fuente de cada dato y la fecha si la ves. Si no lo encuentras, dilo." }, { role: "user", content: q }],
-      venice_parameters: { enable_web_search: "on", enable_web_citations: true, include_venice_system_prompt: false } }) }, 40000);
-  const d = await r.json(); if (!r.ok) return null;
-  const texto = salida(d); if (!texto) return null;
-  const citas = (((d.venice_parameters || {}).web_search_citations) || []).filter(c => c && c.url).slice(0, 6).map(c => ({ titulo: c.title || c.url, url: c.url, resumen: String(c.content || "").slice(0, 300), fuente: "Venice web" }));
-  return { texto: texto.slice(0, 3500), citas };
-}
-async function webBuscar(q, env) {
-  q = String(q || "").trim().slice(0, 300); if (!q) return { resultados: [], fuentes: [] };
-  const mc = /(minecraft|bedrock|add-?on|@minecraft|script api)/i.test(q);
-  const tareas = [];
-  if (env.TAVILY_API_KEY) tareas.push(["Tavily", webTavily(q, env)]);
-  if (env.BRAVE_API_KEY) tareas.push(["Brave", webBrave(q, env)]);
-  const tecnico = mc || /@[a-z0-9_.-]+\/|\b(api|npm|javascript|python|versi[oó]n|sdk|framework|librer[ií]a)\b/i.test(q);
-  tareas.push(["DuckDuckGo", webDuck(q)], ["Stack Overflow", webStack(q)]);
-  if (/@[a-z0-9_.-]+\//i.test(q)) tareas.unshift(["npm", webNpm(q)]);
-  if (!tecnico) tareas.push(["Wikipedia", webWiki(q)]);
-  if (mc || /(api|javascript|python|docs|documentaci)/i.test(q)) tareas.push(["Microsoft Learn", webLearn(q)], ["GitHub", webGithub(q)]);
-  const rs = await Promise.allSettled(tareas.map(t => t[1]));
-  const res = [], usadas = [], vistos = new Set();
-  rs.forEach((r, i) => { if (r.status === "fulfilled" && r.value && r.value.length) { usadas.push(tareas[i][0]); for (const x of r.value) { if (x.url && !vistos.has(x.url)) { vistos.add(x.url); res.push(x); } } } });
-  // Prioridad: fuentes de calidad primero
-  const peso = { "npm": -1, "Tavily": 0, "Brave": 0, "Microsoft Learn": 1, "GitHub": 2, "DuckDuckGo": 2, "Stack Overflow": 3, "Wikipedia": 3 };
-  res.sort((a, b) => (peso[a.fuente] ?? 5) - (peso[b.fuente] ?? 5));
-  return { resultados: res.slice(0, 10), fuentes: usadas };
-}
-function webUrlSegura(u) {
-  try { const x = new URL(u); if (!/^https?:$/.test(x.protocol)) return false; const h = x.hostname; return !(/^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[)/.test(h) || !h.includes(".")); } catch (e) { return false; }
-}
-async function webLeer(url, max) {
-  if (!webUrlSegura(url)) return "";
-  try {
-    const r = await webFetch(url, {}, 7000); if (!r.ok) return "";
-    const ct = r.headers.get("content-type") || ""; if (!/text|json|xml/.test(ct)) return "";
-    const t = (await r.text()).slice(0, 400000);
-    return (/html/.test(ct) ? webLimpiar(t) : t.replace(/\s+/g, " ")).slice(0, max || 3500);
-  } catch (e) { return ""; }
-}
-// Reglas para decidir cuándo conviene buscar solos (o siempre que el usuario lo pida)
-const RX_WEB = /(busca(?:r|me)?\s+(?:en\s+)?(?:internet|la web|google)|b[uú]sca(?:lo)?\s+en\s+(?:internet|la web)|investiga|en internet|en la web|[uú]ltim[ao]s?\s+(?:versi[oó]n|noticias|novedades)|versi[oó]n\s+(?:actual|m[aá]s reciente|estable)|changelog|novedades|noticias|cu[aá]nto cuesta|qui[eé]n es el actual|esta semana|compatible con|ya sali[oó]|sali[oó] la|lanzamiento|documentaci[oó]n oficial)/i;
-async function contextoWeb(texto, env, forzar) {
-  const q = String(texto || "").replace(/\s+/g, " ").slice(0, 300);
-  const [b, v] = await Promise.all([webBuscar(q, env), veniceBuscar(q, env).catch(() => null)]);
-  const todos = [...(v ? v.citas : []), ...b.resultados];
-  const vistos = new Set(), lista = [];
-  for (const x of todos) { if (!vistos.has(x.url)) { vistos.add(x.url); lista.push(x); } }
-  if (!lista.length && !(v && v.texto)) return { texto: "", fuentes: [] };
-  // Lee las 2 mejores páginas (documentación) para tener datos y no solo títulos
-  const leer = lista.filter(x => /learn\.microsoft|github\.com|wiki\.bedrock|minecraft\.net|docs\.|developer\./.test(x.url)).slice(0, 2);
-  const paginas = await Promise.all(leer.map(x => webLeer(x.url, 2500)));
-  let c = "\n\n=== INFORMACIÓN ACTUAL DE INTERNET (consultada ahora, " + new Date().toISOString().slice(0, 10) + ") ===\nUsa estos datos como fuente principal para versiones, fechas, precios y noticias; si algo no aparece aquí, dilo en vez de inventarlo, y cita las fuentes.\n";
-  if (v && v.texto) c += "\n[Búsqueda de Venice]\n" + v.texto + "\n";
-  lista.slice(0, 8).forEach((x, i) => { c += `\n[${i + 1}] ${x.titulo} — ${x.url} (${x.fuente})\n${x.resumen || ""}\n`; });
-  paginas.forEach((p, i) => { if (p) c += `\n--- Contenido de ${leer[i].url} ---\n${p}\n`; });
-  c += "=== FIN INTERNET ===\n";
-  return { texto: c, fuentes: lista.slice(0, 6).map(x => ({ titulo: x.titulo, url: x.url })), usadas: [...new Set([...(v ? ["Venice web"] : []), ...b.fuentes])] };
 }
 const RX_WEB_PEDIDA = /(internet|busca(?:r|me)?\b|investiga|la web|google)/i;
 // ============================================================
@@ -1519,30 +1361,22 @@ function limpiarPlan(j,prompt){
 }
 async function candidatosCodigo(env,rol){
   const c=[];
-  if(rol==="razonar"){
-    if(veniceKey(env)&&env.VENICE_FIRST!=="0")for(const x of await veniceModelos(env,"reasoning"))c.push({tipo:"venice",id:x});
-    if(env.AI)for(const x of CF_MODELS.razonar.slice(0,3))c.push({tipo:"cf",id:x});
-    if(veniceKey(env)&&env.VENICE_FIRST==="0")for(const x of await veniceModelos(env,"reasoning"))c.push({tipo:"venice",id:x});
-    if(routerApiKey(env))for(const x of openRouterCandidates(env,"reasoning").slice(0,2))c.push({tipo:"or",id:x});
-    if(c.length)return c;
+  if(rol==="razonar" && env.AI) for(const x of CF_MODELS.razonar.slice(0,3)) c.push({tipo:"cf",id:x});
+  if(rol!=="razonar" && env.AI){
+    const cad=env.PROJECT_CF_MODEL?[String(env.PROJECT_CF_MODEL),...CF_MODELS.codigo.filter(m=>m!==String(env.PROJECT_CF_MODEL))]:CF_MODELS.codigo;
+    for(const m of cad.slice(0,4)) c.push({tipo:"cf",id:m});
   }
-  const ven=veniceKey(env)?(await veniceModelos(env,"code")).map(m=>({tipo:"venice",id:m})):[];
-  if(ven.length&&env.VENICE_FIRST!=="0") c.push(...ven);
-  if(env.AI){const cad=env.PROJECT_CF_MODEL?[String(env.PROJECT_CF_MODEL),...CF_MODELS.codigo.filter(m=>m!==String(env.PROJECT_CF_MODEL))]:CF_MODELS.codigo;
-    for(const m of cad.slice(0,4)) c.push({tipo:"cf",id:m});}
-  if(ven.length&&env.VENICE_FIRST==="0") c.push(...ven);
-  if(routerApiKey(env)) for(const m of openRouterCandidates(env,"code").slice(0,2)) c.push({tipo:"or",id:m});
+  if(routerApiKey(env)) for(const m of openRouterCandidates(env,rol==="razonar"?"reasoning":"code").slice(0,3)) c.push({tipo:"or",id:m});
   return c;
 }
 async function llamarCodigo(env,mensajes,maxTok,desde,rol){
   const cands=await candidatosCodigo(env,rol); const fallos=[];
-  if(!cands.length) throw new Error("Configura Workers AI, VENICE_API_KEY u OPENROUTER_API_KEY.");
+  if(!cands.length) throw new Error("Configura Workers AI o ROUTER_API_KEY/OPENROUTER_API_KEY.");
   for(let i=Math.min(desde||0,cands.length-1);i<cands.length;i++){
     const c=cands[i];
     try{
       let raw="";
       if(c.tipo==="cf") raw=(await cfChat(c.id,mensajes,env,maxTok)).content;
-      else if(c.tipo==="venice") raw=(await veniceChat(mensajes,env,maxTok,c.id)).content;
       else{
         const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Authorization":`Bearer ${routerApiKey(env)}`,"Content-Type":"application/json","HTTP-Referer":env.OPENROUTER_SITE_URL||"https://ego-ai.app","X-Title":"EGO AI"},body:JSON.stringify({model:c.id,messages:mensajes,temperature:0.15,max_tokens:Math.min(maxTok,16000)})});
         const data=await r.json().catch(()=>({}));
@@ -1631,7 +1465,8 @@ function parsearSalidaMc(raw){
     vistos.add(path);
     if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path);continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
     else if(/\.js$/i.test(path)){if(balanceJs(f.content)||lintScriptApi(f.content, "2.10.0").length){errores.push(path);continue;}files.push({path,content:f.content});}
-    else files.push({path,content:f.content.slice(0,300000)});
+    else if (f.content.length > 300000) errores.push(path + ": archivo supera 300000 caracteres; se rechaza completo para evitar truncamiento silencioso.");
+    else files.push({path,content:f.content});
   }
   return {files,errores};
 }
@@ -1789,7 +1624,8 @@ async function mcPart(body,env){
       vistos.add(path);
       if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path+": JSON inválido ("+t.error+")");continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
       else if(/\.js$/i.test(path)){const bal=balanceJs(f.content);if(bal){errores.push(path+": "+bal);}for(const pr of lintScriptApi(f.content, "2.10.0"))errores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server.");files.push({path,content:f.content});}
-      else files.push({path,content:f.content.slice(0,300000)});
+      else if (f.content.length > 300000) errores.push(path + ": archivo supera 300000 caracteres; no se truncó.");
+      else files.push({path,content:f.content});
     }
     if(!files.length&&!errores.length)errores.push("No devolviste archivos BP/ o RP/ válidos.");
     if(!mejor||errores.length<mejor.errores.length||(errores.length===mejor.errores.length&&files.length>=mejor.files.length))mejor={files,errores:errores.slice()};
@@ -2545,7 +2381,8 @@ async function mcBuild(body,env,request){
   const entrada=[];const vistos=new Set();
   for(const f of (Array.isArray(body.files)?body.files:[]).slice(0,400)){
     const path=safeProjectPath(f&&f.path);
-    if(!path||!/^(BP|RP)\//.test(path)||typeof f.content!=="string"||f.content.length>400000) continue;
+    if(!path||!/^(BP|RP)\//.test(path)||typeof f.content!=="string") continue;
+    if (f.content.length > 400000) return json({ error: "Archivo demasiado grande para construir el paquete; no se truncó.", path, limiteCaracteres: 400000 }, 413);
     if(/manifest\.json$|\.(png|jpg|zip|mcaddon)$/i.test(path)) continue;
     vistos.add(path);entrada.push({path,content:f.content});
   }
@@ -2558,6 +2395,9 @@ async function mcBuild(body,env,request){
     for(const x of vz.fallos)r.notas.push("Voz: "+x);
     const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
     const validacion=ciclo.validacion||validarAddonEstructural(r.files);
+    if (!validacion.ok || validacion.errores.length) {
+      return json({ error: "El add-on no superó la validación estructural y no se exportó como terminado.", estado: "validacion_fallida", archivos: validacion.archivos, errores: validacion.errores.slice(0,40), avisos: validacion.avisos.slice(0,30), reparacion: ciclo.informe }, 422);
+    }
     for(const x of ciclo.informe.cambios)r.notas.push(`Auto-reparación ronda ${x.ronda}: ${x.path}`);
     for(const x of ciclo.informe.avisosFinales)r.notas.push("Auto-reparación: "+x);
     for(const x of validacion.errores)r.notas.push("Validación pendiente: "+x);
@@ -2595,7 +2435,6 @@ async function moondreamVision(messages, env) {
 }
 async function cfVision(messages, env) {
   let ultimo = null;
-  if (veniceKey(env) && env.VENICE_FIRST !== "0") { try { const v = await veniceVision(messages, env); if (v.content) return v; } catch (e) { ultimo = e; } }
   if (env.AI) {
     const ult = JSON.stringify((messages[messages.length - 1] || {}).content || "").slice(0, 4000);
     const descriptiva = /(qu[eé] (?:hay|es|ves|aparece|objeto|animal|cosa)|descr[ií]b|cu[aá]nt[oa]s|d[oó]nde|identifica|qui[eé]n|color|ropa|lugar|what is|describe)/i.test(ult) && !/(ecuaci|resuelve|ejercicio|problema|c[oó]digo|error|lee el texto|transcribe|\d\s*[+\-*\/=])/i.test(ult);
@@ -2680,7 +2519,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.27.0",
+    version: "14.28.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -2773,12 +2612,6 @@ async function generarImagen(body, env) {
   if (!prompt) return respuestaJsonError("Falta prompt.");
   const mejorado = body.mejorar === false ? prompt : await mejorarPromptImagen(prompt, env);
   const enhanced = promptImagenProfesional(mejorado, body);
-  // Workers AI FLUX.2 Klein ofrece generación y edición con referencia. Se usa primero
-  // si está disponible; se conserva el fallback de proveedores ya configurado.
-  if (veniceKey(env) && env.VENICE_IMAGE_FIRST !== "0") {
-    const v = await veniceImagen(env, enhanced, dimImg(body.width, 1024), dimImg(body.height, 1024));
-    if (v) return json(v);
-  }
   if (env.AI) {
     for (const model of cadenaImg(env)) {
       try {
@@ -3153,7 +2986,8 @@ async function completarAddonPorCobertura(files, prompt, env, maxFiles, intentos
         if (!path || seen.has(path.toLowerCase()) || typeof f.content !== "string" || added >= remaining) continue;
         if (/\.json$/i.test(path) && !jsonTolerante(f.content).ok) continue;
         if (/\.js$/i.test(path) && balanceJs(f.content)) continue;
-        files.push({ path, content: f.content.slice(0, 300000) });
+        if (f.content.length > 300000) { intentos.push(path + ": archivo demasiado grande; rechazado sin truncarlo"); continue; }
+        files.push({ path, content: f.content });
         seen.add(path.toLowerCase()); added++;
       }
       intentos.push(`completitud-addon: ${added} archivos nuevos añadidos`);
@@ -3176,6 +3010,7 @@ async function generarProyecto(body, env, minecraft, request) {
       const reparaciones = repararAddon(files, env.MC_SERVER_VERSION);
       const ciclo = await cicloReparacionAutomatica(files, env, { minecraft: true });
       const validacion = ciclo.validacion || validarAddonEstructural(files);
+      if (!validacion.ok || validacion.errores.length) return json({ error: "El add-on no superó la validación estructural y no se exportó como terminado.", estado: "validacion_fallida", errores: validacion.errores.slice(0,40), avisos: validacion.avisos.slice(0,30), reparacion: ciclo.informe }, 422);
       const avisos = [...reparaciones, ...ciclo.informe.cambios.map(x=>`Auto-reparación (ronda ${x.ronda}): ${x.path}`), ...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x), ...validacion.errores.map(x=>"Validación pendiente: "+x), ...validacion.avisos.map(x=>"Revisión: "+x)];
       const readme = files.find(f=>/^BP\/README\.md$/i.test(f.path));
       if(readme && avisos.length) readme.content += "\n\n## Revisión de EGO AI\n"+avisos.map(x=>"- "+x).join("\n")+"\n";
@@ -3252,7 +3087,8 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     for(const f of parsed.files.slice(0,maxFiles)) {
       const path=safeProjectPath(f?.path);
       if(!path || seen.has(path) || typeof f.content!=="string") continue;
-      seen.add(path); files.push({path,content:f.content.slice(0,300000)});
+      if (f.content.length > 300000) { intentos.push(path + ": archivo supera el límite seguro; no se truncó"); continue; }
+      seen.add(path); files.push({path,content:f.content});
     }
     if(!files.length) return json({error:"El proyecto no contiene archivos válidos.",model},502);
     let coberturaAddon = null;
@@ -3278,6 +3114,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
     const ciclo=await cicloReparacionAutomatica(files,env,{minecraft});
     const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files):{ok:true,errores:[],avisos:[],archivos:files.length});
+    if (minecraft && (!validacion.ok || validacion.errores.length)) return json({ error: "El proyecto Minecraft no superó la validación estructural y no se exportó como terminado.", estado: "validacion_fallida", errores: validacion.errores.slice(0,40), avisos: validacion.avisos.slice(0,30), reparacion: ciclo.informe }, 422);
     avisos.push(...ciclo.informe.cambios.map(x=>`Auto-reparación ronda ${x.ronda}: ${x.path}`),...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x));
     if(minecraft) avisos.push(...validacion.errores.map(x=>"Validación pendiente: "+x),...validacion.avisos.map(x=>"Revisión: "+x));
     if (coberturaAddon && !coberturaAddon.ok) avisos.push("Cobertura funcional incompleta: " + coberturaAddon.missing.join(" | "));
@@ -3637,7 +3474,7 @@ function construirAddonItem(s,version){
 
 
 // Ciclo de reparación asistida: revisa JS/JSON, aplica parches acotados y vuelve a validar.
-// Solo modifica archivos existentes; máximo dos rondas. No ejecuta Minecraft ni simula pruebas reales.
+// Solo modifica archivos existentes; máximo tres rondas. No ejecuta Minecraft ni simula pruebas reales.
 async function cicloReparacionAutomatica(files, env, opciones = {}) {
   const informe = { habilitado: !!routerApiKey(env) && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], erroresFinales: [], avisosFinales: [], estado: "omitido" };
   if (!Array.isArray(files) || !informe.habilitado) {
@@ -3645,7 +3482,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     if (v) { informe.erroresFinales = v.errores; informe.avisosFinales = v.avisos; }
     return { validacion: v, informe };
   }
-  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 2), 2));
+  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 3), 3));
   let validacion = opciones.minecraft ? validarAddonEstructural(files) : { ok: true, errores: [], avisos: [], archivos: files.length };
   for (let ronda = 1; ronda <= maxRondas; ronda++) {
     const candidatos = files.filter(f => f && typeof f.content === "string" && (/\.js$/i.test(f.path) || /\.json$/i.test(f.path)));
@@ -3839,6 +3676,32 @@ function validarAddonEstructural(files) {
     if(ce?.__ego_geo_has_limbs&&!used.length) errores.push(`${clientPath}: la geometría tiene extremidades móviles pero no tiene animación locomotora conectada.`);
     for(const alias of used){const animId=anims[alias];if(!animId){errores.push(`${clientPath}: script animate usa alias ${alias} sin declarar.`);continue;}let found=false;for(const [ap,af] of porRuta){if(!/^RP\/animations\/.+\.json$/i.test(ap)||typeof af.content!=="string")continue;try{if(JSON.parse(af.content).animations?.[animId]){found=true;break;}}catch{}}if(!found)errores.push(`${clientPath}: animación ${animId} no existe en RP/animations.`);}
   }
+  // Recetas: todos los identificadores no vanilla deben existir en los packs del proyecto.
+  const idsItems = new Set(idsBP.keys());
+  const vanilla = id => /^minecraft:/.test(String(id||""));
+  for (const [path,f] of porRuta) {
+    if (!/^BP\/recipes\/.+\.json$/i.test(path) || typeof f.content !== "string") continue;
+    let root; try { root = JSON.parse(f.content); } catch { continue; }
+    const walk = (v, key) => {
+      if (!v || typeof v !== "object") return;
+      for (const [k,val] of Object.entries(v)) {
+        if ((k === "item" || k === "output" || k === "result") && typeof val === "string" && val.includes(":" ) && !vanilla(val) && !idsItems.has(val))
+          errores.push(`${path}: referencia a objeto inexistente ${val}.`);
+        else if (k === "item" && val && typeof val === "object" && typeof val.item === "string" && !vanilla(val.item) && !idsItems.has(val.item))
+          errores.push(`${path}: ingrediente inexistente ${val.item}.`);
+        else if (val && typeof val === "object") walk(val,k);
+      }
+    };
+    walk(root, "");
+  }
+  // Spawn rules: una regla no crea una entidad; su identifier debe existir en BP/entities.
+  const entityIds = new Set();
+  for (const [path,f] of porRuta) if (/^BP\/entities\/.+\.json$/i.test(path) && typeof f.content === "string") {
+    try { const id = JSON.parse(f.content)["minecraft:entity"]?.description?.identifier; if (id) entityIds.add(id); } catch {}
+  }
+  for (const [path,f] of porRuta) if (/^BP\/spawn_rules\/.+\.json$/i.test(path) && typeof f.content === "string") {
+    try { const id = JSON.parse(f.content)["minecraft:spawn_rules"]?.description?.identifier; if (id && !entityIds.has(id)) errores.push(`${path}: spawn_rule ${id} no tiene definición correspondiente en BP/entities.`); } catch {}
+  }
   // Scripts: errores sintácticos detectables y patrones API incompatibles no deben pasar como éxito.
   for(const [path,f] of porRuta){if(!/^BP\/scripts\/.+\.js$/i.test(path)||typeof f.content!=="string")continue;const bal=balanceJs(f.content);if(bal)errores.push(`${path}: posible error de sintaxis (${bal}).`);const lint=lintScriptApi(f.content,"2.10.0");for(const msg of lint.slice(0,4))errores.push(`${path}: ${msg}.`);}
   if (!manifests.length) errores.push("No se encontró ningún manifest.json.");
@@ -3991,17 +3854,8 @@ async function manejar(request, env) {
   const correoUsuario = obtenerCorreo(request, null);
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
-  if (url.searchParams.has("venice")) {
-    if (!veniceKey(env)) return json({ configurado: false, aviso: "Falta el secreto VENICE_API_KEY." });
-    if (url.searchParams.get("venice") === "test") {
-      try { const mod = (await veniceModelos(env, "code"))[0]; const t0 = Date.now(); const r = await veniceChat([{ role: "user", content: "Responde solo: ok" }], env, 30, mod); return json({ ok: true, modelo: mod, ms: Date.now() - t0, respuesta: String(r.content).slice(0, 40) }); }
-      catch (e) { return json({ ok: false, error: String((e && e.message) || e).slice(0, 300), ayuda: "Venice rechazó la prueba: revisa saldo/créditos de la clave o el nombre del modelo." }); }
-    }
-    const cat = await veniceCatalogo(env);
-    return json({ configurado: true, modelosEncontrados: cat.length, codigo: veniceRanking(cat, "code").slice(0, 5), razonamiento: veniceRanking(cat, "reasoning").slice(0, 5), chat: veniceRanking(cat, "chat").slice(0, 5), vision: veniceRanking(cat, "vision").slice(0, 5), imagenes: cat.map(veniceInfo).filter(i => i.tipo === "image").map(i => i.id).slice(0, 12), todos: cat.map(m => m && m.id).filter(Boolean).slice(0, 80) });
-  }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.27.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI, veniceConfigured: !!veniceKey(env),
+    ok: true, version: "14.28.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -4030,7 +3884,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.27.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.28.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
