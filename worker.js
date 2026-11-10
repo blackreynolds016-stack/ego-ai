@@ -1114,7 +1114,7 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
 // un fallback explícito. Los fallbacks no sustituyen al modelo principal si este responde.
 const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning" };
 async function egoRoleChat(role, messages, env, maxTokens = 3000) {
-  if (!routerApiKey(env)) throw new Error("Falta ROUTER_API_KEY/OPENROUTER_API_KEY para el equipo EGO.");
+  if (!routerApiKey(env) && !env.AI) throw new Error("Falta ROUTER_API_KEY/OPENROUTER_API_KEY o Workers AI para el equipo EGO.");
   const task = EGO_ROLE_TASK[role] || "chat";
   const envName = `EGO_${String(role).toUpperCase()}_MODEL`;
   const primary = String(env[envName] || EGO_TEAM_MODELS[role] || "").trim();
@@ -1123,7 +1123,10 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000) {
     : [OR_FREE.reasoning, OR_FREE.fallback];
   const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
   const failures = [];
-  for (let i = 0; i < models.length; i++) {
+  // Si OpenRouter acaba de responder 402 (sin crédito), no se pierde tiempo reintentándolo: se pasa directo a Workers AI.
+  const orBloqueado = !routerApiKey(env) || (globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
+  if (orBloqueado && routerApiKey(env)) failures.push("OpenRouter sin crédito (402), se omite");
+  for (let i = 0; i < models.length && !orBloqueado; i++) {
     try {
       // El tiempo de espera crece con el tamaño de la respuesta: 10 000 tokens no caben en 36 s (causa real de "tiempo agotado").
       const tPrim = Math.min(100000, 25000 + Number(maxTokens || 3000) * 8);
@@ -1131,7 +1134,20 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000) {
       if (r.content) return { ...r, role, fallos: failures };
       failures.push(`${models[i]}: respuesta vacía`);
     } catch (e) {
-      failures.push(`${models[i]}: ${String(e?.message || e).slice(0, 120)}`);
+      const em = String(e?.message || e);
+      failures.push(`${models[i]}: ${em.slice(0, 120)}`);
+      if (/HTTP 402/.test(em)) { globalThis.__egoOrSinCredito = Date.now(); break; }
+    }
+  }
+  // Respaldo propio: Workers AI (incluido en tu cuenta de Cloudflare, no depende de créditos de OpenRouter).
+  if (env.AI) {
+    const cadena = (task === "code" ? CF_MODELS.codigo : CF_MODELS.razonar).slice(0, 3);
+    for (const id of cadena) {
+      try {
+        const r = await Promise.race([cfChat(id, messages, env, Math.min(Number(maxTokens || 3000), 8000)), tmoMc(70000)]);
+        if (r && r.content) return { ...r, model: `cf:${id}`, role, fallos: failures };
+        failures.push(`${id}: respuesta vacía`);
+      } catch (e) { failures.push(`${id}: ${String(e?.message || e).slice(0, 80)}`); }
     }
   }
   throw new Error(`${role} no respondió: ${failures.join(" | ").slice(0, 420)}`);
