@@ -1,5 +1,5 @@
 /*
- * EGO AI Worker v14.30.0 — cambios sobre v14.28.0
+ * EGO AI Worker v14.31.0 — cambios sobre v14.28.0
  *  - balanceJs reescrito: entiende regex literales, plantillas anidadas y comentarios (0 falsos positivos en 281 JS reales; el anterior daba 16).
  *  - Validador estructural con severidades: CRITICO (bloquea), ADVERTENCIA, INFORMATIVO. Solo lo crítico impide exportar.
  *  - Spawn rules de mobs vanilla (minecraft:*) aceptadas; client_entity se busca por identificador; eventos system.* reconocidos.
@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.30.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.31.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -46,7 +46,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.30.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI v14.31.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -2455,6 +2455,495 @@ async function generarVocesAddon(plan,env){
   }
   return {out,fallos};
 }
+// ============================================================
+// ENDURECIMIENTO v14.31 — correcciones determinísticas + módulos de juego probados
+// Todo lo que sigue es código fijo (no depende del modelo): si el modelo se equivoca en
+// recetas, loot, bloques, entidades o scripts, aquí se corrige o se reemplaza por un módulo que funciona.
+// ============================================================
+const HD_ARMAS=[
+  {rx:/francotir|sniper/i,dmg:22,cd:40,rango:120,perdigones:1,desv:0,nombre:"Francotirador"},
+  {rx:/escopet|shotgun/i,dmg:4,cd:25,rango:14,perdigones:6,desv:0.12,nombre:"Escopeta"},
+  {rx:/rifle|fusil|metralla|smg|ak/i,dmg:5,cd:4,rango:64,perdigones:1,desv:0,nombre:"Rifle"},
+  {rx:/pistol|revolver|arma_fuego|gun|pistola/i,dmg:6,cd:8,rango:48,perdigones:1,desv:0,nombre:"Pistola"}
+];
+const HD_CURA=[{rx:/botiquin|medkit|medicina|first_?aid/i,vida:12,cura:true},{rx:/venda|bandage|gasa/i,vida:4,cura:false}];
+const HD_ARQUETIPOS=[
+  [/alfa|alpha/,{hp:150,dmg:16,spd:0.3,kb:1,seg:64}],[/gigante|giant|titan/,{hp:120,dmg:14,spd:0.18,kb:1,seg:32}],
+  [/mutante|mutant/,{hp:70,dmg:10,spd:0.25,kb:0.5,seg:32}],[/blindado|armored|tank/,{hp:60,dmg:5,spd:0.18,kb:0.9,seg:24}],
+  [/militar|soldier/,{hp:40,dmg:6,spd:0.25,kb:0.3,seg:32}],[/brutal|brute/,{hp:45,dmg:8,spd:0.22,kb:0.6,seg:24}],
+  [/cazador|hunter/,{hp:26,dmg:5,spd:0.3,kb:0,seg:48}],[/rastreador|tracker/,{hp:18,dmg:3,spd:0.3,kb:0,seg:64}],
+  [/nocturno|night/,{hp:22,dmg:4,spd:0.27,kb:0,seg:32}],[/toxico|toxic|venen/,{hp:24,dmg:3,spd:0.23,kb:0,seg:24}],
+  [/explosiv|bomb|kamikaze/,{hp:12,dmg:1,spd:0.3,kb:0,seg:24}],[/corredor|runner|rapido/,{hp:16,dmg:3,spd:0.34,kb:0,seg:28}],
+  [/infectado|infected/,{hp:20,dmg:3,spd:0.22,kb:0,seg:24}],[/caminante|walker/,{hp:20,dmg:3,spd:0.2,kb:0,seg:24}]
+];
+const HD_RUINAS=[
+  {rx:/hospital/i,tipo:"Hospital",muro:"minecraft:white_concrete",suelo:"minecraft:quartz_block",techo:"minecraft:light_gray_concrete",deco:"minecraft:red_concrete",
+   botin:[["BOTIQUIN",1,2,0.8],["VENDA",2,4,0.9],["minecraft:golden_apple",1,1,0.15],["minecraft:iron_nugget",4,10,0.5]]},
+  {rx:/laborator/i,tipo:"Laboratorio",muro:"minecraft:gray_concrete",suelo:"minecraft:green_concrete",techo:"minecraft:black_concrete",deco:"minecraft:glass_pane",
+   botin:[["BOTIQUIN",1,1,0.5],["minecraft:potion",1,1,0.2],["minecraft:redstone",4,12,0.6],["minecraft:iron_ingot",2,6,0.6]]},
+  {rx:/militar|bunker|base/i,tipo:"Base militar",muro:"minecraft:cobblestone",suelo:"minecraft:stone_bricks",techo:"minecraft:stone_bricks",deco:"minecraft:iron_bars",
+   botin:[["ARMA",1,1,0.7],["minecraft:iron_nugget",12,32,0.95],["minecraft:iron_ingot",3,8,0.6],["BOTIQUIN",1,1,0.35]]},
+  {rx:/.*/,tipo:"Refugio",muro:"minecraft:stone_bricks",suelo:"minecraft:cobblestone",techo:"minecraft:cobblestone",deco:"minecraft:cobweb",
+   botin:[["VENDA",1,3,0.7],["minecraft:iron_nugget",4,10,0.6],["minecraft:bread",1,3,0.5]]}
+];
+function hdJson(f){ if(!f||typeof f.content!=="string")return null; const t=jsonTolerante(f.content); return t.ok?t.obj:null; }
+function hdSnake(s){return String(s||"").split(":").pop();}
+
+function endurecerAddonBedrock(files, plan){
+  const cambios=[], generado=[];
+  const nota=(p,m)=>cambios.push({path:p,motivo:m});
+  const porRuta=()=>new Map(files.map(f=>[f.path,f]));
+  const poner=(path,content)=>{const f=files.find(x=>x.path===path); if(f)f.content=content; else files.push({path,content});};
+  const quitar=(path)=>{const i=files.findIndex(x=>x.path===path); if(i>=0)files.splice(i,1);};
+  const guardar=(f,o)=>{f.content=JSON.stringify(o,null,2);};
+
+  // ---- inventario de lo que existe de verdad
+  const items=new Set(),bloques=new Set(),entidades=new Map(),itemFile=new Map(),blockFile=new Map();
+  for(const f of files){
+    const o=hdJson(f); if(!o)continue;
+    if(/^BP\/items\/[^/]+\.json$/.test(f.path)&&o["minecraft:item"]){const id=o["minecraft:item"].description?.identifier;if(id){items.add(id);itemFile.set(id,f);}}
+    if(/^BP\/blocks\/[^/]+\.json$/.test(f.path)&&o["minecraft:block"]){const id=o["minecraft:block"].description?.identifier;if(id){bloques.add(id);blockFile.set(id,f);}}
+    if(/^BP\/entities\/[^/]+\.json$/.test(f.path)&&o["minecraft:entity"]){const id=o["minecraft:entity"].description?.identifier;if(id)entidades.set(id,f);}
+  }
+  const propios=new Set([...items,...bloques]);
+  const nsCont=new Map();for(const id of [...items,...bloques,...entidades.keys()]){const n=id.split(":")[0];nsCont.set(n,(nsCont.get(n)||0)+1);}
+  const ns=[...nsCont.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||String(plan&&plan.ns||"ego");
+  const sust=(id)=>{
+    const s=String(id||""); if(!s.includes(":")||s.startsWith("minecraft:")||propios.has(s))return s;
+    const n=hdSnake(s);
+    if(/bandage|venda|gasa/i.test(n))return "minecraft:paper";
+    if(/ammo|bala|muni|bullet/i.test(n))return "minecraft:iron_nugget";
+    if(/wood|madera|plank/i.test(n))return "minecraft:planks";
+    if(/cloth|tela|fabric/i.test(n))return "minecraft:string";
+    return "minecraft:iron_ingot";
+  };
+  const itemMalo=(id)=>/^minecraft:(shotgun_ammo|bullet|ammo|ammunition)$/i.test(String(id||""))||(String(id||"").includes(":")&&!String(id).startsWith("minecraft:")&&!propios.has(id));
+
+  // ---- 1) loot en la carpeta correcta (loot_tables) y sin NBT
+  for(const f of [...files]){
+    if(/^BP\/loot\/.+\.json$/i.test(f.path)){
+      const np=f.path.replace(/^BP\/loot\//i,"BP/loot_tables/"); if(!files.some(x=>x.path===np)){f.path=np;nota(np,"el loot estaba en BP/loot; Minecraft solo lee BP/loot_tables");}
+    }
+  }
+  const arreglarLoot=(f)=>{
+    const o=hdJson(f); if(!o||!Array.isArray(o.pools))return;
+    let ch=false;
+    for(const pool of o.pools){
+      if(!Array.isArray(pool.entries))continue;
+      const antes=pool.entries.length;
+      pool.entries=pool.entries.filter(e=>!(e&&e.type==="item"&&itemMalo(e.name)));
+      if(pool.entries.length!==antes)ch=true;
+      for(const e of pool.entries){
+        if(Array.isArray(e.functions)){const n0=e.functions.length;e.functions=e.functions.filter(x=>x&&x.function!=="set_nbt"&&x.function!=="set_lore"&&!x.nbt);if(e.functions.length!==n0)ch=true;}
+      }
+    }
+    const n0=o.pools.length; o.pools=o.pools.filter(p=>Array.isArray(p.entries)&&p.entries.length); if(o.pools.length!==n0)ch=true;
+    if(ch){guardar(f,o);nota(f.path,"loot saneado: sin NBT y sin objetos que no existen");}
+  };
+  for(const f of files)if(/^BP\/loot_tables\/.+\.json$/i.test(f.path))arreglarLoot(f);
+
+  // ---- 2) recetas
+  for(const f of files){
+    if(!/^BP\/recipes\/.+\.json$/i.test(f.path))continue;
+    const o=hdJson(f); if(!o)continue; let ch=false;
+    const sh=o["minecraft:recipe_shaped"],sl=o["minecraft:recipe_shapeless"];
+    const fixIng=(ing)=>{ if(ing&&typeof ing==="object"&&typeof ing.item==="string"){const n=sust(ing.item);if(n!==ing.item){ing.item=n;ch=true;}} };
+    if(sh){
+      if(Array.isArray(sh.pattern)){
+        let rows=sh.pattern.map(r=>String(r)).slice(0,3); const w=Math.min(3,Math.max(...rows.map(r=>r.length)));
+        rows=rows.map(r=>r.slice(0,w).padEnd(w," "));
+        if(JSON.stringify(rows)!==JSON.stringify(sh.pattern)){sh.pattern=rows;ch=true;}
+        const usados=new Set(rows.join("").replace(/ /g,"").split(""));
+        sh.key=sh.key||{};
+        for(const k of Object.keys(sh.key)){ if(!usados.has(k)){delete sh.key[k];ch=true;} else fixIng(sh.key[k]); }
+        for(const u of usados){ if(!sh.key[u]){ sh.pattern=sh.pattern.map(r=>r.split(u).join(" ")); ch=true; } }
+      }
+      if(!Array.isArray(sh.tags)||!sh.tags.length){sh.tags=["crafting_table"];ch=true;}
+      if(sh.result&&typeof sh.result==="object"){ if(sh.result.components){delete sh.result.components;ch=true;} if(!(sh.result.count>0)){sh.result.count=1;ch=true;} }
+    }
+    if(sl){ if(Array.isArray(sl.ingredients))sl.ingredients.forEach(fixIng); if(!Array.isArray(sl.tags)||!sl.tags.length){sl.tags=["crafting_table"];ch=true;} if(sl.result&&sl.result.components){delete sl.result.components;ch=true;} }
+    if(ch){guardar(f,o);nota(f.path,"receta corregida: filas de igual largo, ingredientes que existen y sin componentes inválidos");}
+  }
+
+  // ---- 3) bloques: sin componentes de script, con loot existente
+  const lootSolo=(id)=>"BP/loot_tables/blocks/"+hdSnake(id)+".json";
+  for(const [id,f] of blockFile){
+    const o=hdJson(f); if(!o)continue; const b=o["minecraft:block"]; let ch=false;
+    const c=b.components||{};
+    for(const k of Object.keys(c)){ const v=JSON.stringify(c[k]); if(k==="minecraft:use"||/script:|"on_use"/.test(v)){delete c[k];ch=true;nota(f.path,"se quitó "+k+" (no es un componente válido de bloque; la interacción va en scripts)");} }
+    if(c["minecraft:loot"]){
+      const ruta="BP/"+String(c["minecraft:loot"]).replace(/^\//,"");
+      if(!files.some(x=>x.path===ruta)){
+        poner(lootSolo(id),JSON.stringify({pools:[{rolls:1,entries:[{type:"item",name:id,weight:1}]}]},null,2));
+        c["minecraft:loot"]="loot_tables/blocks/"+hdSnake(id)+".json";ch=true;nota(lootSolo(id),"se generó la tabla de loot que el bloque pedía (suelta el propio bloque)");
+      }
+    }
+    b.components=c; if(ch)guardar(f,o);
+  }
+
+  // ---- 4) entidades
+  const zombis=[];let vehiculo=null,superv=null;
+  const tabla=new Map();
+  for(const [id,f] of entidades){
+    const o=hdJson(f); if(!o)continue; const e=o["minecraft:entity"]; let ch=false;
+    const cg=e.component_groups||{}; const usados=new Set();
+    for(const ev of Object.values(e.events||{})){for(const k of ["add","remove"])for(const g of (ev?.[k]?.component_groups||[]))usados.add(g);
+      for(const s of (ev?.sequence||[]))for(const k of ["add","remove"])for(const g of (s?.[k]?.component_groups||[]))usados.add(g);}
+    for(const k of Object.keys(cg)){
+      const raro=(k==="components"||k==="events"||k==="zombi_base")&&!usados.has(k);
+      if(raro||(k==="components"||k==="events")){delete cg[k];ch=true;}
+    }
+    e.component_groups=cg; if(!Object.keys(cg).length)delete e.component_groups;
+    const c=e.components||(e.components={});
+    const n=hdSnake(id);
+    if(/zombi|zombie/i.test(n)&&c["minecraft:health"])zombis.push({id,f,o,e,c,n});
+    if(/automovil|vehiculo|vehicle|^car$|coche/i.test(n))vehiculo={id,f,o,e,c,n};
+    if(/superviviente|survivor|aldeano|npc/i.test(n))superv={id,f,o,e,c,n};
+    if(ch){guardar(f,o);nota(f.path,"grupos de componentes mal formados eliminados");}
+  }
+  // zombis idénticos → estadísticas por arquetipo
+  const firma=(z)=>[z.c["minecraft:health"]?.value,z.c["minecraft:attack"]?.damage,z.c["minecraft:movement"]?.value].join("/");
+  const conteoFirma=new Map();for(const z of zombis)conteoFirma.set(firma(z),(conteoFirma.get(firma(z))||0)+1);
+  const lootZ="BP/loot_tables/entities/"+ns+"_zombi.json";
+  const tieneBot=[...items].find(i=>HD_CURA[0].rx.test(i)); const tieneVen=[...items].find(i=>HD_CURA[1].rx.test(i));
+  let dropOk=false;
+  for(const z of zombis){
+    let ch=false;
+    const arq=HD_ARQUETIPOS.find(a=>a[0].test(z.n));
+    if(arq&&(conteoFirma.get(firma(z))||0)>=3){
+      const a=arq[1];
+      z.c["minecraft:health"]={value:a.hp,max:a.hp};
+      z.c["minecraft:movement"]={value:a.spd};
+      z.c["minecraft:attack"]={damage:a.dmg};
+      if(a.kb)z.c["minecraft:knockback_resistance"]={value:a.kb};
+      z.c["minecraft:follow_range"]={value:a.seg,max:a.seg};
+      const t=z.c["minecraft:behavior.nearest_attackable_target"]; if(t&&Array.isArray(t.entity_types))for(const et of t.entity_types)et.max_dist=a.seg;
+      if(/rastreador|tracker/.test(z.n)&&t)t.must_see=false;
+      ch=true;
+    }
+    if(!z.c["minecraft:behavior.float"]){z.c["minecraft:behavior.float"]={priority:0};ch=true;}
+    if(!z.c["minecraft:loot"]){z.c["minecraft:loot"]={table:"loot_tables/entities/"+ns+"_zombi.json"};dropOk=true;ch=true;}
+    if(ch){guardar(z.f,z.o);nota(z.f.path,"estadísticas propias del tipo de zombi, caída de botín y comportamiento base");}
+  }
+  if(dropOk&&!files.some(x=>x.path===lootZ)){
+    const pools=[{rolls:{min:0,max:2},entries:[{type:"item",name:"minecraft:rotten_flesh",weight:1}]},
+      {rolls:1,conditions:[{condition:"random_chance",chance:0.5}],entries:[{type:"item",name:"minecraft:iron_nugget",weight:1,functions:[{function:"set_count",count:{min:1,max:4}}]}]}];
+    if(tieneBot)pools.push({rolls:1,conditions:[{condition:"random_chance",chance:0.06}],entries:[{type:"item",name:tieneBot,weight:1}]});
+    if(tieneVen)pools.push({rolls:1,conditions:[{condition:"random_chance",chance:0.12}],entries:[{type:"item",name:tieneVen,weight:1}]});
+    poner(lootZ,JSON.stringify({pools},null,2));nota(lootZ,"botín de zombis: carne podrida, pepitas de hierro (munición) y curas");
+  }
+  if(vehiculo&&!vehiculo.c["minecraft:rideable"]){
+    const c=vehiculo.c;
+    delete c["minecraft:behavior.random_stroll"]; delete c["minecraft:behavior.look_at_player"]; delete c["minecraft:type_family"];
+    c["minecraft:type_family"]={family:[ns+"_vehiculo","inanimate"]};
+    c["minecraft:rideable"]={seat_count:2,family_types:["player"],interact_text:"action.interact.ride.horse",seats:[{position:[0,0.6,0.3],min_rider_count:0,max_rider_count:1},{position:[0,0.6,-0.5],min_rider_count:2,max_rider_count:2}]};
+    c["minecraft:input_ground_controlled"]={};
+    c["minecraft:movement"]={value:0.45}; c["minecraft:movement.basic"]={};
+    c["minecraft:navigation.walk"]=c["minecraft:navigation.walk"]||{can_path_over_water:false,avoid_water:true};
+    c["minecraft:jump.static"]={}; c["minecraft:physics"]={};
+    c["minecraft:knockback_resistance"]={value:1};
+    guardar(vehiculo.f,vehiculo.o);nota(vehiculo.f.path,"el vehículo ahora se puede montar y conducir (rideable + input_ground_controlled)");
+  }
+  if(superv&&!superv.c["minecraft:persistent"]){superv.c["minecraft:persistent"]={};superv.c["minecraft:nameable"]={};guardar(superv.f,superv.o);nota(superv.f.path,"el superviviente ya no desaparece solo");}
+
+  // ---- 5) reglas de aparición de entidades que no existen
+  for(const f of [...files]){
+    if(!/^BP\/spawn_rules\/.+\.json$|^BP\/spawn\/.+\.json$/i.test(f.path))continue;
+    const o=hdJson(f); const id=o?.["minecraft:spawn_rules"]?.description?.identifier;
+    if(id&&!entidades.has(id)){quitar(f.path);nota(f.path,"se quitó la regla de aparición: la entidad "+id+" no existe");}
+  }
+  // Minecraft lee spawn_rules/, no spawn/
+  for(const f of files){ if(/^BP\/spawn\/[^/]+\.json$/i.test(f.path)){const np=f.path.replace(/^BP\/spawn\//i,"BP/spawn_rules/");if(!files.some(x=>x.path===np)){f.path=np;nota(np,"las reglas de aparición van en BP/spawn_rules");}} }
+
+  // ---- 6) geometrías duplicadas (models/ y models/entity/)
+  {
+    const geoIds=(f)=>{const o=hdJson(f);if(!o)return [];const m=o["minecraft:geometry"];return Array.isArray(m)?m.map(g=>g?.description?.identifier).filter(Boolean):Object.keys(o).filter(k=>k.startsWith("geometry."));};
+    const enEntity=new Set();for(const f of files)if(/^RP\/models\/entity\/.+\.geo\.json$/i.test(f.path))for(const g of geoIds(f))enEntity.add(g);
+    for(const f of [...files]){ if(/^RP\/models\/[^/]+\.geo\.json$/i.test(f.path)){const ids=geoIds(f);if(ids.length&&ids.every(g=>enEntity.has(g))){quitar(f.path);nota(f.path,"geometría duplicada eliminada");}} }
+  }
+
+  // ---- 7) scripts: importaciones que faltan y entrada principal
+  const SRV=["world","system","ItemStack","GameMode","EquipmentSlot","EntityComponentTypes","EntityDamageCause","BlockPermutation","BlockVolume","MolangVariableMap"];
+  const quitarCom=(t)=>String(t).replace(/\/\*[\s\S]*?\*\//g,"").replace(/\/\/[^\n]*/g,"").replace(/`(?:\\.|[^`\\])*`/g,'""').replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g,'""');
+  for(const f of files){
+    if(!/^BP\/scripts\/.+\.js$/.test(f.path)||typeof f.content!=="string")continue;
+    const sin=quitarCom(f.content);
+    const imp=sin.match(/import\s*\{[^}]*\}\s*from\s*["']@minecraft\/server["']/)||f.content.match(/import\s*\{([^}]*)\}\s*from\s*["']@minecraft\/server["']/);
+    const m=f.content.match(/import\s*\{([^}]*)\}\s*from\s*["']@minecraft\/server["'];?/);
+    const ya=new Set(m?m[1].split(",").map(s=>s.trim().split(/\s+as\s+/).pop()).filter(Boolean):[]);
+    const locales=new Set();for(const x of sin.matchAll(/(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/g))locales.add(x[1]);
+    for(const x of f.content.matchAll(/import\s*\{([^}]*)\}\s*from\s*["'][^"']+["']/g))for(const n of x[1].split(","))ya.add(n.trim().split(/\s+as\s+/).pop());
+    const faltan=SRV.filter(n=>!ya.has(n)&&!locales.has(n)&&new RegExp("(^|[^\\w$.])"+n+"\\b").test(sin));
+    if(!faltan.length)continue;
+    if(m){const lista=m[1].split(",").map(s=>s.trim()).filter(Boolean).concat(faltan);f.content=f.content.replace(m[0],"import { "+lista.join(", ")+" } from \"@minecraft/server\";");}
+    else f.content="import { "+faltan.join(", ")+" } from \"@minecraft/server\";\n"+f.content;
+    nota(f.path,"importaciones que faltaban: "+faltan.join(", "));
+  }
+  // misiones heredadas con errores de API → se reemplazan por el módulo probado
+  const defectuoso=(t)=>/\b\w+\.inventory\b(?!\w)/.test(t)||/\{\s*damager\b/.test(t)||/event\.player\b[\s\S]{0,80}playerJoin|playerJoin[\s\S]{0,120}event\.player\b/.test(t);
+  let reemplazaMisiones=false;
+  for(const f of [...files]){
+    if(!/^BP\/scripts\/[^/]+\.js$/.test(f.path)||typeof f.content!=="string")continue;
+    if(/misi[oó]n|quest/i.test(f.content)&&defectuoso(f.content)){quitar(f.path);reemplazaMisiones=true;nota(f.path,"se reemplazó: usaba la API de Minecraft de forma incorrecta (inventory, damager, playerJoin.player)");}
+  }
+
+  // ---- 8) módulos de juego
+  const scripts=()=>files.filter(f=>/^BP\/scripts\/[^/]+\.js$/.test(f.path)&&typeof f.content==="string");
+  const yaEgo=(n)=>files.some(f=>f.path==="BP/scripts/"+n+".js");
+  const existe=(rx)=>scripts().some(f=>!/\/(ego_[a-z]+|main)\.js$/.test(f.path)&&rx.test(f.content));
+  const textoPlan=(String(plan&&plan._prompt||"")+" "+JSON.stringify(plan||{})).slice(0,12000);
+  const J=(x)=>JSON.stringify(x);
+  const armas=[...items].map(id=>{const a=HD_ARMAS.find(x=>x.rx.test(hdSnake(id)));return a?{id,...a,rx:undefined}:null;}).filter(Boolean);
+  const curas=[...items].map(id=>{const c=HD_CURA.find(x=>x.rx.test(hdSnake(id)));return c?{id,vida:c.vida,cura:c.cura}:null;}).filter(Boolean);
+  const zIds=zombis.map(z=>z.id);
+  const tz=(rx)=>zombis.filter(z=>rx.test(z.n)).map(z=>z.id);
+  const sonido=(()=>{const f=files.find(x=>x.path==="RP/sounds/sound_definitions.json");const o=hdJson(f);const k=o&&o.sound_definitions?Object.keys(o.sound_definitions):[];return k.find(x=>/disparo|shot|gun/i.test(x))||"";})();
+  const usaInfeccion=(/infecc|infect/i.test(textoPlan)||zombis.some(z=>/infectado|infected/.test(z.n)))&&zIds.length&&!existe(/infecc[\s\S]{0,1500}(addEffect|addTag|applyDamage)|(addEffect|addTag|applyDamage)[\s\S]{0,1500}infecc/i);
+  const modulos=[];
+
+
+  if(armas.length&&!yaEgo("ego_armas")&&!existe(/itemUse[\s\S]{0,2500}(getEntitiesFromViewDirection|applyDamage)/)){
+    const W={};for(const a of armas)W[a.id]={nombre:a.nombre,dano:a.dmg,espera:a.cd,rango:a.rango,perdigones:a.perdigones,desv:a.desv};
+    const H={};for(const c of curas)H[c.id]={vida:c.vida,cura:c.cura};
+    poner("BP/scripts/ego_armas.js",
+'// Armas de fuego y curas (EGO AI): clic derecho con el arma para disparar; gasta munición del inventario.\n'+
+'import { world, system } from "@minecraft/server";\n'+
+'import { CFG, TAG_INF, contar, quitar, curarVida, aviso } from "./ego_nucleo.js";\n'+
+'const ARMAS = '+J(W)+';\nconst CURAS = '+J(H)+';\nconst SONIDO = '+J(sonido)+';\nconst ultimo = new Map();\n'+
+'world.afterEvents.itemUse.subscribe((ev) => {\n'+
+'  try {\n'+
+'    const p = ev.source, id = ev.itemStack.typeId;\n'+
+'    if (!p || p.typeId !== "minecraft:player") return;\n'+
+'    const cura = CURAS[id];\n'+
+'    if (cura) {\n'+
+'      if (!quitar(p, id, 1)) return;\n'+
+'      curarVida(p, cura.vida);\n'+
+'      if (cura.cura && p.hasTag(TAG_INF)) { p.removeTag(TAG_INF); aviso(p, "§aInfección curada"); } else aviso(p, "§a+" + cura.vida / 2 + " corazones");\n'+
+'      return;\n'+
+'    }\n'+
+'    const arma = ARMAS[id];\n'+
+'    if (!arma) return;\n'+
+'    const ahora = system.currentTick, clave = p.id + id, previo = ultimo.has(clave) ? ultimo.get(clave) : -999;\n'+
+'    if (ahora - previo < arma.espera) return;\n'+
+'    if (!quitar(p, CFG.armas.municion, 1)) { aviso(p, "§cSin munición (pepitas de hierro)"); ultimo.set(clave, ahora); return; }\n'+
+'    ultimo.set(clave, ahora);\n'+
+'    try { p.playSound(SONIDO || "random.explode", { volume: SONIDO ? 1 : 0.4, pitch: SONIDO ? 1 : 1.8 }); } catch (e) {}\n'+
+'    const golpes = p.getEntitiesFromViewDirection({ maxDistance: arma.rango });\n'+
+'    const blanco = golpes.find((g) => g.entity && g.entity.id !== p.id && g.entity.typeId !== "minecraft:item");\n'+
+'    if (!blanco) return;\n'+
+'    const caida = Math.max(0.25, 1 - blanco.distance / arma.rango);\n'+
+'    const dano = arma.perdigones > 1 ? arma.dano * arma.perdigones * caida : arma.dano;\n'+
+'    blanco.entity.applyDamage(dano, { cause: "entityAttack", damagingEntity: p });\n'+
+'    try { blanco.entity.dimension.spawnParticle("minecraft:basic_smoke_particle", blanco.entity.location); } catch (e) {}\n'+
+'  } catch (e) { console.warn("ego_armas: " + e); }\n'+
+'});\n');
+    modulos.push("armas");generado.push("ego_armas.js (disparo con munición, daño por distancia, curas)");
+  } else if(curas.length&&!yaEgo("ego_armas")&&!existe(/itemUse[\s\S]{0,1500}(setCurrentValue|health)/)){
+    const H={};for(const c of curas)H[c.id]={vida:c.vida,cura:c.cura};
+    poner("BP/scripts/ego_armas.js",
+'import { world } from "@minecraft/server";\nimport { TAG_INF, quitar, curarVida, aviso } from "./ego_nucleo.js";\nconst CURAS = '+J(H)+';\n'+
+'world.afterEvents.itemUse.subscribe((ev) => { try { const p = ev.source, c = CURAS[ev.itemStack.typeId]; if (!c || !p || p.typeId !== "minecraft:player") return; if (!quitar(p, ev.itemStack.typeId, 1)) return; curarVida(p, c.vida); if (c.cura && p.hasTag(TAG_INF)) p.removeTag(TAG_INF); aviso(p, "§aTe curaste"); } catch (e) {} });\n');
+    modulos.push("curas");generado.push("ego_armas.js (curas)");
+  }
+
+  if(usaInfeccion&&!yaEgo("ego_infeccion")){
+    const mult={};for(const z of zombis){ if(/toxico|infectado|mutante/.test(z.n))mult[z.id]=1.6; if(/explosiv/.test(z.n))mult[z.id]=0; }
+    poner("BP/scripts/ego_infeccion.js",
+'// Sistema de infección (EGO AI): los zombis pueden infectar; 3 etapas con síntomas; se cura con botiquín.\n'+
+'import { world, system } from "@minecraft/server";\n'+
+'import { CFG, TAG_INF, aviso } from "./ego_nucleo.js";\n'+
+'const ZOMBIS = new Set('+J(zIds)+');\nconst MULT = '+J(mult)+';\nconst inicio = new Map(), ultimoDano = new Map(), etapaVista = new Map();\n'+
+'export function infectar(p) { if (p.hasTag(TAG_INF)) return; p.addTag(TAG_INF); inicio.set(p.id, system.currentTick); etapaVista.set(p.id, 0); p.sendMessage("§2☣ Te infectaron. Busca un botiquín antes de que sea tarde."); }\n'+
+'world.afterEvents.entityHitEntity.subscribe((ev) => {\n'+
+'  try {\n'+
+'    const a = ev.damagingEntity, v = ev.hitEntity;\n'+
+'    if (!a || !v || v.typeId !== "minecraft:player" || !ZOMBIS.has(a.typeId)) return;\n'+
+'    const m = MULT[a.typeId] === undefined ? 1 : MULT[a.typeId];\n'+
+'    if (Math.random() < CFG.infeccion.probabilidad * m) infectar(v);\n'+
+'  } catch (e) { console.warn("ego_infeccion: " + e); }\n'+
+'});\n'+
+'world.afterEvents.playerSpawn.subscribe((ev) => { try { if (!ev.initialSpawn && ev.player.hasTag(TAG_INF)) ev.player.removeTag(TAG_INF); } catch (e) {} });\n'+
+'system.runInterval(() => {\n'+
+'  for (const p of world.getAllPlayers()) {\n'+
+'    try {\n'+
+'      if (!p.hasTag(TAG_INF)) { inicio.delete(p.id); continue; }\n'+
+'      if (!inicio.has(p.id)) inicio.set(p.id, system.currentTick);\n'+
+'      const edad = system.currentTick - inicio.get(p.id);\n'+
+'      const etapa = Math.min(3, Math.floor(edad / CFG.infeccion.etapaTicks) + 1);\n'+
+'      aviso(p, "§2☣ Infección: etapa " + etapa + "/3");\n'+
+'      if (etapaVista.get(p.id) !== etapa) { etapaVista.set(p.id, etapa); p.sendMessage(etapa === 1 ? "§eTe sientes débil..." : etapa === 2 ? "§6La fiebre sube, apenas puedes moverte." : "§cTu cuerpo se apaga. ¡Necesitas un botiquín YA!"); }\n'+
+'      p.addEffect("weakness", 60, { amplifier: 0, showParticles: false });\n'+
+'      if (etapa >= 2) { p.addEffect("slowness", 60, { amplifier: 0, showParticles: false }); p.addEffect("nausea", 100, { amplifier: 0, showParticles: false }); }\n'+
+'      if (etapa >= 3 && system.currentTick - (ultimoDano.get(p.id) || 0) >= CFG.infeccion.intervaloDano) { ultimoDano.set(p.id, system.currentTick); p.applyDamage(CFG.infeccion.danoEtapa3, { cause: "magic" }); }\n'+
+'    } catch (e) {}\n'+
+'  }\n'+
+'}, 20);\n');
+    modulos.push("infeccion");generado.push("ego_infeccion.js (contagio por golpe, 3 etapas, cura con botiquín)");
+  }
+
+  const exp=tz(/explosiv|bomb|kamikaze/), tox=tz(/toxico|toxic|venen/), mut=tz(/mutante|mutant|alfa|gigante/);
+  if((exp.length||tox.length||mut.length)&&!yaEgo("ego_zombis")&&!existe(/createExplosion/)){
+    poner("BP/scripts/ego_zombis.js",
+'// Habilidades especiales de zombis (EGO AI).\n'+
+'import { world, system } from "@minecraft/server";\n'+
+'const EXPLOSIVOS = '+J(exp)+', TOXICOS = '+J(tox)+', REGENERAN = '+J(mut)+';\n'+
+'world.afterEvents.entityHitEntity.subscribe((ev) => { try { const a = ev.damagingEntity, v = ev.hitEntity; if (a && v && v.typeId === "minecraft:player" && TOXICOS.includes(a.typeId)) v.addEffect("poison", 100, { amplifier: 0 }); } catch (e) {} });\n'+
+'system.runInterval(() => {\n'+
+'  for (const p of world.getAllPlayers()) {\n'+
+'    try {\n'+
+'      for (const t of EXPLOSIVOS) for (const z of p.dimension.getEntities({ type: t, location: p.location, maxDistance: 2.6 })) { const loc = z.location, dim = z.dimension; z.remove(); dim.createExplosion(loc, 2.5, { breaksBlocks: false, causesFire: false }); }\n'+
+'      for (const t of REGENERAN) for (const z of p.dimension.getEntities({ type: t, location: p.location, maxDistance: 48 })) z.addEffect("regeneration", 60, { amplifier: 0, showParticles: false });\n'+
+'    } catch (e) {}\n'+
+'  }\n'+
+'}, 10);\n');
+    modulos.push("zombis");generado.push("ego_zombis.js (explosivos, tóxicos, regeneración de mutantes)");
+  }
+
+  const quiereMisiones=reemplazaMisiones||/misi[oó]n|quest/i.test(textoPlan);
+  if(quiereMisiones&&zombis.length&&!yaEgo("ego_misiones")&&!existe(/misi[oó]n|quest/i)){
+    const z1=zombis.find(z=>/caminante|walker/.test(z.n))||zombis[0];
+    const zg=zombis.find(z=>/gigante|mutante|brutal|alfa/.test(z.n));
+    const wA=armas[0],wB=armas[1]||armas[0],wC=armas[armas.length-1];
+    const botiq=tieneBot,m=[];const CFGAMMO=()=>"minecraft:iron_nugget";
+    if(wA)m.push({id:"m1",texto:"Elimina 5 zombis ("+hdSnake(z1.id)+")",tipo:"matar",ent:z1.id,cant:5,premio:[[wA.id,1],[CFGAMMO(),12]]});
+    m.push({id:"m2",texto:"Reúne 10 lingotes de hierro",tipo:"reunir",item:"minecraft:iron_ingot",cant:10,premio:wB?[[wB.id,1],[CFGAMMO(),16]]:[["minecraft:iron_sword",1]]});
+    if(superv)m.push({id:"m3",texto:"Protege al superviviente 3 minutos (mantente a menos de 24 bloques)",tipo:"proteger",ent:superv.id,cant:180,premio:botiq?[[botiq,3]]:[["minecraft:golden_apple",1]]});
+    if(zg)m.push({id:"m4",texto:"Derrota a "+hdSnake(zg.id),tipo:"matar",ent:zg.id,cant:1,premio:wC?[[wC.id,1],[CFGAMMO(),32]]:[["minecraft:diamond",2]]});
+    poner("BP/scripts/ego_misiones.js",
+'// Misiones (EGO AI). Progreso guardado en el jugador. Comando: /scriptevent ego:misiones\n'+
+'import { world, system } from "@minecraft/server";\n'+
+'import { contar, dar } from "./ego_nucleo.js";\n'+
+'const MISIONES = '+J(m)+';\nconst estado = new Map();\n'+
+'function cargar(p) { if (estado.has(p.id)) return estado.get(p.id); let o = {}; try { o = JSON.parse(p.getDynamicProperty("ego:misiones") || "{}"); } catch (e) { o = {}; } estado.set(p.id, o); return o; }\n'+
+'function guardar(p) { try { p.setDynamicProperty("ego:misiones", JSON.stringify(estado.get(p.id) || {})); } catch (e) {} }\n'+
+'function completar(p, m, o) { o[m.id] = { hecho: true }; guardar(p); p.sendMessage("§a✔ Misión completada: " + m.texto); for (const r of m.premio) { try { dar(p, r[0], r[1]); } catch (e) {} } p.sendMessage("§eRecompensa entregada."); }\n'+
+'function avanzar(p, m, o, n) { const s = o[m.id] || { n: 0 }; if (s.hecho) return; s.n = n; o[m.id] = s; if (s.n >= m.cant) completar(p, m, o); else guardar(p); }\n'+
+'world.afterEvents.entityDie.subscribe((ev) => {\n'+
+'  try {\n'+
+'    const k = ev.damageSource && ev.damageSource.damagingEntity;\n'+
+'    if (!k || k.typeId !== "minecraft:player") return;\n'+
+'    const o = cargar(k);\n'+
+'    for (const m of MISIONES) { if (m.tipo !== "matar" || m.ent !== ev.deadEntity.typeId || (o[m.id] && o[m.id].hecho)) continue; const n = ((o[m.id] && o[m.id].n) || 0) + 1; avanzar(k, m, o, n); if (n < m.cant) k.sendMessage("§7" + m.texto + ": " + n + "/" + m.cant); }\n'+
+'  } catch (e) { console.warn("ego_misiones: " + e); }\n'+
+'});\n'+
+'system.runInterval(() => {\n'+
+'  for (const p of world.getAllPlayers()) {\n'+
+'    try {\n'+
+'      const o = cargar(p);\n'+
+'      for (const m of MISIONES) {\n'+
+'        if (o[m.id] && o[m.id].hecho) continue;\n'+
+'        if (m.tipo === "reunir") { const n = contar(p, m.item); if (n >= m.cant) completar(p, m, o); }\n'+
+'        else if (m.tipo === "proteger") { const cerca = p.dimension.getEntities({ type: m.ent, location: p.location, maxDistance: 24 }); if (cerca.length) avanzar(p, m, o, ((o[m.id] && o[m.id].n) || 0) + 1); }\n'+
+'      }\n'+
+'    } catch (e) {}\n'+
+'  }\n'+
+'}, 20);\n'+
+'world.afterEvents.playerSpawn.subscribe((ev) => { try { if (ev.initialSpawn) ev.player.sendMessage("§6Escribe /scriptevent ego:misiones para ver tus misiones."); } catch (e) {} });\n'+
+'system.afterEvents.scriptEventReceive.subscribe((ev) => {\n'+
+'  try {\n'+
+'    if (ev.id !== "ego:misiones" || !ev.sourceEntity || ev.sourceEntity.typeId !== "minecraft:player") return;\n'+
+'    const p = ev.sourceEntity, o = cargar(p);\n'+
+'    p.sendMessage("§6=== Misiones ===");\n'+
+'    for (const m of MISIONES) { const s = o[m.id] || { n: 0 }; p.sendMessage((s.hecho ? "§a✔ " : "§f• ") + m.texto + (s.hecho ? "" : " §7(" + (m.tipo === "reunir" ? contar(p, m.item) : s.n) + "/" + m.cant + ")")); }\n'+
+'  } catch (e) {}\n'+
+'});\n');
+    modulos.push("misiones");generado.push("ego_misiones.js ("+m.length+" misiones con progreso guardado y comando /scriptevent ego:misiones)");
+  }
+
+  const ruinas=[...bloques].map(id=>{const r=HD_RUINAS.find(x=>x.rx.test(hdSnake(id)));return /hospital|laborator|militar|bunker|refugio|ruina|casa|base/i.test(hdSnake(id))?{id,r}:null;}).filter(Boolean);
+  if(ruinas.length&&zIds.length&&!yaEgo("ego_estructuras")&&!existe(/playerPlaceBlock[\s\S]{0,2500}setBlockType/)){
+    const cfg={};
+    for(const {id,r} of ruinas){
+      cfg[id]={tipo:r.tipo,muro:r.muro,suelo:r.suelo,techo:r.techo,deco:r.deco,
+        botin:r.botin.map(b=>{let it=b[0];if(it==="BOTIQUIN")it=tieneBot||"minecraft:golden_apple";else if(it==="VENDA")it=tieneVen||"minecraft:paper";else if(it==="ARMA")it=(armas[0]&&armas[0].id)||"minecraft:iron_sword";return [it,b[1],b[2],b[3]];})};
+    }
+    poner("BP/scripts/ego_estructuras.js",
+'// Estructuras (EGO AI): al colocar el bloque se levanta una ruina 9x9 con cofres de botín y zombis.\n'+
+'import { world, system, ItemStack } from "@minecraft/server";\n'+
+'const RUINAS = '+J(cfg)+';\nconst ZOMBIS = '+J(zIds.filter(i=>!/explosiv/.test(i)))+';\n'+
+'function azar(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }\n'+
+'function* construir(dim, o, r) {\n'+
+'  let n = 0;\n'+
+'  const poner = (x, y, z, t) => { dim.setBlockType({ x: o.x + x, y: o.y + y, z: o.z + z }, t); n++; };\n'+
+'  for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) {\n'+
+'    poner(x, -2, z, r.suelo); poner(x, -1, z, r.suelo);\n'+
+'    const borde = Math.abs(x) === 4 || Math.abs(z) === 4;\n'+
+'    for (let y = 0; y <= 3; y++) {\n'+
+'      if (borde) { const puerta = z === 4 && Math.abs(x) <= 1 && y <= 2; const ventana = y === 2 && ((Math.abs(x) === 4 && Math.abs(z) % 2 === 0) || (Math.abs(z) === 4 && Math.abs(x) % 2 === 0)); const roto = Math.random() < 0.12 && y >= 2; poner(x, y, z, puerta || roto ? "minecraft:air" : ventana ? r.deco : r.muro); }\n'+
+'      else poner(x, y, z, "minecraft:air");\n'+
+'    }\n'+
+'    poner(x, 4, z, Math.random() < 0.8 ? r.techo : "minecraft:air");\n'+
+'    if (n % 80 === 0) yield;\n'+
+'  }\n'+
+'  for (const c of [[-3, -3], [3, -3]]) {\n'+
+'    const pos = { x: o.x + c[0], y: o.y, z: o.z + c[1] };\n'+
+'    dim.setBlockType(pos, "minecraft:chest");\n'+
+'    yield;\n'+
+'    try { const cont = dim.getBlock(pos).getComponent("inventory").container; let slot = 0; for (const b of r.botin) { if (Math.random() > b[3]) continue; cont.setItem(slot, new ItemStack(b[0], azar(b[1], b[2]))); slot += azar(1, 3); if (slot >= cont.size) break; } } catch (e) {}\n'+
+'  }\n'+
+'  for (let i = 0; i < 3 && ZOMBIS.length; i++) { try { dim.spawnEntity(ZOMBIS[azar(0, ZOMBIS.length - 1)], { x: o.x + azar(-2, 2) + 0.5, y: o.y, z: o.z + azar(-2, 2) + 0.5 }); } catch (e) {} }\n'+
+'}\n'+
+'world.afterEvents.playerPlaceBlock.subscribe((ev) => {\n'+
+'  try {\n'+
+'    const r = RUINAS[ev.block.typeId];\n'+
+'    if (!r) return;\n'+
+'    const dim = ev.dimension || ev.player.dimension, o = { x: ev.block.location.x, y: ev.block.location.y, z: ev.block.location.z };\n'+
+'    ev.player.sendMessage("§7Levantando " + r.tipo + " abandonado...");\n'+
+'    system.runJob(construir(dim, o, r));\n'+
+'  } catch (e) { console.warn("ego_estructuras: " + e); }\n'+
+'});\n');
+    modulos.push("estructuras");generado.push("ego_estructuras.js (ruinas con cofres de botín y zombis al colocar los bloques)");
+  }
+
+  if(superv&&zIds.length&&!yaEgo("ego_supervivientes")&&!existe(/playerInteractWithEntity/)){
+    poner("BP/scripts/ego_supervivientes.js",
+'// Supervivientes amistosos (EGO AI): hablan al interactuar.\n'+
+'import { world } from "@minecraft/server";\n'+
+'const ID = '+J(superv.id)+';\nconst FRASES = ["Los zombis atacan más de noche. No salgas sin munición.", "Las pepitas de hierro sirven de munición para las armas.", "Si te infectas, un botiquín es lo único que te salva.", "Los hospitales y laboratorios guardan botiquines.", "Escribe /scriptevent ego:misiones para ver qué necesito de ti."];\n'+
+'world.afterEvents.playerInteractWithEntity.subscribe((ev) => { try { if (ev.target.typeId !== ID) return; ev.player.sendMessage("§b<Superviviente> §f" + FRASES[Math.floor(Math.random() * FRASES.length)]); } catch (e) {} });\n');
+    modulos.push("supervivientes");generado.push("ego_supervivientes.js (diálogo del superviviente)");
+  }
+
+  if(modulos.some(m=>["armas","curas","infeccion","misiones"].includes(m))){
+    poner("BP/scripts/ego_nucleo.js",
+'// Núcleo compartido (EGO AI). Sin efectos secundarios: solo utilidades y configuración.\n'+
+'import { ItemStack } from "@minecraft/server";\n'+
+'export const CFG = {\n  infeccion: { probabilidad: 0.25, etapaTicks: 1200, danoEtapa3: 1, intervaloDano: 100 },\n  armas: { municion: "minecraft:iron_nugget" },\n  mensajes: true\n};\n'+
+'export const TAG_INF = "ego_infectado";\n'+
+'export function contenedor(p) { try { return p.getComponent("inventory").container; } catch (e) { return null; } }\n'+
+'export function contar(p, id) { const c = contenedor(p); if (!c) return 0; let n = 0; for (let i = 0; i < c.size; i++) { const it = c.getItem(i); if (it && it.typeId === id) n += it.amount; } return n; }\n'+
+'export function quitar(p, id, cant) { const c = contenedor(p); if (!c || contar(p, id) < cant) return false; let falta = cant; for (let i = 0; i < c.size && falta > 0; i++) { const it = c.getItem(i); if (!it || it.typeId !== id) continue; if (it.amount <= falta) { falta -= it.amount; c.setItem(i, undefined); } else { it.amount -= falta; c.setItem(i, it); falta = 0; } } return true; }\n'+
+'export function dar(p, id, cant) { const c = contenedor(p); let resto = cant; while (resto > 0) { const n = Math.min(resto, 64); const it = new ItemStack(id, n); const sobra = c ? c.addItem(it) : it; if (sobra) p.dimension.spawnItem(sobra, p.location); resto -= n; } }\n'+
+'export function curarVida(p, cantidad) { try { const h = p.getComponent("health"); h.setCurrentValue(Math.min(h.effectiveMax, h.currentValue + cantidad)); } catch (e) {} }\n'+
+'export function aviso(p, texto) { try { p.onScreenDisplay.setActionBar(texto); } catch (e) {} }\n');
+  generado.push("ego_nucleo.js (utilidades y configuración)");
+  }
+
+  // ---- 9) main.js importa todo (un script que nadie importa nunca se ejecuta)
+  {
+    const sc=scripts().filter(f=>f.path!=="BP/scripts/main.js");
+    let main=files.find(f=>f.path==="BP/scripts/main.js");
+    if(!main&&sc.length){main={path:"BP/scripts/main.js",content:""};files.push(main);nota(main.path,"se creó main.js que faltaba");}
+    if(main&&typeof main.content!=="string")main.content="";
+    if(main){
+      const quedan=sc.filter(f=>!new RegExp("[\"']\\./"+f.path.split("/").pop().replace(".","\\.")+"[\"']").test(main.content)&&f.path.split("/").pop()!=="ego_nucleo.js");
+      // quita imports a archivos que ya no existen
+      main.content=main.content.split("\n").filter(l=>{const m=l.match(/^\s*import\s+(?:[^"']*from\s*)?["']\.\/([^"']+)["']/);return !m||files.some(x=>x.path==="BP/scripts/"+m[1]);}).join("\n");
+      if(quedan.length){main.content=quedan.map(f=>'import "./'+f.path.split("/").pop()+'";').join("\n")+"\n"+main.content;nota(main.path,"main.js ahora importa: "+quedan.map(f=>f.path.split("/").pop()).join(", "));}
+    }
+  }
+
+  // ---- 10) README honesto
+  const rd=files.find(f=>/^BP\/README\.md$/i.test(f.path));
+  if(rd&&typeof rd.content==="string"&&(generado.length||cambios.length)){
+    rd.content+="\n\n## Qué hace realmente este add-on (verificado por EGO AI)\n"+
+      (generado.length?generado.map(g=>"- "+g).join("\n"):"- Contenido por datos (entidades, ítems, bloques, recetas).")+
+      "\n- Munición de las armas: pepitas de hierro (`minecraft:iron_nugget`); los zombis las sueltan.\n- Las armas se usan con clic derecho (no hay modo automático al mantener).\n- El progreso de misiones se guarda en el jugador; el de infección usa una etiqueta y se reinicia la etapa si se recarga el mundo.\n"+
+      "\n### Limitaciones conocidas\n- Revisión estática y pruebas con un simulador; no se probó dentro de Minecraft.\n- Las estructuras se generan al colocar el bloque correspondiente, no solas en el mundo.\n";
+  }
+  return {cambios,generado,modulos,ns};
+}
+
 async function mcBuild(body,env,request){
   const prompt=String(body.prompt||"").slice(0,2000);
   const plan=limpiarPlan(body.plan,prompt);
@@ -2472,6 +2961,7 @@ async function mcBuild(body,env,request){
     plan._modelos3d=(Array.isArray(body.modelos3d)?body.modelos3d:[]).slice(0,4).map(q=>({entidad:String(q&&q.entidad||""),partes:limpiarModelo3d(q&&q.partes)})).filter(q=>q.entidad&&q.partes.length>=3);
     const vz=await generarVocesAddon(plan,env);plan._voces=vz.out;
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
+    try{const hd=endurecerAddonBedrock(r.files,plan);for(const g of hd.generado)r.notas.push("Módulo añadido: "+g);for(const x of hd.cambios.slice(0,30))r.notas.push("Corregido: "+x.path+" — "+x.motivo);r.conteo.scripts=r.files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)).length;}catch(e){r.notas.push("El endurecimiento automático falló y se omitió: "+String(e&&e.message||e).slice(0,100));}
     for(const x of vz.fallos)r.notas.push("Voz: "+x);
     const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
     const validacion=ciclo.validacion||validarAddonEstructural(r.files);
@@ -2599,7 +3089,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.30.0",
+    version: "14.31.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -3190,6 +3680,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
       const planGen=planDesdeArchivosMinecraft(files,name,prompt);
       const procesado=postprocesarAddon(files,planGen,env.MC_SERVER_VERSION);
       files.splice(0,files.length,...procesado.files);
+      try{endurecerAddonBedrock(files,planGen);}catch(e){console.warn('endurecer',String(e&&e.message||e).slice(0,100));}
     }
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
     const ciclo=await cicloReparacionAutomatica(files,env,{minecraft});
@@ -4081,7 +4572,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.30.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.31.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -4110,7 +4601,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.30.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.31.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
