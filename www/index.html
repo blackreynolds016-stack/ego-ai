@@ -1091,6 +1091,7 @@ const ext=(String(f.name).split(".").pop()||"").toUpperCase();const mc=/mcaddon|
 const h='<div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div><div class="finfo"><b>'+esc(f.name)+'</b><small><em>'+esc(ext||"ARCHIVO")+'</em> \u00b7 '+fmtKB(f.blob.size)+(mc?' \u00b7 listo para Minecraft':'')+'</small></div></div><div class="fbtns"><button class="dlfile" data-id="'+id+'" type="button">Descargar</button><button class="shfile" data-id="'+id+'" type="button">Compartir</button></div>';
 const a=d.querySelector(".act");if(a)a.insertAdjacentHTML("beforebegin",h);else d.insertAdjacentHTML("beforeend",h)}
 function blobB64(b){return new Promise((res,rej)=>{const f=new FileReader();f.onload=()=>res(String(f.result).split(",")[1]||"");f.onerror=()=>rej(new Error("lectura"));f.readAsDataURL(b)})}
+chat.addEventListener("click",e=>{const b=e.target.closest(".retryadd");if(!b||b.disabled)return;if(busy){toast("Ya hay una generación en curso. Espera a que termine.",3500);return}b.disabled=true;reintentarAddon(b.dataset.job)});
 chat.addEventListener("click",async e=>{const b=e.target.closest(".dlfile,.shfile");if(!b)return;cargarArchivo(b.dataset.id,"ego-archivo.mcaddon");const f=FILES.get(b.dataset.id);if(!f){toast("El archivo ya no está en memoria. Pídelo de nuevo.",4000);return}
 const share=b.classList.contains("shfile");
 try{const data=await blobB64(f.blob);await nat("EgoNative",share?"shareFile":"saveFile",{data:data,name:f.name,mime:f.mime||"application/octet-stream"});
@@ -1101,52 +1102,102 @@ if(share||(navigator.canShare&&navigator.canShare({files:[file]}))){if(navigator
 const u=URL.createObjectURL(f.blob);const a=document.createElement("a");a.href=u;a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);toast("Descargando "+f.name+"… (si no aparece, usa Compartir)",5000)}catch(x){toast("No se pudo guardar el archivo",4000)}});
 function guardarArchivo(id,name,blob){try{if(blob.size>300000)return;const fr=new FileReader();fr.onload=()=>{try{const b64=String(fr.result).split(",")[1]||"";localStorage.setItem("ego_f_"+id,JSON.stringify({n:name,b:b64}));let ks=JSON.parse(localStorage.getItem("ego_fkeys")||"[]");ks.push(id);while(ks.length>6){try{localStorage.removeItem("ego_f_"+ks.shift())}catch(e){}}localStorage.setItem("ego_fkeys",JSON.stringify(ks))}catch(e){}};fr.readAsDataURL(blob)}catch(e){}}
 function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.parse(localStorage.getItem("ego_f_"+id)||"null");if(!o||!o.b)return false;const bin=atob(o.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);FILES.set(id,{name:o.n||name,blob:new Blob([u],{type:"application/octet-stream"}),mime:/\.zip$/i.test(o.n||name)?"application/zip":"application/octet-stream"});return true}catch(e){return false}}
+/* ===== Generación modular de add-ons (coordinada con el Worker: ~112 s por módulo, 2 trabajos a la vez) ===== */
+const ADDON_JOBS=new Map();let ADDON_SEQ=0;
+const T_PLAN=165000,T_PART=140000,T_BUILD=170000;
+async function leerErrorHttp(rr){let msg="";try{const t=await rr.text();try{const j=JSON.parse(t);msg=String(j.error||j.message||"").trim();if(j.codigo)msg+=" ["+j.codigo+"]"}catch(e){msg=t.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().slice(0,200)}}catch(e){}
+const st=rr.status,ex=(st===524||st===522||st===504)?" — el servidor cortó la conexión por tiempo":st===429?" — límite de uso del proveedor":"";
+return "HTTP "+st+(msg?": "+msg.slice(0,300):"")+ex}
+function nuevoCtrl(job){if(!job.ctrls)job.ctrls=new Set();ctrl={abort:function(){job.ctrls.forEach(function(a){try{a.abort()}catch(e){}})}}}
+async function pedirJob(job,o,ms){const ac=new AbortController();job.ctrls.add(ac);let vencio=false;const tm=setTimeout(function(){vencio=true;ac.abort()},ms);
+try{return await wPost(Object.assign({usuario:usuarioId()},o),ac.signal)}
+catch(e){if(e&&e.name==="AbortError"&&vencio){const x=new Error("tiempo");x.tiempo=true;throw x}throw e}
+finally{clearTimeout(tm);job.ctrls.delete(ac)}}
+function botonReintento(d,job,k){if(!k||d.querySelector(".retryadd"))return;
+const h='<div class="fbtns"><button type="button" class="retryadd" data-job="'+job.id+'">↻ Reintentar '+k+' parte'+(k>1?"s que fallaron":" que falló")+'</button></div>';
+const a=d.querySelector(".act");if(a)a.insertAdjacentHTML("beforebegin",h);else d.insertAdjacentHTML("beforeend",h)}
 async function genAddonPro(c,d,text){
-const usuario=usuarioId();let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",fallos=[],why="",ficha=null,diag=null;const modelos=new Set(),fm=new Set(),modelos3d=[];
-const prog=t=>{d.removeAttribute("data-err");d.innerHTML='<span class="dots">'+t+'</span>';scroll()};
-async function pedir(o,ms){const ac=new AbortController();ctrl=ac;const tm=setTimeout(()=>ac.abort(),ms);try{const r=await wPost(Object.assign({usuario:usuario},o),ac.signal);return r}finally{clearTimeout(tm)}}
-try{
-prog("🧠 Planificando tu add-on…");
-let r=await pedir({action:"mc_plan",prompt:text},150000);let j=await r.json().catch(()=>null);
-if(!r.ok||!j||!j.ok)throw new Error((j&&j.error)||"no se pudo planificar ("+r.status+")");
-const plan=j.plan,files=[];(j.fallosModelos||[]).forEach(function(x){fm.add(String(x))});const res=new Array(plan.partes.length);let hechas=0,sig=0;
-const pintar=()=>prog("🔨 Creando tu add-on: "+hechas+" de "+plan.partes.length+" partes listas…<br><small>"+plan.partes.map(function(p,x){return (res[x]?"✓ ":"· ")+p.titulo}).join("<br>")+"<br>Trabajo en varias partes a la vez. No cierres la app.</small>");
-pintar();
-async function trabajador(){
-while(!stop){const i=sig++;if(i>=plan.partes.length)return;
-let ok=false,err="";
-for(let t=0;t<2&&!ok&&!stop;t++){
-try{const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:i,previos:[],ligero:t>0},175000);const jj=await rr.json().catch(()=>null);
-if(rr.ok&&jj&&((jj.files&&jj.files.length)||jj.modelo3d)){res[i]=jj.files||[];if(jj.modelo3d)modelos3d.push(jj.modelo3d);(jj&&jj.fallosModelos||[]).forEach(function(x){fm.add(String(x))});if(jj.model)modelos.add(String(jj.model).split("/").pop());ok=true}else err=(jj&&jj.error)||("error "+rr.status)}
-catch(e){err=(e&&e.name==="AbortError")?"tiempo agotado":"sin conexión"}}
-if(!ok&&!stop)fallos.push(plan.partes[i].titulo+" ("+err+")");hechas++;pintar()}}
-await Promise.all([trabajador(),trabajador(),trabajador()]);
-res.forEach(function(a){if(a)files.push(...a)});
+const job={id:"j"+(++ADDON_SEQ),texto:text,plan:null,res:[],m3d:[],fallos:{},seq:[],vivo:true,corriendo:false,enVuelo:new Set(),modelos:new Set(),fm:new Set(),ctrls:new Set()};
+ADDON_JOBS.set(job.id,job);while(ADDON_JOBS.size>4)ADDON_JOBS.delete(ADDON_JOBS.keys().next().value);
+nuevoCtrl(job);
+try{d.removeAttribute("data-err");d.innerHTML='<span class="dots">🧠 Planificando tu add-on…</span>';scroll();
+const r=await pedirJob(job,{action:"mc_plan",prompt:text},T_PLAN);
 if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";ctrl=null;return}
-if(!files.length&&plan.partes.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+fallos[0]:""));
+if(!r.ok)throw new Error(await leerErrorHttp(r));
+const j=await r.json().catch(function(){return null});
+if(!j||!j.ok||!j.plan||!Array.isArray(j.plan.partes)||!j.plan.partes.length)throw new Error((j&&j.error)||"el Worker devolvió un plan vacío o ilegible");
+job.plan=j.plan;job.res=new Array(j.plan.partes.length);(j.fallosModelos||[]).forEach(function(x){job.fm.add(String(x))})}
+catch(e){ctrl=null;if(stop){d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";return}
+const why=e&&e.tiempo?"el planificador no respondió en "+Math.round(T_PLAN/1000)+" s":String((e&&e.message)||"error");
+const reply="No pude crear el add-on.\n\nMotivo: "+why;c.msgs.push({role:"assistant",content:reply});saveChats();renderList();finish(d,reply,true);busy=false;stop=false;send.textContent="➤";scroll();return}
+return ejecutarAddon(c,d,job,job.plan.partes.map(function(p,i){return i}))}
+async function reintentarAddon(id){const job=ADDON_JOBS.get(id);
+if(!job||!job.plan){toast("Esa generación ya no está en memoria. Pídelo de nuevo.",4000);return}
+if(busy||job.corriendo){toast("Ya hay una generación en curso. Espera a que termine.",3500);return}
+const idx=Object.keys(job.fallos).map(Number).filter(function(i){return !job.res[i]});
+if(!idx.length){toast("No hay partes pendientes.",2500);return}
+const c=cur();busy=true;stop=false;send.textContent="■";const d=bubble("bot");d.innerHTML='<span class="dots">↻ Reintentando '+idx.length+' parte(s)…</span>';scroll();
+return ejecutarAddon(c,d,job,idx)}
+async function ejecutarAddon(c,d,job,indices){
+job.corriendo=true;job.vivo=true;nuevoCtrl(job);
+const text=job.texto,plan=job.plan,n=plan.partes.length;
+let blob=null,name="ego-addon.mcaddon",nfiles=0,resumen="",notas="",ficha=null,diag=null,why="";
+const prog=function(t){d.removeAttribute("data-err");d.innerHTML='<span class="dots">'+t+'</span>';scroll()};
+const listas=function(){let k=0;for(let x=0;x<n;x++)if(job.res[x])k++;return k};
+const pintar=function(){prog("🔨 Creando tu add-on: "+listas()+" de "+n+" partes listas…<br><small>"+plan.partes.map(function(p,x){return (job.res[x]?"✓ ":job.enVuelo.has(x)?"⏳ ":job.fallos[x]?"✗ ":"· ")+p.titulo}).join("<br>")+"<br>Hasta 2 partes a la vez; cada una puede tardar ~2 minutos. No cierres la app.</small>")};
+pintar();
+const cola=indices.slice();
+async function trabajador(){
+while(!stop&&job.vivo){const i=cola.shift();if(i===undefined)return;if(job.enVuelo.has(i))continue;
+job.enVuelo.add(i);delete job.fallos[i];pintar();
+try{let ok=false,err="";
+for(let t=0;t<2&&!ok&&!stop;t++){
+const mio=(job.seq[i]=(job.seq[i]||0)+1);let reintentable=false;
+try{const rr=await pedirJob(job,{action:"mc_part",prompt:text,plan:plan,parte:i,previos:[],ligero:t>0},T_PART);
+if(!job.vivo||job.seq[i]!==mio)return;/* respuesta tardía: se descarta */
+let jj=null;if(rr.ok)jj=await rr.json().catch(function(){return null});
+if(rr.ok&&jj&&((jj.files&&jj.files.length)||jj.modelo3d)){job.res[i]=jj.files||[];job.m3d[i]=jj.modelo3d||null;(jj.fallosModelos||[]).forEach(function(x){job.fm.add(String(x))});if(jj.model)job.modelos.add(String(jj.model).split("/").pop());ok=true}
+else{err=rr.ok?"respuesta vacía o ilegible":await leerErrorHttp(rr);reintentable=true}}
+catch(e){if(!job.vivo||stop)return;
+if(e&&e.tiempo)err="sin respuesta tras "+Math.round(T_PART/1000)+" s (el servidor sigue ocupado; usa Reintentar)";
+else{err="sin conexión con el Worker";reintentable=true}}
+if(!ok&&!reintentable)break}
+if(!ok&&!stop&&job.vivo)job.fallos[i]=err||"error desconocido"}
+finally{job.enVuelo.delete(i)}
+pintar()}}
+try{
+await Promise.all([trabajador(),trabajador()]);
+job.corriendo=false;
+if(stop){job.vivo=false;d.dataset.err="1";d.textContent="Creación detenida.";busy=false;stop=false;send.textContent="➤";ctrl=null;return}
+const files=[];job.res.forEach(function(a){if(a)files.push.apply(files,a)});
+const fallidos=Object.keys(job.fallos).map(Number).filter(function(i){return !job.res[i]});
+const fallos=fallidos.map(function(i){return plan.partes[i].titulo+" ("+job.fallos[i]+")"});
+try{
+if(!files.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+fallos[0]:""));
 prog("📦 Armando el paquete, texturas y manifests…");
-r=await pedir({action:"mc_build",prompt:text,plan:plan,files:files,modelos3d:modelos3d},90000);
+let r=await pedirJob(job,{action:"mc_build",prompt:text,plan:plan,files:files,modelos3d:job.m3d.filter(Boolean)},T_BUILD);
 if(r.ok&&/zip|octet-stream/.test(r.headers.get("content-type")||"")){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
 try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}try{ficha=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Ficha")||"null"))}catch(e){ficha=null}
 const m=(r.headers.get("content-disposition")||"").match(/filename="?([^";]+)"?/i);if(m)name=m[1]}
-else{const jb=await r.json().catch(()=>null);diag=jb&&(jb.criticos||jb.advertencias)?jb:null;throw new Error((jb&&jb.error)||"no se pudo armar el paquete")}
+else{const jb=await r.clone().json().catch(function(){return null});diag=jb&&(jb.criticos||jb.advertencias)?jb:null;throw new Error((jb&&jb.error)||await leerErrorHttp(r))}
 if(ficha&&ficha.revision&&ficha.revision.faltan&&ficha.revision.faltan.length&&!stop){
 try{prog("🔧 Revisión final: completando lo que faltó…");
 const ex=files.filter(function(f){return /\.(js|json)$/.test(f.path)&&!/manifest/.test(f.path)}).map(function(f){return "=== "+f.path+" ===\n"+f.content}).join("\n").slice(0,14000);
-const rr=await pedir({action:"mc_part",prompt:text,plan:plan,parte:0,previos:[],existentes:ex,parteExtra:{titulo:"Completar lo que faltó",tipo:"script",detalle:"Faltan estos requisitos del usuario; impleméntalos de verdad:\n- "+ficha.revision.faltan.join("\n- ")}},170000);
-const jj=await rr.json().catch(()=>null);
-if(rr.ok&&jj&&jj.files&&jj.files.length){const nf=files.filter(function(f){return !jj.files.some(function(g){return g.path===f.path})}).concat(jj.files);
-const r2=await pedir({action:"mc_build",prompt:text,plan:plan,files:nf,modelos3d:modelos3d},90000);
+const rr=await pedirJob(job,{action:"mc_part",prompt:text,plan:plan,parte:0,previos:[],existentes:ex,parteExtra:{titulo:"Completar lo que faltó",tipo:"script",detalle:"Faltan estos requisitos del usuario; impleméntalos de verdad:\n- "+ficha.revision.faltan.join("\n- ")}},T_PART);
+const jj=rr.ok?await rr.json().catch(function(){return null}):null;
+if(jj&&jj.files&&jj.files.length){const nf=files.filter(function(f){return !jj.files.some(function(g){return g.path===f.path})}).concat(jj.files);
+const r2=await pedirJob(job,{action:"mc_build",prompt:text,plan:plan,files:nf,modelos3d:job.m3d.filter(Boolean)},T_BUILD);
 if(r2.ok&&/zip|octet-stream/.test(r2.headers.get("content-type")||"")){const b2=await r2.blob();let f2=null;try{f2=JSON.parse(decodeURIComponent(r2.headers.get("X-EGO-Ficha")||"null"))}catch(e){}
 const antes=ficha.revision.faltan.length,desp=f2&&f2.revision?f2.revision.faltan.length:antes;
-if(f2&&desp<=antes){blob=b2;ficha=f2;nfiles=Number(r2.headers.get("X-EGO-Files"))||nfiles;if(jj.model)modelos.add(String(jj.model).split("/").pop())}}}}catch(e){}}
-}catch(e){why=(e&&e.name==="AbortError")?"se agotó el tiempo":String((e&&e.message)||"error")}
+if(f2&&desp<=antes){blob=b2;ficha=f2;nfiles=Number(r2.headers.get("X-EGO-Files"))||nfiles;if(jj.model)job.modelos.add(String(jj.model).split("/").pop())}}}}catch(e){}}
+}catch(e){why=e&&e.tiempo?"el armado del paquete no respondió en "+Math.round(T_BUILD/1000)+" s":String((e&&e.message)||"error")}
 ctrl=null;let reply,id=null;
 if(blob){id="f"+Date.now();FILES.set(id,{name:name,blob:blob,mime:"application/octet-stream"});
-reply=ficha?fichaMc(ficha,name,nfiles,fallos,(modelos.size?"**Generado con:** "+[...modelos].slice(0,3).join(", "):"")):("✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\n"+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+".\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""))}
-else reply="No pude crear el add-on.\n\n"+(diag?diagMd(diag,why):"Motivo: "+why);
+reply=ficha?fichaMc(ficha,name,nfiles,fallos,(job.modelos.size?"**Generado con:** "+[...job.modelos].slice(0,3).join(", "):"")):("✅ Listo, creé tu add-on de Minecraft con "+(nfiles||"varios")+" archivos: **"+name+"**.\n\n**Qué incluye:** "+resumen+"\n\n"+(fallos.length?"⚠️ **Partes que no se pudieron generar:** "+fallos.join("; ")+".\n\n":"")+(notas?"**Avisos:** "+notas.split(" | ").join("; ")+"\n\n":""))}
+else reply="No pude crear el add-on.\n\n"+(diag?diagMd(diag,why):"Motivo: "+why)+(fallos.length&&!diag&&files.length?"\n\nPartes con error: "+fallos.join("; "):"");
 const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp="mc";am.pro=true;am.pp=text;guardarArchivo(id,name,blob)}
-c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);
+c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);botonReintento(d,job,fallidos.length)}
+catch(e){job.corriendo=false;ctrl=null;const reply="No pude crear el add-on.\n\nMotivo: "+String((e&&e.message)||e);c.msgs.push({role:"assistant",content:reply});saveChats();renderList();finish(d,reply,true)}
 busy=false;stop=false;send.textContent="➤";scroll()}
 function fichaMc(f,name,nfiles,fallos,extra){
 var L=["## ✅ "+((f&&f.nombre)||"Tu add-on")+" está listo","","**Archivo:** `"+name+"` · "+(nfiles||"varios")+" archivos",""];
