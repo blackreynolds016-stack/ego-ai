@@ -1,5 +1,5 @@
 /*
- * EGO AI Worker v14.31.0 — cambios sobre v14.28.0
+ * EGO AI — núcleo de ejecución y servicios
  *  - balanceJs reescrito: entiende regex literales, plantillas anidadas y comentarios (0 falsos positivos en 281 JS reales; el anterior daba 16).
  *  - Validador estructural con severidades: CRITICO (bloquea), ADVERTENCIA, INFORMATIVO. Solo lo crítico impide exportar.
  *  - Spawn rules de mobs vanilla (minecraft:*) aceptadas; client_entity se busca por identificador; eventos system.* reconocidos.
@@ -23,11 +23,13 @@ const EGO_TEAM_MODELS = {
   auditor: "qwen/qwen3.8-27b"
 };
 const CF_MODELS = {
-  chat: MODELO_RAPIDO,   // resúmenes y estudio de lecciones
-  codigo:  ["@cf/moonshotai/kimi-k2.7-code", "@cf/qwen/qwen3-30b-a3b-fp8", "@cf/qwen/qwen3-coder-next", "@cf/qwen/qwen3.8-27b", MODELO_RAPIDO],
-  razonar: ["@cf/deepseek-ai/deepseek-v4-pro-0813", "@cf/moonshotai/kimi-k2.7-code", "@cf/qwen/qwen3-30b-a3b-fp8", "@cf/qwen/qwen3.8-27b", MODELO_RAPIDO],
-  rapido:  [MODELO_RAPIDO, "@cf/qwen/qwen3.8-27b"],
-  vision:  ["@cf/qwen/qwen3.8-27b"]
+  chat: MODELO_RAPIDO,   // resúmenes y tareas rápidas
+  // Cadenas actualizadas para evitar modelos con retiro anunciado el 20-11-2026.
+  // El acceso y el coste dependen del plan/cuota de Cloudflare; cada modelo se prueba en runtime.
+  codigo:  ["@cf/deepseek-ai/deepseek-v4.1-flash-1017", "@cf/zai-org/glm-5.3", "@cf/qwen/qwen3.8-27b", "@cf/google/gemma-4-26b-a4b-it", MODELO_RAPIDO],
+  razonar: ["@cf/deepseek-ai/deepseek-v4.1-flash-1017", "@cf/zai-org/glm-5.3", "@cf/qwen/qwen3.8-27b", "@cf/google/gemma-4-26b-a4b-it", MODELO_RAPIDO],
+  rapido:  [MODELO_RAPIDO, "@cf/google/gemma-4-26b-a4b-it", "@cf/qwen/qwen3.8-27b"],
+  vision:  ["@cf/qwen/qwen3.8-27b", "@cf/google/gemma-4-26b-a4b-it", "@cf/deepseek-ai/deepseek-v4.1-flash-1017"]
 };
 
 // Correo OFICIAL de EGO AI: solo con esta cuenta (sesión verificada por Google) se puede enseñar a EGO.
@@ -46,7 +48,7 @@ const CORS = {
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
 const RX_LISTAR = /^[\s¿¡]*(?:qu[eé]\s+(?:lecciones\s+)?has\s+(?:estudiado|aprendido)|(?:mis\s+|las\s+)?lecciones(?:\s+estudiadas)?)[\s?!.]*$/i;
 
-const EGO_MANUAL = `Eres EGO AI v14.31.0, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
+const EGO_MANUAL = `Eres EGO AI, una IA especializada en PROGRAMACIÓN, MATEMÁTICAS, CIENCIAS y CREACIÓN DE APPS Y JUEGOS. Habla en español de forma clara y directa.
 
 === TU ESPECIALIDAD ===
 1. Tu especialidad: código y scripts (cualquier lenguaje), depuración, apps, juegos, webs e interfaces, add-ons de Minecraft Bedrock, ciberseguridad defensiva y ética, matemáticas y ciencias (maestro paso a paso), creación y edición de imágenes, y ayuda para conversar, conocer gente y ligar con respeto. También respondes saludos y preguntas sobre ti.
@@ -168,7 +170,7 @@ async function verificarSesion(token) {
     if (typeof payload.iat !== "number" || payload.iat > ahora + 300) return null;
     if (typeof payload.email !== "string" || !payload.email) return null;
     if (payload.email_verified !== true) return null;
-    return { email: payload.email.trim().toLowerCase() };
+    return { email: payload.email.trim().toLowerCase(), uid: payload.sub };
   } catch { return null; }
 }
 
@@ -183,8 +185,10 @@ function exigirAdmin(sesion) {
   if (!sesion || sesion.admin !== true || !esCorreoAdmin(sesion.email)) throw new Error("no_autorizado");
 }
 
-function obtenerCorreo(request, body) {
-  return request.headers.get("X-Usuario-Correo") || body?.correo || null;
+function obtenerToken(request, body) {
+  const auth = String(request.headers.get("Authorization") || "");
+  const bearer = auth.match(/^Bearer\s+(.+)$/i);
+  return (bearer && bearer[1]) || body?.idToken || null;
 }
 
 // ============================================================
@@ -949,11 +953,11 @@ async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
     if (esProyecto && contextoExtra) mensajesRol.push({ role: "user", content: `RESULTADOS DE ETAPAS ANTERIORES (úsalos como contexto, no los contradigas sin explicar):\n${contextoExtra.slice(0,18000)}` });
     const tokensRol = esProyecto ? (key === "coder" ? Math.max(5000, Math.min(14000, Math.floor(maxTokens * 0.78))) : 1800) : memberTokens;
     try {
-      const r = await openRouterChat([
+      const r = await egoRoleChat(key, [
         { role: "system", content: `${rolePrompt}\nTarea: ${task}. No inventes pruebas ni APIs.` },
         ...mensajesRol
-      ], env, tokensRol, model, esProyecto ? 24000 : 55000);
-      return { key, model, content: String(r.content || "").trim() };
+      ], env, tokensRol);
+      return { key, model: r.model || model, content: String(r.content || "").trim(), fallos: r.fallos || [] };
     } catch (e) {
       return { key, model, content: "", error: String(e?.message || e).slice(0, 150) };
     }
@@ -997,7 +1001,7 @@ async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
     }
   ];
   try {
-    const final = await openRouterChat(synthesisMessages, env, maxTokens, EGO_TEAM_MODELS.planner);
+    const final = await egoRoleChat("planner", synthesisMessages, env, maxTokens);
     if (final.content) return {
       content: final.content,
       model: `ego-team:${ok.map(x => x.model.split("/").pop()).join("+")}->nemotron`,
@@ -1288,6 +1292,8 @@ async function webNpm(q) {
   return out;
 }
 const RX_WEB_PEDIDA = /(internet|busca(?:r|me)?\b|investiga|la web|google)/i;
+// Detecta consultas que dependen de información cambiante y pueden requerir búsqueda web.
+const RX_WEB = /(noticias?|actualidad|hoy|ahora|esta semana|este mes|[uú]ltim[oa]s?|reciente|precio(?:s)?|cotizaci[oó]n|tipo de cambio|versi[oó]n(?:es)?|lanzamiento|disponibilidad|clima|pron[oó]stico|resultados|fecha de estreno|calendario)/i;
 // ============================================================
 // 🏗️ GENERADOR POR PARTES DE ADD-ONS GRANDES (Minecraft Bedrock)
 //   mc_plan  → el modelo planifica (objetos, ids y partes)
@@ -1361,7 +1367,7 @@ function limpiarPlan(j,prompt){
   base.ns=mcNs(j.ns);
   {const cnt={};for(const o of (Array.isArray(j.objetos)?j.objetos:[])){const mm=String(o&&o.id||"").match(/^([a-z][a-z0-9_]{1,12}):/i);if(mm){const k=mm[1].toLowerCase();cnt[k]=(cnt[k]||0)+1;}}const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];if(top&&(base.ns==="ego"||!cnt[base.ns]))base.ns=mcNs(top[0]);}
   base.resumen=String(j.resumen||prompt||"").slice(0,400);
-  base.requisitos=(Array.isArray(j.requisitos)?j.requisitos:[]).map(x=>String(x||"").trim().slice(0,160)).filter(Boolean).slice(0,14);
+  base.requisitos=(Array.isArray(j.requisitos)?j.requisitos:[]).map(x=>String(x||"").trim().slice(0,500)).filter(Boolean).slice(0,40);
   {const pj=new Set((Array.isArray(j.poderes_jugador)?j.poderes_jugador:(Array.isArray(j.poderesJugador)?j.poderesJugador:[])).map(x=>normMc(x).replace(/[^a-z_]/g,"")).filter(x=>MC_PODERES_JUG[x]));for(const x of detectarPoderesJugador(prompt))pj.add(x);base.poderesJugador=[...pj];}
   const sinObj=/(?:no quiero|sin|nada de|no necesito)\s+(?:ning[uú]n\s+)?(?:objetos?|[ií]tems?|criaturas?|mobs?|bloques?|armas?)/i.test(String(prompt||""));
   if(j.kit&&typeof j.kit==="object"&&/\b(?:cofres?|kit|caja)\b/i.test(String(prompt||""))){const K=j.kit;base.kit={armadura:!!K.armadura,herramientas:!!K.herramientas,recursos:!!K.recursos,encantar:!!K.encantar,material:/diam/i.test(String(K.material))?"diamond":"netherite"};}
@@ -1537,7 +1543,76 @@ function limpiarModelo3d(partes){
   }
   return out;
 }
+// ===== TEXTURAS CON DETALLE: cada cubo tiene su propio UV y se pinta con ruido, sombras, suciedad, sangre y rasgos =====
+function hshT(a,b,c){let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263)+Math.imul(c|0,2147483647))|0;h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;}
+function vnT(x,y,s){const gx=Math.floor(x/4),gy=Math.floor(y/4),fx=x/4-gx,fy=y/4-gy;const a=hshT(gx,gy,s),b=hshT(gx+1,gy,s),c=hshT(gx,gy+1,s),d=hshT(gx+1,gy+1,s);return (a*(1-fx)+b*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy;}
+function empaquetarCaras(caras,W){
+  const orden=caras.map((c,i)=>i).sort((i,j)=>caras[j].h-caras[i].h||caras[j].w-caras[i].w);
+  let x=0,y=0,fila=0;
+  for(const i of orden){const c=caras[i];if(c.w>W)return null;if(x+c.w>W){x=0;y+=fila;fila=0;}c.x=x;c.y=y;x+=c.w;fila=Math.max(fila,c.h);}
+  return y+fila;
+}
 function construirModelo3d(geoId,partes){
+  const ps=limpiarModelo3d(partes);if(ps.length<3)return null;
+  const caras=[];
+  ps.forEach((p,i)=>{const t=p.tam.map(v=>Math.max(1,Math.round(v)));
+    for(const c of [["north",t[0],t[1]],["south",t[0],t[1]],["east",t[2],t[1]],["west",t[2],t[1]],["up",t[0],t[2]],["down",t[0],t[2]]])caras.push({i,n:c[0],w:c[1],h:c[2]});});
+  let W=0;for(const cand of [64,128,256]){const alto=empaquetarCaras(caras,cand);if(alto!==null&&alto<=cand){W=cand;break;}}
+  if(!W)return construirModelo3dPaleta(geoId,partes);
+  const px=new Uint8Array(W*W*4);
+  const SOMBRA={up:0.16,north:0.02,south:-0.07,east:-0.1,west:-0.1,down:-0.28};
+  const esZ=/zombi|zombie|infect|mutante|cadaver/.test(geoId);
+  const seed0=[...geoId].reduce((a,c)=>(a*31+c.charCodeAt(0))|0,7);
+  const rgbDe=(h)=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+  const clamp=(v)=>Math.max(0,Math.min(255,Math.round(v)));
+  const poner=(X,Y,r,g,b)=>{if(X<0||Y<0||X>=W||Y>=W)return;const o=(Y*W+X)*4;px[o]=clamp(r);px[o+1]=clamp(g);px[o+2]=clamp(b);px[o+3]=255;};
+  const uvPorCubo=ps.map(()=>({}));
+  for(const c of caras){
+    const p=ps[c.i],base=rgbDe(p.color),brillo=/ojo|eye|brill|gema|runa|emblema/.test(p.nombre);
+    uvPorCubo[c.i][c.n]={uv:[c.x,c.y],uv_size:[c.w,c.h]};
+    const sd=seed0+c.i*977;
+    const sangre=!brillo&&esZ&&/torso|peto|brazo|manga|cabeza|head|pierna/.test(p.nombre)&&hshT(c.i,c.n.length,seed0)<0.4;
+    for(let v=0;v<c.h;v++)for(let u=0;u<c.w;u++){
+      const X=c.x+u,Y=c.y+v;
+      let k=brillo?0.04+(hshT(X,Y,sd)-0.5)*0.1:SOMBRA[c.n]+(hshT(X,Y,sd)-0.5)*0.16+(vnT(X,Y,sd+3)-0.5)*0.26-(v/Math.max(1,c.h))*0.1;
+      if(!brillo&&c.w>2&&c.h>2&&(u===0||v===0||u===c.w-1||v===c.h-1))k-=0.11;
+      px[(Y*W+X)*4+3]=255;
+      poner(X,Y,base[0]*(1+k),base[1]*(1+k),base[2]*(1+k));
+    }
+    if(sangre&&c.w>=2&&c.h>=3){
+      const n=1+Math.floor(hshT(c.i,c.w,seed0+9)*3);
+      for(let q=0;q<n;q++){const cx=Math.floor(hshT(q,c.i,seed0+1)*c.w),cy=Math.floor(hshT(q,c.i,seed0+2)*c.h),r=1+Math.floor(hshT(q,c.n.length,seed0+5)*2);
+        for(let dv=-r;dv<=r;dv++)for(let du=-r;du<=r;du++){if(du*du+dv*dv>r*r+1||hshT(du+9,dv+7,sd+q)<0.3)continue;const uu=cx+du,vv=cy+dv;if(uu<0||vv<0||uu>=c.w||vv>=c.h)continue;const m=0.55+hshT(uu,vv,sd+q)*0.35;poner(c.x+uu,c.y+vv,110*m+base[0]*0.15,16*m,16*m);}
+        if(c.h-cy>3&&hshT(q,cx,sd)<0.5)poner(c.x+cx,c.y+cy+r+1,90,12,12);}
+    }
+    // rasgos de la cara frontal de la cabeza: boca con dientes y cejas
+    if(c.n==="north"&&/^(cabeza|head)$/.test(p.nombre)&&c.w>=4&&c.h>=4){
+      const yb=Math.floor(c.h*0.72),x0=Math.floor(c.w*0.2),x1=Math.ceil(c.w*0.8);
+      for(let u=x0;u<x1;u++){poner(c.x+u,c.y+yb,38,10,10);if(u%2===0&&yb+1<c.h)poner(c.x+u,c.y+yb+1,214,208,186);}
+      const ye=Math.floor(c.h*0.3);for(let u=x0;u<x1;u++)if(u!==Math.floor(c.w/2))poner(c.x+u,c.y+ye,base[0]*0.45,base[1]*0.45,base[2]*0.45);
+    }
+  }
+  const nombres=new Set(ps.map(p=>p.nombre));
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9,minZ=1e9,maxZ=-1e9;
+  const bones=ps.map((p,i)=>{
+    const t=p.tam.map(x=>Math.max(x,0));
+    minX=Math.min(minX,p.origen[0]);maxX=Math.max(maxX,p.origen[0]+t[0]);minY=Math.min(minY,p.origen[1]);maxY=Math.max(maxY,p.origen[1]+t[1]);minZ=Math.min(minZ,p.origen[2]);maxZ=Math.max(maxZ,p.origen[2]+t[2]);
+    const b={name:p.nombre,pivot:p.pivote||[p.origen[0]+t[0]/2,p.origen[1]+t[1]/2,p.origen[2]+t[2]/2],cubes:[{origin:p.origen,size:t,uv:uvPorCubo[i]}]};
+    if(p.padre&&p.padre!==p.nombre&&nombres.has(p.padre))b.parent=p.padre;
+    if(p.rot)b.rotation=p.rot;
+    return b;
+  });
+  const ancho=Math.max(2,Math.ceil(Math.max(Math.abs(minX),Math.abs(maxX),Math.abs(minZ),Math.abs(maxZ))*2/16)+1),alto=Math.max(2,Math.ceil(maxY/16)+1);
+  const geo={format_version:"1.12.0","minecraft:geometry":[{description:{identifier:geoId,texture_width:W,texture_height:W,visible_bounds_width:ancho,visible_bounds_height:alto,visible_bounds_offset:[0,alto/2,0]},bones}]};
+  const FASE={pierna_i:1,pierna_d:-1,bota_i:1,bota_d:-1,brazo_i:-1,brazo_d:1,manga_i:-1,manga_d:1,hombrera_i:-1,hombrera_d:1,pata_di:1,pata_dd:-1,pata_ti:-1,pata_td:1};
+  const ab={};for(const p of ps){const f=FASE[p.nombre]??(/^pata_/.test(p.nombre)?((Number((p.nombre.match(/\d+$/)||["0"])[0])%2)?-1:1):0);if(f){
+    const brazo=/brazo|manga|hombrera/.test(p.nombre);const amp=brazo?28:36;
+    const mov="Math.cos(query.modified_distance_moved * 38.17) * "+(f*(brazo&&esZ?6:amp))+" * query.modified_move_speed";
+    ab[p.nombre]={rotation:[brazo&&esZ?"-80 + "+mov:mov,0,0]};}}
+  const cols=new Set(ps.map(p=>p.color));
+  return {geo:JSON.stringify(geo,null,2)+"\n",png:pngBytes(W,W,px),cubos:ps.length,colores:cols.size,alto:maxY-minY,ancho:Math.max(maxX-minX,maxZ-minZ),animados:Object.keys(ab).length,bonesAnim:ab,texturaPx:W};
+}
+function construirModelo3dPaleta(geoId,partes){
   const ps=limpiarModelo3d(partes);if(ps.length<3)return null;
   const cols=[...new Set(ps.map(p=>p.color))].slice(0,256);const idx=new Map(cols.map((c,i)=>[c,i]));
   const px=new Uint8Array(16*16*4);
@@ -1799,12 +1874,15 @@ function tipoIconoDe(t){
   if(/(orbe|esfera|bola|perla|huevo|nucleo|corazon)/.test(n))return "orbe";
   return "gema";
 }
+const SPR_ARMAS={"pistola": ["................", "................", "....KKKKKKKKKK..", "...KHLLLLLLLMMK.", "...KLMMMMMMMDDK.", "...KMDDDDDDDDDK.", "...KKKKKKKKKKK..", "....KDDKMK......", "....KwwDKK......", "....KwWwK.......", "....KwWwK.......", "....KwWwK.......", "....KwWwK.......", ".....KKKK.......", "................", "................"], "rifle": ["................", "................", "..........KK....", "KKKKKKKKKKHKKKK.", "KwwWDLLLLLLLLMMK", "KwWWKMMMMMMMMDDK", "KwWWDDDDDDDDDDK.", "KKKKKKKDKKKKKK..", "......KDKMK.....", "......KDDMK.....", "......KDDMK.....", ".......KKKK.....", "................", "................", "................", "................"], "escopeta": ["................", "................", "................", "KKKKKKKKKKKKKKK.", "KwwWKLLLLLLLLLMK", "KwWWKMMMMMMMMMDK", "KwWWKKKKKKKKKKK.", "KKKKKwwwwKDDDDK.", "....KKwWWwKKKKK.", "....KDKwwwK.....", ".....KKKKKK.....", "................", "................", "................", "................", "................"], "francotirador": ["................", "................", "......KKKK......", ".....KLHHLK.....", "KKKKKKMMMMKKKKK.", "KwwWDLLLLLLLLMMK", "KwWWKMMMMMMMMDDK", "KwWWDDDDDDDDDDK.", "KKKKKKKDKKKKKK..", "......KDKMK.....", "......KDDMK.....", ".......KKKK.....", "................", "................", "................", "................"], "arma_fuego": ["................", "................", "....KKKKKKKKKK..", "...KHLLLLLLLMMK.", "...KLMMMMMMMDDK.", "...KMDDDDDDDDDK.", "...KKKKKKKKKKK..", "....KDDKMK......", "....KwwDKK......", "....KwWwK.......", "....KwWwK.......", "....KwWwK.......", "....KwWwK.......", ".....KKKK.......", "................", "................"]};
+const SPR_PAL={K:[22,22,28],D:[58,61,70],M:[93,98,110],L:[154,160,174],H:[214,218,228],W:[75,47,28],w:[122,77,43]};
 function dibujarGenerico(tipo,principal,acento){
   if(["espada","hacha","pico","vara"].includes(tipo))return dibujarIcono(tipo,principal,acento);
   const W=16,px=new Uint8Array(W*W*4),P=hexRgb(principal),A=hexRgb(acento),CLARO=mezcla(P,[255,255,255],.55),OSC=mezcla(P,[0,0,0],.38),OUT=[24,20,30];
   const set=(x,y,c)=>{if(x<0||y<0||x>=W||y>=W)return;const i=(y*W+x)*4;px[i]=c[0];px[i+1]=c[1];px[i+2]=c[2];px[i+3]=255;};
   const lleno=(x,y)=>x>=0&&y>=0&&x<W&&y<W&&px[(y*W+x)*4+3]>0;
   if(["arma_fuego","pistola","rifle","escopeta","francotirador"].includes(tipo)){
+    if(SPR_ARMAS[tipo]){SPR_ARMAS[tipo].forEach((fila,y)=>{for(let x=0;x<16;x++){const c=SPR_PAL[fila[x]];if(c)set(x,y,c);}});return px;}
     // Siluetas pixel-art distintas para cada clase de arma; no se sustituyen por espadas.
     if(tipo==="pistola"){
       for(let y=6;y<=8;y++)for(let x=4;x<=11;x++)set(x,y,y===6?CLARO:(y===8?OSC:P));
@@ -2304,7 +2382,7 @@ function postprocesarAddon(entrada,plan,verSrv){
   const aTxt=(m)=>[...m.entries()].map(([k,v])=>k+"="+v).join("\n")+"\n";
   mapa.set("RP/texts/en_US.lang",aTxt(en));mapa.set("RP/texts/es_ES.lang",aTxt(es));mapa.set("RP/texts/languages.json",'["en_US","es_ES"]\n');
   // --- scripts: se descartan los que usan APIs que no existen; las habilidades las programa el código
-  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const tx=String(mapa.get(k));const mal=lintScript(tx);const prs=lintScriptApi(tx, verSrv||"2.10.0");if(mal||prs.length){mapa.delete(k);notas.push(k.replace("BP/","")+" se descartó porque "+(mal||prs.slice(0,3).join("; "))+" (no existe en la API oficial de Minecraft y rompería todo el script).");}}
+  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const tx=String(mapa.get(k));const mal=lintScript(tx);const prs=lintScriptApi(tx, verSrv||"2.10.0");if(mal||prs.length){const respaldo="EGO_QUARANTINE/"+k.replace(/^BP\//,"");mapa.set(respaldo,tx);mapa.delete(k);notas.push(k.replace("BP/","")+" se aisló para evitar que un script posiblemente inválido rompa el add-on. Se conservó una copia íntegra en "+respaldo+". Motivo: "+(mal||prs.slice(0,3).join("; "))+". Requiere corrección y nueva validación antes de activarlo.");}}
   const habilidades=[...(plan._hab3d||[])];
   for(const id of items){
     const o=(plan.objetos||[]).find(x=>x.id===id)||{id,nombre:nombreDeId(id,plan),descripcion:""};
@@ -2497,6 +2575,13 @@ function endurecerAddonBedrock(files, plan){
   const quitar=(path)=>{const i=files.findIndex(x=>x.path===path); if(i>=0)files.splice(i,1);};
   const guardar=(f,o)=>{f.content=JSON.stringify(o,null,2);};
 
+  // ---- ítems cuyo "components" quedó fuera de minecraft:item (Minecraft los ignora)
+  for(const f of files){
+    if(!/^BP\/items\/[^/]+\.json$/.test(f.path))continue;
+    const o=hdJson(f); if(!o||!o["minecraft:item"]||!o.components||typeof o.components!=="object")continue;
+    const it=o["minecraft:item"]; it.components=Object.assign({},o.components,it.components||{}); delete o.components;
+    guardar(f,o); nota(f.path,"los componentes del ítem estaban fuera de minecraft:item y se ignoraban; se movieron adentro");
+  }
   // ---- inventario de lo que existe de verdad
   const items=new Set(),bloques=new Set(),entidades=new Map(),itemFile=new Map(),blockFile=new Map();
   for(const f of files){
@@ -2543,7 +2628,7 @@ function endurecerAddonBedrock(files, plan){
   for(const f of files)if(/^BP\/loot_tables\/.+\.json$/i.test(f.path))arreglarLoot(f);
 
   // ---- 2) recetas
-  for(const f of files){
+  for(const f of [...files]){
     if(!/^BP\/recipes\/.+\.json$/i.test(f.path))continue;
     const o=hdJson(f); if(!o)continue; let ch=false;
     const sh=o["minecraft:recipe_shaped"],sl=o["minecraft:recipe_shapeless"];
@@ -2562,6 +2647,8 @@ function endurecerAddonBedrock(files, plan){
       if(sh.result&&typeof sh.result==="object"){ if(sh.result.components){delete sh.result.components;ch=true;} if(!(sh.result.count>0)){sh.result.count=1;ch=true;} }
     }
     if(sl){ if(Array.isArray(sl.ingredients))sl.ingredients.forEach(fixIng); if(!Array.isArray(sl.tags)||!sl.tags.length){sl.tags=["crafting_table"];ch=true;} if(sl.result&&sl.result.components){delete sl.result.components;ch=true;} }
+    const res=(sh||sl)&&((sh||sl).result||{}).item;
+    if(res&&String(res).startsWith(ns+":")&&!propios.has(res)){quitar(f.path);nota(f.path,"se quitó la receta: fabrica "+res+", que no existe en el add-on");continue;}
     if(ch){guardar(f,o);nota(f.path,"receta corregida: filas de igual largo, ingredientes que existen y sin componentes inválidos");}
   }
 
@@ -2652,6 +2739,18 @@ function endurecerAddonBedrock(files, plan){
     const o=hdJson(f); const id=o?.["minecraft:spawn_rules"]?.description?.identifier;
     if(id&&!entidades.has(id)){quitar(f.path);nota(f.path,"se quitó la regla de aparición: la entidad "+id+" no existe");}
   }
+  {
+    const conRegla=new Set();
+    for(const f of files){ if(/^BP\/spawn_rules\/.+\.json$|^BP\/spawn\/.+\.json$/i.test(f.path)){const o=hdJson(f);const id=o?.["minecraft:spawn_rules"]?.description?.identifier;if(id)conRegla.add(id);} }
+    const PESO=[[/gigante|giant|alfa/,2],[/mutante|mutant/,5],[/blindado|armored/,8],[/brutal/,12],[/explosiv/,14],[/toxico|toxic/,16],[/cazador|hunter|rastreador|tracker/,12],[/nocturno|night/,24],[/corredor|runner/,30],[/infectado|infected/,25],[/caminante|walker/,70]];
+    for(const z of zombis){
+      if(conRegla.has(z.id))continue;
+      const w=(PESO.find(x=>x[0].test(z.n))||[0,15])[1];
+      const noche=/nocturno|night/.test(z.n);
+      poner("BP/spawn_rules/"+z.n+".json",JSON.stringify({format_version:"1.8.0","minecraft:spawn_rules":{description:{identifier:z.id,population_control:"monster"},conditions:[{"minecraft:spawns_on_surface":{},"minecraft:brightness_filter":{min:0,max:noche?3:7,adjust_for_weather:false},"minecraft:weight":{default:w},"minecraft:herd":{min_size:1,max_size:/caminante|corredor|infectado/.test(z.n)?4:1},"minecraft:biome_filter":{test:"has_biome_tag",operator:"==",value:"overworld"}}]}},null,2));
+      nota("BP/spawn_rules/"+z.n+".json","el zombi no tenía regla de aparición: no habría aparecido nunca en el mundo; se generó");
+    }
+  }
   // Minecraft lee spawn_rules/, no spawn/
   for(const f of files){ if(/^BP\/spawn\/[^/]+\.json$/i.test(f.path)){const np=f.path.replace(/^BP\/spawn\//i,"BP/spawn_rules/");if(!files.some(x=>x.path===np)){f.path=np;nota(np,"las reglas de aparición van en BP/spawn_rules");}} }
 
@@ -2660,6 +2759,20 @@ function endurecerAddonBedrock(files, plan){
     const geoIds=(f)=>{const o=hdJson(f);if(!o)return [];const m=o["minecraft:geometry"];return Array.isArray(m)?m.map(g=>g?.description?.identifier).filter(Boolean):Object.keys(o).filter(k=>k.startsWith("geometry."));};
     const enEntity=new Set();for(const f of files)if(/^RP\/models\/entity\/.+\.geo\.json$/i.test(f.path))for(const g of geoIds(f))enEntity.add(g);
     for(const f of [...files]){ if(/^RP\/models\/[^/]+\.geo\.json$/i.test(f.path)){const ids=geoIds(f);if(ids.length&&ids.every(g=>enEntity.has(g))){quitar(f.path);nota(f.path,"geometría duplicada eliminada");}} }
+  }
+
+  // ---- 6b) eventos y propiedades de la API que el modelo suele inventar (hacen que el script entero falle al cargar)
+  {
+    const SOLO_AFTER=["entityHurt","entityHitEntity","entityHitBlock","entityDie","entitySpawn","playerSpawn","playerJoin","itemCompleteUse","itemReleaseUse","itemStartUse","itemStopUse","projectileHitEntity","projectileHitBlock","effectAdd2"];
+    for(const f of files){
+      if(!/^BP\/scripts\/.+\.js$/.test(f.path)||typeof f.content!=="string")continue;
+      let t=f.content;const antes=t;const hechos=[];
+      for(const ev of SOLO_AFTER){const rx=new RegExp("(world|system)\\.beforeEvents\\."+ev+"\\b","g");if(rx.test(t)){t=t.replace(rx,"$1.afterEvents."+ev);hechos.push("beforeEvents."+ev+" no existe, se usa afterEvents");}}
+      if(/(\w+)\.damager\b/.test(t)){t=t.replace(/(\w+)\.damager\b/g,"$1.damageSource.damagingEntity");hechos.push("event.damager → event.damageSource.damagingEntity");}
+      const rxIu=/(itemUse\.subscribe\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*\{[\s\S]{0,500}?)\b\2\.player\b/g;
+      if(rxIu.test(t)){t=t.replace(rxIu,(m,a,b)=>a+b+".source");hechos.push("itemUse: event.player → event.source");}
+      if(t!==antes){f.content=t;nota(f.path,"API corregida: "+hechos.join("; "));}
+    }
   }
 
   // ---- 7) scripts: importaciones que faltan y entrada principal
@@ -2678,6 +2791,23 @@ function endurecerAddonBedrock(files, plan){
     if(m){const lista=m[1].split(",").map(s=>s.trim()).filter(Boolean).concat(faltan);f.content=f.content.replace(m[0],"import { "+lista.join(", ")+" } from \"@minecraft/server\";");}
     else f.content="import { "+faltan.join(", ")+" } from \"@minecraft/server\";\n"+f.content;
     nota(f.path,"importaciones que faltaban: "+faltan.join(", "));
+  }
+  {
+    const todos=new Set([...items,...bloques,...entidades.keys()]);
+    const variantes=(r)=>[r.replace(/zombie/g,"zombi"),r.replace(/zombi(?!e)/g,"zombie"),r.replace(/hunter/g,"cazador"),r.replace(/runner/g,"corredor"),r.replace(/walker/g,"caminante"),r.replace(/toxic(?!o)/g,"toxico"),r.replace(/explosive/g,"explosivo")];
+    for(const f of files){
+      if(!/^BP\/scripts\/.+\.js$/.test(f.path)||typeof f.content!=="string")continue;
+      let n=0;
+      f.content=f.content.replace(/(["'])([a-z0-9_]+):([a-z0-9_]*)\1/g,(m,q,pre,r)=>{
+        if(pre!==ns||todos.has(pre+":"+r))return m;
+        for(const v of variantes(r)){
+          if(v===r)continue;
+          if(todos.has(pre+":"+v)||(v.endsWith("_")&&[...todos].some(t=>t.startsWith(pre+":"+v)))){n++;return q+pre+":"+v+q;}
+        }
+        return m;
+      });
+      if(n)nota(f.path,n+" identificador(es) no coincidían con los reales del add-on (p. ej. zombie_ vs zombi_) y se corrigieron");
+    }
   }
   // misiones heredadas con errores de API → se reemplazan por el módulo probado
   const defectuoso=(t)=>/\b\w+\.inventory\b(?!\w)/.test(t)||/\{\s*damager\b/.test(t)||/event\.player\b[\s\S]{0,80}playerJoin|playerJoin[\s\S]{0,120}event\.player\b/.test(t);
@@ -2703,13 +2833,23 @@ function endurecerAddonBedrock(files, plan){
 
 
   if(armas.length&&!yaEgo("ego_armas")&&!existe(/itemUse[\s\S]{0,2500}(getEntitiesFromViewDirection|applyDamage)/)){
-    const W={};for(const a of armas)W[a.id]={nombre:a.nombre,dano:a.dmg,espera:a.cd,rango:a.rango,perdigones:a.perdigones,desv:a.desv};
+    const W={};for(const a of armas)W[a.id]={nombre:a.nombre,dano:a.dmg,espera:a.cd,rango:a.rango,perdigones:a.perdigones,desv:a.desv,tono:/francotir|sniper/i.test(a.nombre)?0.8:/rifle/i.test(a.nombre)?1.6:/escopet/i.test(a.nombre)?1.1:1.9,vol:/francotir|sniper/i.test(a.nombre)?1:/escopet/i.test(a.nombre)?0.9:0.6};
     const H={};for(const c of curas)H[c.id]={vida:c.vida,cura:c.cura};
     poner("BP/scripts/ego_armas.js",
 '// Armas de fuego y curas (EGO AI): clic derecho con el arma para disparar; gasta munición del inventario.\n'+
 'import { world, system } from "@minecraft/server";\n'+
 'import { CFG, TAG_INF, contar, quitar, curarVida, aviso } from "./ego_nucleo.js";\n'+
 'const ARMAS = '+J(W)+';\nconst CURAS = '+J(H)+';\nconst SONIDO = '+J(sonido)+';\nconst ultimo = new Map();\n'+
+'function sonar(p, a) { try { p.playSound(SONIDO || "random.explode", { volume: SONIDO ? 1 : a.vol, pitch: SONIDO ? 1 : a.tono }); } catch (e) {} system.runTimeout(() => { try { p.playSound("random.click", { volume: 0.5, pitch: 1.3 }); } catch (e) {} }, 8); }\n'+
+'function particula(dim, id, x, y, z) { try { dim.spawnParticle(id, { x: x, y: y, z: z }); } catch (e) {} }\n'+
+'function efectos(p, a, dist, o, d, impacto) {\n'+
+'  const dim = p.dimension;\n'+
+'  particula(dim, "minecraft:basic_flame_particle", o.x + d.x * 0.9, o.y + d.y * 0.9 - 0.15, o.z + d.z * 0.9);\n'+
+'  particula(dim, "minecraft:basic_smoke_particle", o.x + d.x * 1.1, o.y + d.y * 1.1 - 0.15, o.z + d.z * 1.1);\n'+
+'  const n = Math.min(40, Math.floor(dist / 0.9));\n'+
+'  for (let i = 2; i < n; i++) { const t = i * 0.9; particula(dim, "minecraft:basic_crit_particle", o.x + d.x * t, o.y + d.y * t - 0.1, o.z + d.z * t); }\n'+
+'  if (impacto) { const x = o.x + d.x * dist, y = o.y + d.y * dist, z = o.z + d.z * dist; particula(dim, "minecraft:critical_hit_emitter", x, y, z); particula(dim, "minecraft:lava_particle", x, y, z); }\n'+
+'}\n'+
 'world.afterEvents.itemUse.subscribe((ev) => {\n'+
 '  try {\n'+
 '    const p = ev.source, id = ev.itemStack.typeId;\n'+
@@ -2727,14 +2867,17 @@ function endurecerAddonBedrock(files, plan){
 '    if (ahora - previo < arma.espera) return;\n'+
 '    if (!quitar(p, CFG.armas.municion, 1)) { aviso(p, "§cSin munición (pepitas de hierro)"); ultimo.set(clave, ahora); return; }\n'+
 '    ultimo.set(clave, ahora);\n'+
-'    try { p.playSound(SONIDO || "random.explode", { volume: SONIDO ? 1 : 0.4, pitch: SONIDO ? 1 : 1.8 }); } catch (e) {}\n'+
+'    let origen = p.location, dir = { x: 0, y: 0, z: 1 };\n'+
+'    try { origen = p.getHeadLocation(); dir = p.getViewDirection(); } catch (e) {}\n'+
+'    sonar(p, arma);\n'+
 '    const golpes = p.getEntitiesFromViewDirection({ maxDistance: arma.rango });\n'+
 '    const blanco = golpes.find((g) => g.entity && g.entity.id !== p.id && g.entity.typeId !== "minecraft:item");\n'+
+'    efectos(p, arma, blanco ? blanco.distance : Math.min(arma.rango, 30), origen, dir, !!blanco);\n'+
 '    if (!blanco) return;\n'+
 '    const caida = Math.max(0.25, 1 - blanco.distance / arma.rango);\n'+
 '    const dano = arma.perdigones > 1 ? arma.dano * arma.perdigones * caida : arma.dano;\n'+
 '    blanco.entity.applyDamage(dano, { cause: "entityAttack", damagingEntity: p });\n'+
-'    try { blanco.entity.dimension.spawnParticle("minecraft:basic_smoke_particle", blanco.entity.location); } catch (e) {}\n'+
+'    try { p.playSound("random.orb", { volume: 0.4, pitch: 2 }); } catch (e) {}\n'+
 '  } catch (e) { console.warn("ego_armas: " + e); }\n'+
 '});\n');
     modulos.push("armas");generado.push("ego_armas.js (disparo con munición, daño por distancia, curas)");
@@ -2858,7 +3001,7 @@ function endurecerAddonBedrock(files, plan){
         botin:r.botin.map(b=>{let it=b[0];if(it==="BOTIQUIN")it=tieneBot||"minecraft:golden_apple";else if(it==="VENDA")it=tieneVen||"minecraft:paper";else if(it==="ARMA")it=(armas[0]&&armas[0].id)||"minecraft:iron_sword";return [it,b[1],b[2],b[3]];})};
     }
     poner("BP/scripts/ego_estructuras.js",
-'// Estructuras (EGO AI): al colocar el bloque se levanta una ruina 9x9 con cofres de botín y zombis.\n'+
+'// Estructuras (EGO AI): ruinas 9x9 con tabique, cofres de botín y zombis. Aparecen solas cerca del jugador y al colocar el bloque.\n'+
 'import { world, system, ItemStack } from "@minecraft/server";\n'+
 'const RUINAS = '+J(cfg)+';\nconst ZOMBIS = '+J(zIds.filter(i=>!/explosiv/.test(i)))+';\n'+
 'function azar(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }\n'+
@@ -2870,7 +3013,8 @@ function endurecerAddonBedrock(files, plan){
 '    const borde = Math.abs(x) === 4 || Math.abs(z) === 4;\n'+
 '    for (let y = 0; y <= 3; y++) {\n'+
 '      if (borde) { const puerta = z === 4 && Math.abs(x) <= 1 && y <= 2; const ventana = y === 2 && ((Math.abs(x) === 4 && Math.abs(z) % 2 === 0) || (Math.abs(z) === 4 && Math.abs(x) % 2 === 0)); const roto = Math.random() < 0.12 && y >= 2; poner(x, y, z, puerta || roto ? "minecraft:air" : ventana ? r.deco : r.muro); }\n'+
-'      else poner(x, y, z, "minecraft:air");\n'+
+'      else if (x === 0 && z >= -3 && z <= 1 && z !== -1 && y <= 2) poner(x, y, z, r.muro);\n'+
+'      else poner(x, y, z, y === 3 && Math.random() < 0.08 ? "minecraft:cobweb" : "minecraft:air");\n'+
 '    }\n'+
 '    poner(x, 4, z, Math.random() < 0.8 ? r.techo : "minecraft:air");\n'+
 '    if (n % 80 === 0) yield;\n'+
@@ -2883,6 +3027,25 @@ function endurecerAddonBedrock(files, plan){
 '  }\n'+
 '  for (let i = 0; i < 3 && ZOMBIS.length; i++) { try { dim.spawnEntity(ZOMBIS[azar(0, ZOMBIS.length - 1)], { x: o.x + azar(-2, 2) + 0.5, y: o.y, z: o.z + azar(-2, 2) + 0.5 }); } catch (e) {} }\n'+
 '}\n'+
+'const TIPOS = Object.keys(RUINAS), ultima = new Map();\nlet total = 0;\n'+
+'function superficie(dim, x, z) { try { const b = dim.getTopmostBlock({ x: x, z: z }); if (!b || /water|lava|leaves|ice|log/.test(b.typeId)) return null; return b.location.y + 1; } catch (e) { return null; } }\n'+
+'system.runInterval(() => {\n'+
+'  if (total >= 60) return;\n'+
+'  for (const p of world.getAllPlayers()) {\n'+
+'    try {\n'+
+'      if (p.dimension.id.indexOf("overworld") < 0) continue;\n'+
+'      const u = ultima.get(p.id);\n'+
+'      if (u && Math.hypot(u.x - p.location.x, u.z - p.location.z) < 90) continue;\n'+
+'      if (Math.random() > 0.35) continue;\n'+
+'      const ang = Math.random() * Math.PI * 2, dist = 40 + Math.random() * 30;\n'+
+'      const x = Math.floor(p.location.x + Math.cos(ang) * dist), z = Math.floor(p.location.z + Math.sin(ang) * dist);\n'+
+'      const y = superficie(p.dimension, x, z);\n'+
+'      if (y === null) continue;\n'+
+'      ultima.set(p.id, { x: x, z: z }); total++;\n'+
+'      system.runJob(construir(p.dimension, { x: x, y: y, z: z }, RUINAS[TIPOS[Math.floor(Math.random() * TIPOS.length)]]));\n'+
+'    } catch (e) {}\n'+
+'  }\n'+
+'}, 400);\n'+
 'world.afterEvents.playerPlaceBlock.subscribe((ev) => {\n'+
 '  try {\n'+
 '    const r = RUINAS[ev.block.typeId];\n'+
@@ -2892,7 +3055,7 @@ function endurecerAddonBedrock(files, plan){
 '    system.runJob(construir(dim, o, r));\n'+
 '  } catch (e) { console.warn("ego_estructuras: " + e); }\n'+
 '});\n');
-    modulos.push("estructuras");generado.push("ego_estructuras.js (ruinas con cofres de botín y zombis al colocar los bloques)");
+    modulos.push("estructuras");generado.push("ego_estructuras.js (ruinas con cofres de botín y zombis; aparecen solas en el mundo y al colocar los bloques)");
   }
 
   if(superv&&zIds.length&&!yaEgo("ego_supervivientes")&&!existe(/playerInteractWithEntity/)){
@@ -2935,17 +3098,22 @@ function endurecerAddonBedrock(files, plan){
 
   // ---- 10) README honesto
   const rd=files.find(f=>/^BP\/README\.md$/i.test(f.path));
+  if(rd&&typeof rd.content==="string"&&/Actúa como|Tu misión es|PROYECTO MINECRAFT/i.test(rd.content)){
+    const i=rd.content.indexOf("## Instalar");
+    if(i>0)rd.content=rd.content.split("\n").slice(0,1).join("\n")+"\n\nAdd-on para Minecraft Bedrock creado por EGO AI.\n\n"+(plan&&plan.resumen?String(plan.resumen).slice(0,500)+"\n\n":"")+rd.content.slice(i);
+    nota(rd.path,"el README traía pegado el texto completo del pedido; se reemplazó por un resumen");
+  }
   if(rd&&typeof rd.content==="string"&&(generado.length||cambios.length)){
     rd.content+="\n\n## Qué hace realmente este add-on (verificado por EGO AI)\n"+
       (generado.length?generado.map(g=>"- "+g).join("\n"):"- Contenido por datos (entidades, ítems, bloques, recetas).")+
       "\n- Munición de las armas: pepitas de hierro (`minecraft:iron_nugget`); los zombis las sueltan.\n- Las armas se usan con clic derecho (no hay modo automático al mantener).\n- El progreso de misiones se guarda en el jugador; el de infección usa una etiqueta y se reinicia la etapa si se recarga el mundo.\n"+
-      "\n### Limitaciones conocidas\n- Revisión estática y pruebas con un simulador; no se probó dentro de Minecraft.\n- Las estructuras se generan al colocar el bloque correspondiente, no solas en el mundo.\n";
+      "\n### Limitaciones conocidas\n- Revisión estática y pruebas con un simulador; no se probó dentro de Minecraft.\n- Las ruinas aparecen solas cerca del jugador (a 40-70 bloques, máx. 60 por sesión) y también al colocar el bloque; no son estructuras nativas del juego ni hay biomas nuevos.\n";
   }
   return {cambios,generado,modulos,ns};
 }
 
 async function mcBuild(body,env,request){
-  const prompt=String(body.prompt||"").slice(0,2000);
+  const prompt=String(body.prompt||"").slice(0,12000);
   const plan=limpiarPlan(body.plan,prompt);
   const entrada=[];const vistos=new Set();
   for(const f of (Array.isArray(body.files)?body.files:[]).slice(0,400)){
@@ -3089,7 +3257,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.31.0",
+    version: "14.32.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -4568,11 +4736,16 @@ async function manejar(request, env) {
     });
   }
   const url = new URL(request.url);
-  const correoUsuario = obtenerCorreo(request, null);
+  let correoUsuario = null;
+  const tokenInicial = obtenerToken(request, null);
+  if (tokenInicial) {
+    const sesionInicial = await verificarSesion(tokenInicial);
+    correoUsuario = sesionInicial?.email || null;
+  }
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.31.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.32.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -4601,7 +4774,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.31.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.32.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -4628,7 +4801,14 @@ async function manejar(request, env) {
   catch { return json({ error: "JSON inválido" }, 400); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "El cuerpo debe ser un objeto JSON" }, 400);
 
-  const usuario = cleanUser(body.usuario || correoUsuario || "default");
+  const tokenSesion = obtenerToken(request, body);
+  if (tokenSesion && !correoUsuario) {
+    const sesion = await verificarSesion(tokenSesion);
+    correoUsuario = sesion?.email || null;
+  }
+  // La identidad para memoria se deriva exclusivamente de un token Firebase verificado.
+  // body.usuario, body.correo y X-Usuario-Correo nunca son credenciales.
+  const usuario = correoUsuario ? cleanUser(correoUsuario) : null;
   const textoUsuario = lastUserText(body.messages || []).text;
 
   // 🎓 COMANDOS DEL CREADOR: estudiar / borrar / listar lecciones.
@@ -4644,7 +4824,7 @@ async function manejar(request, env) {
   const cmdListar = RX_LISTAR.test(textoUsuario);
 
   let sesionAdmin = null;
-  if (cmdEstudiar || cmdBorrar || cmdListar) sesionAdmin = await verificarAdmin(body.idToken);
+  if (cmdEstudiar || cmdBorrar || cmdListar) sesionAdmin = await verificarAdmin(tokenSesion);
 
   // Enseñar o borrar sin ser el creador verificado: no se guarda NADA en ninguna parte.
   if ((cmdEstudiar || cmdBorrar) && !sesionAdmin) {
@@ -4670,11 +4850,13 @@ async function manejar(request, env) {
     return json({ reply: idx.length ? "📚 Lecciones que he estudiado:\n" + idx.map((x, i) => `${i + 1}. ${x.titulo}`).join("\n") : "Todavía no me han enseñado lecciones.", administrador: true });
   }
 
-  if (body.ping) return json({ 
-    ok: true, v: "14.23.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA 
+  if (body.ping) return json({
+    ok: true, v: "14.32.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA,
+    workersAI: !!env.AI, openRouter: !!routerApiKey(env), equipo: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0"
   });
 
   if (body.recall || body.action === "recall") {
+    if (!correoUsuario) return json({ error: "Inicia sesión para consultar tu memoria personal.", code: "auth_required" }, 401);
     const memorias = await leerListaPersonal(env, usuario);
     const biblioteca = await leerBiblioteca(env);
     const lecs = await leerIndiceLecciones(env);
@@ -4691,6 +4873,7 @@ async function manejar(request, env) {
   }
 
   if (body.forget && env.EGO_MEMORY) {
+    if (!correoUsuario) return json({ error: "Inicia sesión para borrar tu memoria personal.", code: "auth_required" }, 401);
     await env.EGO_MEMORY.delete(`historial:${usuario}`);
     return json({ ok: true });
   }
@@ -4699,7 +4882,7 @@ async function manejar(request, env) {
     const prev = String(body.prev || "").slice(0, 3000);
     const text = String(body.text || "").slice(0, 12000);
     try {
-      const r = await cfChat(CF_MODELS.chat, [
+      const r = await cfChatSeguro([CF_MODELS.chat], [
         { role: "system", content: "Resume en español, en máximo 12 líneas." },
         { role: "user", content: (prev ? "Resumen previo:\n" + prev + "\n\n" : "") + "Conversación:\n" + text }
       ], env, 700);
@@ -4747,7 +4930,7 @@ async function manejar(request, env) {
     if (g.ok) confirmacion = `\n\n🧠 ¡Lo recordé al instante!`;
     const mNombre = text.match(/(?:[Mm]e llamo|[Mm]i nombre es)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/);
     if (mNombre) await guardarPerfil(env, correoUsuario, { nombre: mNombre[1] });
-  } else {
+  } else if (correoUsuario) {
     memoriasPersonales = await leerListaPersonal(env, usuario);
   }
 
@@ -4832,7 +5015,7 @@ async function manejar(request, env) {
   }
 
   // 💬 RESPUESTA FINAL DEL CHAT
-  if (!env.AI) return json({ error: "No hay modelos disponibles" }, 503);
+  if (!env.AI && !routerApiKey(env)) return json({ error: "No hay modelos disponibles. Configura Workers AI o la clave de OpenRouter." }, 503);
   try {
     const r = await cfChatSeguro(cadena, msgsL, env, tipo === "rapido" ? 2000 : 8000);
     let revisado = false;
