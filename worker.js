@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.31.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.34.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1463,7 +1463,7 @@ async function mcPlan(body,env){
 ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enumera en "requisitos" TODO lo que pidió (nada más, nada menos). Cada objeto, habilidad y parte del plan debe servir a un requisito. No interpretes a tu gusto: si el usuario no lo dijo, no lo agregues.
 PODERES DEL JUGADOR: si el usuario quiere TENER poderes él mismo (inmortal, vida infinita, volar, velocidad, fuerza, daño infinito, aura, miedo en monstruos, aldeanos que lo adoran, destruir, levantar objetos, visión nocturna, saltar, respirar bajo el agua, sin hambre, inmune al fuego), ponlos en \"poderes_jugador\" usando SOLO estos nombres: inmortal, vida_infinita, vuelo, velocidad, fuerza, dano_infinito, aura, miedo_mobs, adoracion_aldeanos, destruccion, telekinesis, vision_nocturna, salto, respirar_agua, sin_hambre, resistencia_fuego. EGO los programa y se activan solos al entrar al mundo: NO crees ítems, criaturas ni scripts para eso. Si dijo que no quiere objetos, objetos=[] y partes=[].
 MODELOS 3D: si el usuario pide un modelo 3D, un diseño propio, un jefe/criatura grande o que se vea diferente a los mobs del juego, pon en \"modelos3d\" una entrada por criatura: {\"entidad\":\"ns:id de un objeto tipo entity\",\"descripcion\":\"cómo se ve: forma, tamaño, colores, partes\"}. EGO diseña la geometría y la textura por su cuenta. SONIDOS Y VOCES: si pide que algo hable o tenga voz/sonido propio, pon en \"sonidos\" {\"nombre\":\"corto\",\"texto\":\"frase exacta que dirá (máx 240 caracteres)\",\"entidad\":\"ns:id opcional: suena cuando aparece\"}; EGO genera el audio con voz sintética.
-REGLA CLAVE: incluye SOLO lo que el usuario pidió, nada más (cero extras de ejemplo). EGO programa por su cuenta, sin que tú lo escribas: (a) las habilidades de armas (campo habilidad), (b) los poderes de un ítem (campo poderes: vuelo, visión nocturna, etc.), (c) el KIT INICIAL: si el usuario pide recibir al crear/entrar al mundo un cofre con armadura, herramientas o recursos, pon en el JSON "kit":{"armadura":true|false,"herramientas":true|false,"recursos":true|false,"encantar":true|false,"material":"netherite|diamond"} (si no lo pidió, "kit":null) y NO crees bloques, ítems ni scripts para eso. Solo crea los objetos personalizados que el usuario nombró (ej. el reloj o el amuleto).
+ARQUITECTURA NPC INTELIGENTE EGO (OBLIGATORIA CUANDO EL PEDIDO INCLUYA COMPAÑEROS, ALIADOS, NPCs O CRIATURAS CON IA): diseña una arquitectura original por módulos, no copies código/assets/IDs de add-ons comerciales. Cada NPC debe tener rol explícito, estados (idle/follow/defend/combat/retreat/work), percepción por radio, prioridades, memoria persistente limitada y cooldowns. Usa componentes vanilla válidos para navegación, combate y objetivos; si requiere Script API, divide en BP/scripts/main.js + módulos pequeños autocontenidos importados desde main.js. Define claramente cómo se recluta/vincula al jugador, cómo evita atacar jugadores/aliados, cómo recupera seguimiento y cómo se limpia al morir/despawn. Para minería/recolección/construcción, implementa únicamente acciones compatibles y seguras con APIs verificadas; no simules que el NPC puede hacer tareas que el juego/API no permiten. Añade archivos de prueba/documentación con comandos y límites. Si el usuario pide compañeros inteligentes de supervivencia, incluye combate defensivo y seguimiento; no añadas funciones no pedidas.REGLA CLAVE: incluye SOLO lo que el usuario pidió, nada más (cero extras de ejemplo). EGO programa por su cuenta, sin que tú lo escribas: (a) las habilidades de armas (campo habilidad), (b) los poderes de un ítem (campo poderes: vuelo, visión nocturna, etc.), (c) el KIT INICIAL: si el usuario pide recibir al crear/entrar al mundo un cofre con armadura, herramientas o recursos, pon en el JSON "kit":{"armadura":true|false,"herramientas":true|false,"recursos":true|false,"encantar":true|false,"material":"netherite|diamond"} (si no lo pidió, "kit":null) y NO crees bloques, ítems ni scripts para eso. Solo crea los objetos personalizados que el usuario nombró (ej. el reloj o el amuleto).
 Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
     const mensajesPlan=[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}];
@@ -3112,6 +3112,64 @@ function endurecerAddonBedrock(files, plan){
   return {cambios,generado,modulos,ns};
 }
 
+// Arquitectura EGO de compañeros NPC: complemento determinista y original para entidades
+// explícitamente incluidas en el proyecto. No copia código ni recursos de terceros.
+function integrarArquitecturaNPC(files, plan, prompt, serverVersion){
+  const t=String(prompt||"");
+  const pideIA=/(npc|compa[nñ]er|aliad|guardaespalda|soldado|superviviente|aldeano inteligente|equipo de.*(ia|intelig)|inteligencia artificial|ai player)/i.test(t);
+  if(!pideIA) return {aplicado:false,avisos:[]};
+  const map=new Map(files.map(f=>[f.path,f.content]));
+  const entidades=[];
+  for(const [path,content] of map){
+    if(!/^BP\/entities\/.+\.json$/i.test(path)) continue;
+    try{
+      const root=JSON.parse(content), e=root['minecraft:entity'];
+      const id=e?.description?.identifier;
+      if(!id || !id.includes(':')) continue;
+      const c=e.components=e.components||{};
+      c['minecraft:type_family']=c['minecraft:type_family']||{family:['mob','ego_ally']};
+      const fam=c['minecraft:type_family'].family;
+      if(Array.isArray(fam)&&!fam.includes('ego_ally'))fam.push('ego_ally');
+      c['minecraft:movement']=c['minecraft:movement']||{value:0.25};
+      c['minecraft:movement.basic']=c['minecraft:movement.basic']||{};
+      c['minecraft:navigation.walk']=c['minecraft:navigation.walk']||{can_path_over_water:true,avoid_water:true,can_break_doors:false};
+      c['minecraft:physics']=c['minecraft:physics']||{};
+      c['minecraft:attack']=c['minecraft:attack']||{damage:6};
+      c['minecraft:behavior.float']=c['minecraft:behavior.float']||{priority:0};
+      c['minecraft:behavior.hurt_by_target']=c['minecraft:behavior.hurt_by_target']||{priority:1};
+      // Solo apunta a la familia monster; nunca a jugadores.
+      c['minecraft:behavior.nearest_attackable_target']=c['minecraft:behavior.nearest_attackable_target']||{
+        priority:2, must_see:false, reselect_targets:true,
+        entity_types:[{filters:{all:[{test:'is_family',subject:'other',value:'monster'},{test:'is_family',subject:'other',operator:'!=',value:'ego_ally'}]},max_dist:20}]
+      };
+      c['minecraft:behavior.melee_attack']=c['minecraft:behavior.melee_attack']||{priority:3,speed_multiplier:1.15,track_target:true};
+      c['minecraft:behavior.random_stroll']=c['minecraft:behavior.random_stroll']||{priority:7,speed_multiplier:0.85};
+      c['minecraft:behavior.look_at_player']=c['minecraft:behavior.look_at_player']||{priority:8,look_distance:10};
+      c['minecraft:behavior.random_look_around']=c['minecraft:behavior.random_look_around']||{priority:9};
+      root.format_version=root.format_version||'1.21.0';
+      map.set(path,JSON.stringify(root,null,2)+'\n'); entidades.push({id,path});
+    }catch(_){ }
+  }
+  if(!entidades.length) return {aplicado:false,avisos:['Se detectó una petición de NPC inteligentes, pero el proyecto no contiene entidades BP/entities/*.json; no se inventaron NPC inexistentes.']};
+  const ids=entidades.map(x=>x.id);
+  const esc=JSON.stringify(ids);
+  const script=`// EGO AI — coordinador táctico NPC (Bedrock Script API)\n// Máquina de estados: idle/follow/defend/follow_recover; memoria temporal por entidad.\n// Comportamiento modular: seguimiento, defensa contextual y recuperación.\nimport { world, system } from "@minecraft/server";\nconst EGO_ALLIES = new Set(${esc});\nconst EGO_HOSTILES = new Set(["minecraft:zombie","minecraft:husk","minecraft:drowned","minecraft:skeleton","minecraft:stray","minecraft:creeper","minecraft:spider","minecraft:cave_spider","minecraft:witch","minecraft:pillager","minecraft:vindicator","minecraft:ravager","minecraft:phantom","minecraft:blaze","minecraft:ghast","minecraft:wither_skeleton"]);\nconst memory = new Map();\nconst sq = (a,b) => { const x=a.x-b.x,y=a.y-b.y,z=a.z-b.z; return x*x+y*y+z*z; };\nfunction tick(){\n  let allies=[]; try { for(const d of [world.getDimension("overworld"),world.getDimension("nether"),world.getDimension("the_end")]) for(const e of d.getEntities()) if(EGO_ALLIES.has(e.typeId)) allies.push(e); } catch {}\n  for(const npc of allies){ try {\n    if(!npc.isValid()) { memory.delete(npc.id); continue; }\n    const players=npc.dimension.getPlayers({location:npc.location,maxDistance:48});\n    if(!players.length) continue;\n    players.sort((a,b)=>sq(a.location,npc.location)-sq(b.location,npc.location));\n    const owner=players[0], dist=sq(owner.location,npc.location);\n    let m=memory.get(npc.id)||{state:"follow",lastSeen:0};\n    m.lastSeen=system.currentTick;\n    if(dist>400){ const l=owner.location; npc.teleport({x:l.x+1,y:l.y,z:l.z+1},{dimension:owner.dimension,checkForBlocks:true}); m.state="follow_recover"; }\n    else { let nearby=[]; try { nearby=npc.dimension.getEntities({location:owner.location,maxDistance:12}); } catch {} const threat=nearby.find(e=>e.id!==npc.id && EGO_HOSTILES.has(e.typeId)); m.state=threat?"defend":"follow"; }\n    memory.set(npc.id,m);\n  } catch {} }\n}\nsystem.runInterval(tick,20);\nworld.afterEvents.entityDie.subscribe(ev=>{try{memory.delete(ev.deadEntity.id);}catch{}});\n`;
+  // Evitar reinsertar dos veces el coordinador.
+  const path='BP/scripts/ego_npc_brain.js';
+  if(!map.has(path)) map.set(path,script);
+
+  const main=map.get('BP/scripts/main.js');
+  if(typeof main==='string'){
+    if(!main.includes('./ego_npc_brain.js')) map.set('BP/scripts/main.js',main.replace(/\s*$/,'')+'\nimport "./ego_npc_brain.js";\n');
+  } else {
+    map.set('BP/scripts/main.js','// Punto de entrada EGO AI\nimport "./ego_npc_brain.js";\n');
+  }
+  const readme=map.get('BP/README.md')||'# Add-on EGO AI\n';
+  map.set('BP/README.md',readme+'\n## Arquitectura de compañeros NPC EGO\n- Roles aliados con estados de seguimiento y defensa.\n- Adquisición de objetivos hostiles mediante componentes vanilla; la familia de aliados no se configura como objetivo.\n- Memoria táctica temporal por entidad y recuperación de seguimiento si queda lejos del jugador.\n- El módulo no mina, recoge inventario ni construye bloques automáticamente: esas acciones requieren una implementación específica y pruebas adicionales.\n- Prueba: invoca la entidad con `/summon <namespace:entidad>` y verifica seguimiento cercano, defensa ante mobs hostiles y recuperación al alejarte.\n- Requiere la dependencia `@minecraft/server` declarada en el manifest y compatible con la versión del juego.\n');
+  files.splice(0,files.length,...[...map].map(([path,content])=>({path,content})));
+  return {aplicado:true,entidades:ids,avisos:['Arquitectura NPC EGO añadida para '+ids.length+' entidad(es): roles aliados, adquisición de amenazas hostiles, memoria temporal y recuperación de seguimiento. La prueba dentro del juego sigue pendiente.']};
+}
+
 async function mcBuild(body,env,request){
   const prompt=String(body.prompt||"").slice(0,12000);
   const plan=limpiarPlan(body.plan,prompt);
@@ -3130,9 +3188,14 @@ async function mcBuild(body,env,request){
     const vz=await generarVocesAddon(plan,env);plan._voces=vz.out;
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
     try{const hd=endurecerAddonBedrock(r.files,plan);for(const g of hd.generado)r.notas.push("Módulo añadido: "+g);for(const x of hd.cambios.slice(0,30))r.notas.push("Corregido: "+x.path+" — "+x.motivo);r.conteo.scripts=r.files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)).length;}catch(e){r.notas.push("El endurecimiento automático falló y se omitió: "+String(e&&e.message||e).slice(0,100));}
+    const npcAI=integrarArquitecturaNPC(r.files,plan,prompt,env.MC_SERVER_VERSION);
+    for(const x of npcAI.avisos)r.notas.push(x);
+    r.conteo.scripts=r.files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)).length;
     for(const x of vz.fallos)r.notas.push("Voz: "+x);
     const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
     const validacion=ciclo.validacion||validarAddonEstructural(r.files);
+    const auditoriaIA = auditarArquitecturaIAAddon(r.files, prompt);
+    for (const aviso of auditoriaIA.warnings) r.notas.push(aviso);
     if (!validacion.ok || validacion.errores.length) {
       return respuestaValidacionFallida(validacion, ciclo);
     }
@@ -3257,7 +3320,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.32.0",
+    version: "14.34.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -3674,6 +3737,29 @@ async function generarPaqueteMinecraftEspecial(files, mcKind, nombre, prompt, en
   }});
 }
 
+function auditarArquitecturaIAAddon(files, prompt) {
+  const wanted = /(npc|npcs|aldean|compa[nñ]ero|jugador(?:es)? inteligente|ai player|inteligencia artificial|entidad inteligente|superviviente|survivor|agente aut[oó]nomo)/i.test(String(prompt || ""));
+  if (!wanted) return { aplica: false, warnings: [] };
+  const list = Array.isArray(files) ? files : [];
+  const scripts = list.filter(f => /^BP\/scripts\/.+\.js$/i.test(String(f.path || "")));
+  const paths = scripts.map(f => String(f.path).toLowerCase());
+  const code = scripts.map(f => String(f.content || "")).join("\n").toLowerCase();
+  const warnings = [];
+  const nested = paths.filter(p => p.split("/").length >= 4).length;
+  const hasState = /(state.?machine|statemachine|statecontroller|estado|transition|transici[oó]n)/i.test(code);
+  const hasContext = /(agentcontext|aipcontext|contextcache|contextvar|contexto|memory|memoria)/i.test(code);
+  const hasBehavior = /(behavio[u]?r|comportamiento|procedure|procedimiento)/i.test(code);
+  const hasScheduler = /(runinterval|runtick|scheduler|tickbudget|presupuesto.*tick)/i.test(code);
+  const hasCleanup = /(clearinterval|cleartimeout|unsubscribe|cleanup|dispose|isvalid)/i.test(code);
+  if (scripts.length < 2) warnings.push("Arquitectura IA: faltan módulos separados y conectados (controlador y comportamiento); se detectó una estructura poco modular.");
+  if (!hasState) warnings.push("Arquitectura IA: no se detectó una máquina de estados explícita para decidir entre acciones.");
+  if (!hasContext) warnings.push("Arquitectura IA: no se detectó un módulo de contexto/memoria de entorno para tomar decisiones.");
+  if (!hasBehavior) warnings.push("Arquitectura IA: no se detectaron comportamientos o procedimientos reutilizables.");
+  if (!hasScheduler) warnings.push("Arquitectura IA: no se detectó un scheduler/tick controlado para ejecutar decisiones.");
+  if (!hasCleanup) warnings.push("Arquitectura IA: no se detectó limpieza clara de tareas/eventos ni validación de entidades.");
+  return { aplica: true, scripts: scripts.length, warnings };
+}
+
 function auditarCoberturaAddon(files, prompt) {
   const paths = (files || []).map(f => String(f.path || "").toLowerCase());
   const contents = (files || []).filter(f => /\.(?:js|json|mcfunction)$/i.test(f.path)).map(f => String(f.content || "")).join("\n").toLowerCase();
@@ -3763,6 +3849,22 @@ Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y 
 Ítems personalizados: BP/items/<nombre>.json con formato "minecraft:item" (format_version "1.21.0"), identificador con prefijo propio (por ejemplo ego:espada_trueno), componentes como minecraft:icon, minecraft:max_stack_size, minecraft:damage, minecraft:hand_equipped, minecraft:durability (NO uses minecraft:cooldown; el enfriamiento va en el script). El ícono es "minecraft:icon":{"textures":{"default":"nombre_corto"}} y ese nombre se define en RP/textures/item_texture.json. Textos en RP/texts/es_ES.lang y RP/texts/en_US.lang y RP/texts/languages.json.
 Recursos gráficos: no escribas bytes binarios como texto. El postprocesador de EGO genera PNG de ítems, bloques e iconos. Cada entidad debe tener su propio client_entity, spawn_egg, geometría, textura y animación locomotora coherentes; no reutilices la misma geometría para criaturas distintas. Los iconos de armas de fuego, botiquines, granadas, munición y armaduras deben ser de su categoría y nunca una espada genérica. No finjas que existe un recurso si no se generó.
 Efectos y comportamiento (rayos, partículas, sonidos, habilidades): usa Script API con "@minecraft/server" en BP/scripts/main.js (módulo "script" en el manifest con language "javascript", entry "scripts/main.js", y dependencia @minecraft/server con una version estable). Para rayos usa APIs verificadas; escucha eventos soportados y comprueba el identificador del objeto. Añade cooldown y no uses APIs inventadas.
+ARQUITECTURA AVANZADA PARA NPC, COMPAÑEROS Y ENTIDADES INTELIGENTES (OBLIGATORIA CUANDO EL PEDIDO LO SOLICITE):
+No implementes una IA compleja en un único archivo monolítico ni con decisiones aleatorias. Usa módulos JavaScript pequeños y conectados dentro de BP/scripts/:
+- core/AgentController.js: ciclo de vida, prioridad y transición de estados.
+- core/AgentContext.js: captura limitada y cacheada de contexto (posición, salud, objetivo, jugadores, enemigos, inventario y entorno).
+- core/StateMachine.js: estados explícitos, condiciones de entrada/salida, prioridad, cooldown y recuperación.
+- behaviors/: comportamientos independientes como follow, defend, combat, flee, gather, build, interact y idle, únicamente los solicitados.
+- procedures/: secuencias reutilizables con éxito, fallo, cancelación y timeout.
+- systems/: registro de eventos, scheduler por ticks y persistencia de datos cuando sea necesaria.
+- utils/: validación de entidades, distancias, vectores y manejo seguro de errores.
+La entrada declarada en manifest debe importar e inicializar el sistema real. Comprueba cada ruta de importación relativa; no generes módulos huérfanos.
+Usa un presupuesto de trabajo por tick, actualiza contexto a intervalos razonables, limita búsquedas de entidades/bloques, evita crear intervalos por entidad sin limpieza y cancela tareas cuando la entidad deja de ser válida. No guardes referencias de entidades indefinidamente.
+Cada estado debe definir prioridad, condiciones, cooldown, timeout y fallback. La IA debe evitar ciclos infinitos, cambios de estado recursivos y órdenes incompatibles.
+Implementa memoria persistente solo con Dynamic Properties registradas/compatibles y con límites de tamaño; nunca dependas de variables globales no inicializadas.
+No inventes APIs de navegación, visión, pathfinding, inventario ni eventos. Usa solo miembros disponibles en la versión objetivo de @minecraft/server; si una acción no es viable con la API disponible, declara la limitación y ofrece una alternativa real.
+Pruebas mínimas: sintaxis de todos los scripts, resolución de imports, existencia de entrypoint, registro de eventos, cleanup de tareas y validación de identificadores. La validación estática no demuestra comportamiento real dentro del juego.
+No imites ni reutilices código, recursos o identificadores de add-ons comerciales. Diseña una implementación original con la misma clase de arquitectura modular.
 REGLA DE IMPLEMENTACIÓN: cada característica solicitada debe existir como archivo y lógica conectada, no basta con mencionarla en README. Para cada criatura: BP/entities/<id>.json + RP/entity/<id>.entity.json + geometría propia en RP/models/entity/ + textura real PNG en RP/textures/entity/ + animación/controlador cuando se solicite + spawn egg/registro cuando aplique. Los identificadores y rutas deben coincidir exactamente. Para armas: item JSON, icono registrado, receta y lógica real de uso/ataque/recarga si se prometió; no llames arma de fuego a un objeto de combate cuerpo a cuerpo. Para misiones: estado persistente, objetivos/eventos, progreso y recompensas en scripts. Para botín: loot tables referenciadas por entidades/cofres. Para estructuras: solo declara estructuras importables si entregas el archivo binario real; los planos y comandos deben etiquetarse como planos, no como estructuras listas. No incluyas referencias a archivos que no estén presentes.
 Si el usuario solicita una cantidad explícita de criaturas, genera esa cantidad de entidades distintas o declara claramente que no alcanzaste la cantidad. No reduzcas silenciosamente los requisitos. No entregues un README que afirme sistemas no implementados.
 Incluye todos los archivos con contenido completo, sin placeholders, sin binarios falsos, sin rutas absolutas ni "..". Máximo ${maxFiles} archivos. packType=${kind}.` : `Eres un ingeniero especializado en Minecraft BEDROCK. Tipo de entrega: ${mcKind}. Nunca Java, Forge ni Fabric.
@@ -3851,6 +3953,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
       try{endurecerAddonBedrock(files,planGen);}catch(e){console.warn('endurecer',String(e&&e.message||e).slice(0,100));}
     }
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
+    if (minecraft && mcKind === "addon") avisos.push(...auditarArquitecturaIAAddon(files, prompt).warnings);
     const ciclo=await cicloReparacionAutomatica(files,env,{minecraft});
     const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files):{ok:true,errores:[],avisos:[],archivos:files.length});
     if (minecraft && (!validacion.ok || validacion.errores.length)) return respuestaValidacionFallida(validacion, ciclo);
@@ -4590,6 +4693,28 @@ function validarAddonEstructural(files) {
   // Scripts: errores sintácticos detectables y patrones API incompatibles no deben pasar como éxito.
   for(const [path,f] of porRuta){if(!/^BP\/scripts\/.+\.js$/i.test(path)||typeof f.content!=="string")continue;const bal=balanceJs(f.content);if(bal)errores.push(`${path}: posible error de sintaxis (${bal}).`);const lint=lintScriptApi(f.content,"2.10.0");for(const msg of lint.slice(0,4))errores.push(`${path}: ${msg}.`);}
   if (!manifests.length) errores.push("No se encontró ningún manifest.json.");
+  // Imports locales de scripts: un módulo faltante rompe todo el entrypoint aunque cada archivo sea sintácticamente válido.
+  for (const [path, f] of porRuta) {
+    if (!/^BP\/scripts\/.+\.js$/i.test(path) || typeof f.content !== "string") continue;
+    const rx = /\b(?:from\s*|import\s*\()\s*["'](\.{1,2}\/[^"']+)["']/g;
+    let m;
+    while ((m = rx.exec(f.content))) {
+      const spec = m[1];
+      const base = path.split("/"); base.pop();
+      for (const part of spec.split("/")) {
+        if (!part || part === ".") continue;
+        if (part === "..") { if (base.length > 1) base.pop(); else base.push("!INVALID!"); }
+        else base.push(part);
+      }
+      const resolved = base.join("/");
+      const candidates = /\.[cm]?js$/i.test(resolved)
+        ? [resolved]
+        : [resolved + ".js", resolved + "/index.js"];
+      if (base.includes("!INVALID!") || !candidates.some(p => porRuta.has(p))) {
+        errores.push(`${path}: import local no resuelto "${spec}" (se esperaba ${candidates.join(" o ")}).`);
+      }
+    }
+  }
   return clasificarHallazgos(errores, avisos, porRuta.size);
 }
 
@@ -4745,7 +4870,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.32.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.34.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -4774,7 +4899,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.32.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.33.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -4851,7 +4976,7 @@ async function manejar(request, env) {
   }
 
   if (body.ping) return json({
-    ok: true, v: "14.32.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA,
+    ok: true, v: "14.33.0", memoriaPersonal: !!env.EGO_MEMORY, biblioteca: !!env.EGO_BIBLIOTECA,
     workersAI: !!env.AI, openRouter: !!routerApiKey(env), equipo: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0"
   });
 
