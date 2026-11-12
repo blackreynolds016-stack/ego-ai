@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.34.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.35.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1733,12 +1733,17 @@ async function mcPart(body,env){
     (existentes?`\nARCHIVOS ACTUALES DEL ADD-ON (modifícalos o amplíalos; devuelve completos los que cambies):\n${existentes}\n`:"")+
     `\nPedido original del usuario (para mantener fidelidad):\n${prompt}`;
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
-  const t0=Date.now(),ligero=!!body.ligero,restante=(tope)=>Math.max(5000,tope-(Date.now()-t0));
+  const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
+  // Las criaturas son una de las partes más costosas: se reduce el tamaño de
+  // respuesta solicitado y se da más margen a la cascada de modelos/fallbacks.
+  const maxTokensParte=ligero?5500:(esEntidades?6000:10000);
+  const timeoutParte=ligero?125000:(esEntidades?210000:165000);
+  const restante=(tope)=>Math.max(5000,tope-(Date.now()-t0));
   for(let intento=0;intento<2;intento++){
-    if(intento===1&&Date.now()-t0>70000)break;
+    if(intento===1&&Date.now()-t0>(esEntidades?115000:70000))break;
     let r;
-    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,ligero?7000:10000),tmoMc(restante(ligero?110000:150000))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
-    catch(e){ if(mejor) break; const tm=String(e&&e.message||e);return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+(tm==="tiempo"||/abort|tiempo/i.test(tm)?"el modelo tardó demasiado en responder (la parte es muy grande o el proveedor está lento)":tm.slice(0,200)),codigo:/tiempo|abort/i.test(tm)?"tiempo":"modelo"},502); }
+    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")+(esEntidades?"\n\nMODO ENTIDADES ROBUSTO: prioriza terminar archivos completos y válidos. Genera solo las entidades solicitadas en esta parte, evita explicaciones, JSON repetido y comentarios extensos. Cada entidad debe tener su archivo BP y referencias coherentes; no inventes recursos binarios. Si el plan contiene muchas criaturas, prioriza las primeras entidades completas antes que dejar una respuesta truncada.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,maxTokensParte),tmoMc(restante(timeoutParte))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
+    catch(e){ if(mejor) break; const tm=String(e&&e.message||e);return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+(tm==="tiempo"||/abort|tiempo/i.test(tm)?"se agotó el tiempo después de probar los modelos disponibles; reduce el número de criaturas por solicitud o vuelve a intentar":tm.slice(0,260)),codigo:/tiempo|abort/i.test(tm)?"tiempo":"modelo",detalle:tm.slice(0,420),parte:parte.tipo},502); }
     modelo=r.model; fallosM=(r.fallos||[]); desde=r.idx+(intento===0?1:0);
     const p=leerProyectoModelo(r.raw);
     errores=[]; const files=[];
@@ -3320,7 +3325,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.34.0",
+    version: "14.35.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -4870,7 +4875,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.34.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.35.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
