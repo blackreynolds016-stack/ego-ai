@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.35.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.36.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1117,24 +1117,26 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
 // Orquestación real del equipo EGO: cada rol usa su modelo asignado y tiene
 // un fallback explícito. Los fallbacks no sustituyen al modelo principal si este responde.
 const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning" };
-async function egoRoleChat(role, messages, env, maxTokens = 3000) {
+async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) {
   if (!routerApiKey(env) && !env.AI) throw new Error("Falta ROUTER_API_KEY/OPENROUTER_API_KEY o Workers AI para el equipo EGO.");
   const task = EGO_ROLE_TASK[role] || "chat";
   const envName = `EGO_${String(role).toUpperCase()}_MODEL`;
   const primary = String(env[envName] || EGO_TEAM_MODELS[role] || "").trim();
-  const fallbacks = task === "code"
-    ? [OR_FREE.code, OR_FREE.fallback]
-    : [OR_FREE.reasoning, OR_FREE.fallback];
+  const fallbacks = task === "code" ? [OR_FREE.code, OR_FREE.fallback] : [OR_FREE.reasoning, OR_FREE.fallback];
   const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
   const failures = [];
-  // Si OpenRouter acaba de responder 402 (sin crédito), no se pierde tiempo reintentándolo: se pasa directo a Workers AI.
+  const bounded = Number.isFinite(Number(options.maxTotalMs));
+  const deadline = bounded ? Date.now() + Math.max(5000, Number(options.maxTotalMs)) : Infinity;
+  const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
   const orBloqueado = !routerApiKey(env) || (globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
   if (orBloqueado && routerApiKey(env)) failures.push("OpenRouter sin crédito (402), se omite");
-  for (let i = 0; i < models.length && !orBloqueado; i++) {
+  // Para tareas grandes se usa un presupuesto total: modelo principal, un respaldo y, si queda margen, Workers AI.
+  for (let i = 0; i < maxModels && i < models.length && !orBloqueado && Date.now() < deadline; i++) {
     try {
-      // El tiempo de espera crece con el tamaño de la respuesta: 10 000 tokens no caben en 36 s (causa real de "tiempo agotado").
-      const tPrim = Math.min(100000, 25000 + Number(maxTokens || 3000) * 8);
-      const r = await openRouterChat(messages, env, maxTokens, models[i], i === 0 ? tPrim : Math.round(tPrim * 0.6));
+      const remaining = deadline - Date.now();
+      const defaultTimeout = Math.min(100000, 25000 + Number(maxTokens || 3000) * 8);
+      const timeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.perModelMs) || 42000)) : (i === 0 ? defaultTimeout : Math.round(defaultTimeout * 0.6));
+      const r = await openRouterChat(messages, env, maxTokens, models[i], timeout);
       if (r.content) return { ...r, role, fallos: failures };
       failures.push(`${models[i]}: respuesta vacía`);
     } catch (e) {
@@ -1143,18 +1145,21 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000) {
       if (/HTTP 402/.test(em)) { globalThis.__egoOrSinCredito = Date.now(); break; }
     }
   }
-  // Respaldo propio: Workers AI (incluido en tu cuenta de Cloudflare, no depende de créditos de OpenRouter).
-  if (env.AI) {
-    const cadena = (task === "code" ? CF_MODELS.codigo : CF_MODELS.razonar).slice(0, 3);
-    for (const id of cadena) {
+  if (env.AI && Date.now() < deadline && options.cfModels !== 0) {
+    const cadenaBase = task === "code" ? CF_MODELS.codigo : CF_MODELS.razonar;
+    const cantidad = bounded ? Math.max(1, Math.min(cadenaBase.length, Number(options.cfModels) || 1)) : 3;
+    for (const id of cadenaBase.slice(0, cantidad)) {
+      const remaining = deadline - Date.now();
+      if (remaining < 5000) break;
+      const cfTimeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.cfTimeoutMs) || 30000)) : 70000;
       try {
-        const r = await Promise.race([cfChat(id, messages, env, Math.min(Number(maxTokens || 3000), 8000)), tmoMc(70000)]);
+        const r = await Promise.race([cfChat(id, messages, env, Math.min(Number(maxTokens || 3000), 8000)), tmoMc(cfTimeout)]);
         if (r && r.content) return { ...r, model: `cf:${id}`, role, fallos: failures };
         failures.push(`${id}: respuesta vacía`);
       } catch (e) { failures.push(`${id}: ${String(e?.message || e).slice(0, 80)}`); }
     }
   }
-  throw new Error(`${role} no respondió: ${failures.join(" | ").slice(0, 420)}`);
+  throw new Error(`${role} no respondió dentro del presupuesto disponible: ${failures.join(" | ").slice(0, 420)}`);
 }
 
 async function visionOpenRouter(messages, env) {
@@ -1702,8 +1707,10 @@ async function mcModelo3d(parte,plan,prompt,env){
   let ult="",modelo="";
   for(let t=0;t<2;t++){
     try{
-      const r=await llamarCodigo(env,[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez.":"")}],12000,0);
-      const j=extractJson(r.raw);let ps=null;
+      // El modelador 3D usa la misma ruta acotada del equipo EGO: dos intentos breves,
+      // sin recorrer la cadena larga de candidatos de llamarCodigo (causa del timeout de criaturas).
+      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:45000,maxModels:1,perModelMs:29000,cfModels:1,cfTimeoutMs:14000});
+      const j=extractJson(r.content);let ps=null;
       if(j){const ar=String(j.arquetipo||"").toLowerCase();let base=[];
         if(/human|person|caball|bipedo/.test(ar))base=modeloHumanoide(j);else if(/best|cuadr|animal|lobo|dragon/.test(ar))base=modeloBestia(j);
         const ex=limpiarModelo3d(j.extras).slice(0,40),libres=limpiarModelo3d(j.partes);
@@ -1737,13 +1744,13 @@ async function mcPart(body,env){
   // Las criaturas son una de las partes más costosas: se reduce el tamaño de
   // respuesta solicitado y se da más margen a la cascada de modelos/fallbacks.
   const maxTokensParte=ligero?5500:(esEntidades?6000:10000);
-  const timeoutParte=ligero?125000:(esEntidades?210000:165000);
+  const timeoutParte=112000; // presupuesto máximo de generación de una parte; el cliente deja margen para recibir el error/JSON.
   const restante=(tope)=>Math.max(5000,tope-(Date.now()-t0));
   for(let intento=0;intento<2;intento++){
     if(intento===1&&Date.now()-t0>(esEntidades?115000:70000))break;
     let r;
-    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")+(esEntidades?"\n\nMODO ENTIDADES ROBUSTO: prioriza terminar archivos completos y válidos. Genera solo las entidades solicitadas en esta parte, evita explicaciones, JSON repetido y comentarios extensos. Cada entidad debe tener su archivo BP y referencias coherentes; no inventes recursos binarios. Si el plan contiene muchas criaturas, prioriza las primeras entidades completas antes que dejar una respuesta truncada.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,maxTokensParte),tmoMc(restante(timeoutParte))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
-    catch(e){ if(mejor) break; const tm=String(e&&e.message||e);return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+(tm==="tiempo"||/abort|tiempo/i.test(tm)?"se agotó el tiempo después de probar los modelos disponibles; reduce el número de criaturas por solicitud o vuelve a intentar":tm.slice(0,260)),codigo:/tiempo|abort/i.test(tm)?"tiempo":"modelo",detalle:tm.slice(0,420),parte:parte.tipo},502); }
+    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")+(esEntidades?"\n\nMODO ENTIDADES ROBUSTO: prioriza terminar archivos completos y válidos. Genera solo las entidades solicitadas en esta parte, evita explicaciones, JSON repetido y comentarios extensos. Cada entidad debe tener su archivo BP y referencias coherentes; no inventes recursos binarios. Si el plan contiene muchas criaturas, prioriza las primeras entidades completas antes que dejar una respuesta truncada.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,maxTokensParte,{maxTotalMs:104000,maxModels:2,perModelMs:41000,cfModels:1,cfTimeoutMs:26000}),tmoMc(restante(timeoutParte))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
+    catch(e){ if(mejor) break; const tm=String(e&&e.message||e);return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+(tm==="tiempo"||/abort|tiempo/i.test(tm)?"el proveedor no terminó esta parte dentro del presupuesto de tiempo; se puede reintentar esta parte en modo compacto sin descartar las demás":tm.slice(0,260)),codigo:/tiempo|abort/i.test(tm)?"tiempo":"modelo",detalle:tm.slice(0,420),parte:parte.tipo},502); }
     modelo=r.model; fallosM=(r.fallos||[]); desde=r.idx+(intento===0?1:0);
     const p=leerProyectoModelo(r.raw);
     errores=[]; const files=[];
@@ -1764,13 +1771,13 @@ async function mcPart(body,env){
   }
   // ---- Reasoner + auditor independientes en paralelo; coder repara si hay defectos ----
   let revisado="", modelosRevision={};
-  if(mejor&&mejor.files.length&&!ligero&&Date.now()-t0<85000&&["script","entities","items","blocks","recipes","loot","spawn","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
+  if(mejor&&mejor.files.length&&!ligero&&Date.now()-t0<62000&&["script","entities","items","blocks","recipes","loot","spawn","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
     try{
       const texto=mejor.files.filter(f=>/\.(js|json)$/.test(f.path)).map(f=>"=== ARCHIVO: "+f.path+" ===\n"+f.content).join("\n").slice(0,16000);
       const reviewUser="REQUISITOS:\n"+((plan.requisitos||[]).map((x,k)=>(k+1)+". "+x).join("\n")||prompt.slice(0,1500))+"\n\nPLAN:\n"+JSON.stringify({objetos:plan.objetos,poderes_jugador:plan.poderesJugador,revisionEquipo:plan.revisionEquipo||null})+"\n\nARCHIVOS DE LA PARTE «"+parte.titulo+"»:\n"+texto;
       const [crit,razon]=await Promise.all([
-        Promise.race([egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800),tmoMc(30000)]).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
-        Promise.race([egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800),tmoMc(30000)]).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
+        Promise.race([egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
+        Promise.race([egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
       ]);
       modelosRevision={auditor:crit.model||"no disponible",reasoner:razon.model||"no disponible"};
       const problemas=[];
@@ -1783,8 +1790,8 @@ async function mcPart(body,env){
       }
       const probs=problemas.slice(0,8);
       if(probs.length&&Date.now()-t0>130000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
-      else if(probs.length){
-        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,10000),tmoMc(restante(160000))]);
+      else if(probs.length&&Date.now()-t0<76000){
+        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:30000,maxModels:1,perModelMs:26000,cfModels:0}),tmoMc(32000)]);
         const np=parsearSalidaMc(rr.content);
         if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="auditor y reasoner detectaron "+probs.length+" problema(s); coder aplicó una corrección que pasó la validación básica";}
         else revisado="auditoría detectó "+probs.length+" problema(s), pero la reparación no pasó; se conserva la versión anterior y se informa la limitación";
@@ -3325,7 +3332,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.35.0",
+    version: "14.36.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -4875,7 +4882,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.35.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.36.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -4904,7 +4911,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.33.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.36.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
