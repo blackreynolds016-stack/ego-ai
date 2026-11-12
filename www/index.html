@@ -463,10 +463,9 @@ function usuarioId(){const c=correoUsuario();if(c)return c;
 let u=null;try{u=JSON.parse(localStorage.getItem("ego_uid"))}catch(e){}
 if(!u){u="u"+Date.now().toString(36)+Math.random().toString(36).slice(2,10);try{localStorage.setItem("ego_uid",JSON.stringify(u))}catch(e){}}
 return u}
-/* La identidad nunca se autentica con correo o UID enviado por el cliente.
-   El Worker obtiene la cuenta exclusivamente del ID token Firebase verificado. */
-function wHeaders(token){const h={"Content-Type":"application/json"};if(token)h.Authorization="Bearer "+token;return h}
-function wBody(o){return JSON.stringify(o)}
+/* Toda petición al Worker lleva el correo en el encabezado X-Usuario-Correo y en el cuerpo ("correo"); sin sesión va vacío */
+function wHeaders(){return{"Content-Type":"application/json","X-Usuario-Correo":correoUsuario()}}
+function wBody(o){o.correo=correoUsuario();return JSON.stringify(o)}
 /* Ense\u00f1ar a EGO ("Estudia esto: ..."): solo el creador puede; el Worker exige el token de sesi\u00f3n firmado por Google, as\u00ed que la app lo env\u00eda SOLO en esos mensajes */
 const RX_TEACH=/^[\s"'“”‘’«»¡!¿]*(?:(?:estudia|est[uú]dia|aprende|guarda en la biblioteca)(?:\s+(?:esto|eso|lo siguiente|que))?(?:\s+y\s+(?:aprend[eé]lo|apr[eé]ndelo|estud[ií]alo|est[uú]dialo))?(?:\s+(?:con|a)\s+(?:profundidad|fondo))?\s*:|(?:estudia|est[uú]dia|aprende)\s+(?:esto|eso|lo siguiente)(?:\s+y\s+(?:aprend[eé]lo|apr[eé]ndelo|estud[ií]alo|est[uú]dialo))?(?:\s+(?:con|a)\s+(?:profundidad|fondo))?[ \t]*[\r\n]|(?:borra|elimina)\s+la\s+lecci[oó]n\s*:)/i;
 const MSG_NO_APRENDE="EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
@@ -475,9 +474,12 @@ const esCmdAdmin=t=>RX_TEACH.test(t)||RX_LISTAR.test(t);
 function esAdminLocal(){try{return !!(Cloud.user&&String(Cloud.user.email||"").trim().toLowerCase()==="egoai.oficial2026@gmail.com")}catch(e){return false}}
 async function tokenSesion(){try{const u=Cloud.fb&&Cloud.fb.au&&Cloud.fb.au.currentUser;return u?await u.getIdToken():null}catch(e){return null}}
 async function wPost(o,signal){
-let tk=null;
-try{tk=await tokenSesion()}catch(e){}
-return fetch(API,{method:"POST",headers:wHeaders(tk),body:wBody(o),signal:signal})}
+try{if(Array.isArray(o.messages)){const m=o.messages.slice().reverse().find(x=>x&&x.role==="user");
+const t=m?(typeof m.content==="string"?m.content:((Array.isArray(m.content)&&m.content.find(p=>p&&p.type==="text"))||{}).text||""):"";
+if(esCmdAdmin(t)&&esAdminLocal()){const tk=await tokenSesion();if(tk)o.idToken=tk}}}catch(e){}
+/* El Worker v14.32 identifica al usuario SOLO con el token de Firebase (Authorization: Bearer). Sin él no hay memoria personal en el servidor. */
+const h=wHeaders();try{const tk=o.idToken||await Promise.race([tokenSesion(),new Promise(r=>setTimeout(()=>r(null),4000))]);if(tk)h["Authorization"]="Bearer "+tk}catch(e){}
+return fetch(API,{method:"POST",headers:h,body:wBody(o),signal:signal})}
 const CREATED="6 de octubre de 2026";
 const CREATOR="Ernesto Hernández";
 const BASE="Tu nombre es EGO AI. Fuiste creado el "+CREATED+" por "+CREATOR+". Si te preguntan cómo te llamas, responde \"Me llamo EGO AI\". Menciona a tu creador y la fecha SOLO si te preguntan por tu origen. Eres una IA especializada en programación, matemáticas, ciencias y creación de apps y juegos. Resuelves problemas difíciles con rigor, razonas paso a paso y entregas código completo que funciona. Lees y analizas imágenes y videos: texto, código, ecuaciones, errores en capturas y problemas en pantalla. Si te piden otro tema, dilo con amabilidad en una frase y ofrece ayuda dentro de tu especialidad. La app SÍ crea y edita imágenes (el usuario solo debe pedirlo: «créame una imagen de…», o enviar una foto con el cambio que quiere) y SÍ crea add-ons de Minecraft Bedrock como archivo .mcaddon con texturas PNG, receta y habilidades (el usuario pide «crea un add-on de una espada…»). Nunca digas que no puedes generar texturas, imágenes ni archivos: si el usuario quiere cambios en lo que se creó, dile que escriba el cambio (por ejemplo «hazlo de fuego» o «más daño») y la app lo rehace. No pegues JSON de add-ons a mano ni pidas armar el ZIP manualmente. También analizas imágenes y videos. Responde en el idioma del usuario, claro y bien estructurado (títulos, listas, código en bloques con lenguaje). Verifica datos y lógica; si algo es ambiguo asume lo más razonable y dilo; si no sabes algo, dilo sin inventar. A un saludo responde en una frase corta. Capacidades de la app: memoria («recuerda que…») y análisis de archivos (PDF, Word, Excel, texto), fotos y videos.";
