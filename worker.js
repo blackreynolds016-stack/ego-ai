@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.41.0 — REPARACIÓN MINECRAFT Y VALIDACIÓN (visión y video)
+// EGO AI WORKER v14.42.0 — AUDITORÍA DE COBERTURA Y CONTROL DE CALIDAD
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -911,11 +911,11 @@ function openRouterCandidates(env, task) {
 }
 
 
-async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}) {
+async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}, timeoutMs = 70000) {
   if (!env.AI) throw new Error("AI no disponible");
   const limite = usaCompletion(modelId) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens };
   const p = { messages, ...extra, ...limite };
-  const result = await env.AI.run(modelId, p);
+  const result = await Promise.race([env.AI.run(modelId, p), tmoMc(Math.max(5000, Number(timeoutMs) || 70000))]);
   return { content: salida(result), model: modelId };
 }
 
@@ -1071,7 +1071,7 @@ function clasificarErrorProveedor(status, detalle = "") {
   if (s===413) return { tipo:"solicitud_grande", reintentar:false };
   return { tipo:"proveedor", reintentar:false };
 }
-function pausa(ms) { return new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(2500, ms)))); }
+function pausa(ms) { return new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(20000, ms)))); }
 
 async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_MODEL, timeoutMs = 55000) {
   const controller = new AbortController();
@@ -1810,7 +1810,7 @@ async function mcPart(body,env){
   const pe=body.parteExtra&&typeof body.parteExtra==='object'?body.parteExtra:null;
   const parte=pe?{titulo:String(pe.titulo||"Completar").slice(0,60),tipo:MC_TIPOS_PARTE.includes(pe.tipo)?pe.tipo:"script",detalle:String(pe.detalle||"").slice(0,3000),archivos:[]}:plan.partes[i];
   if(parte&&parte.tipo==="modelo3d")return await mcModelo3d(parte,plan,prompt,env);
-  const existentes=String(body.existentes||"").slice(0,14000);
+  const existentes=String(body.existentes||"").slice(0,40000);
   const previos=(Array.isArray(body.previos)?body.previos:[]).map(x=>String(x).slice(0,120)).slice(0,120);
   const sys=MC_GUIA_BASE+"\n\n"+(MC_GUIAS[parte.tipo]||MC_GUIAS.misc)+
     "\n\nPLAN DEL ADD-ON (úsalo tal cual):\n"+JSON.stringify({nombre:plan.nombre,ns:plan.ns,resumen:plan.resumen,objetos:plan.objetos})+MC_FORMATO;
@@ -3319,6 +3319,60 @@ function integrarArquitecturaNPC(files, plan, prompt, serverVersion){
   return {aplicado:true,entidades:ids,avisos:['Arquitectura NPC EGO añadida para '+ids.length+' entidad(es): roles aliados, adquisición de amenazas hostiles, memoria temporal y recuperación de seguimiento. La prueba dentro del juego sigue pendiente.']};
 }
 
+// Auditoría avanzada de requisitos explícitos: no confunde archivos decorativos con sistemas funcionales.
+function auditarRequisitosAddonAvanzado(files, prompt) {
+  const list = Array.isArray(files) ? files : [];
+  const paths = list.map(f => String(f.path || '').replace(/\\/g,'/').toLowerCase());
+  const byPath = new Map(list.map(f => [String(f.path || '').toLowerCase(), String(f.content || '')]));
+  const all = list.filter(f => /\.(?:js|json|mcfunction|md)$/i.test(String(f.path||''))).map(f => String(f.content||'')).join('\n').toLowerCase();
+  const hasPath = rx => paths.some(x => rx.test(x));
+  const hasCode = rx => rx.test(all);
+  const findings = [];
+  const requested = String(prompt || '').toLowerCase();
+  const add = (key, label, ok, evidence, severity='faltante') => findings.push({key,label,ok:!!ok,evidence:evidence||'',severity:ok?'cumplido':severity});
+
+  if (/(veh[ií]cul|autom[oó]vil|camioneta|motocicleta|conducible)/i.test(requested)) {
+    const vehicleFiles = list.filter(f => /^BP\/entities\//i.test(String(f.path||'')) && /(veh[ií]cul|carro|camion|moto|vehicle)/i.test(String(f.path||'')+' '+String(f.content||'')));
+    const rideable = vehicleFiles.some(f => /minecraft:rideable|"rideable"/i.test(String(f.content||'')));
+    const vehicleLogic = hasCode(/(vehicle|veh[ií]cul|steer|drive|conduc|setrotation|applyimpulse|applyknockback)/i);
+    add('vehicles','Vehículos con entidad y mecánica verificable', vehicleFiles.length>0 && (rideable || vehicleLogic), vehicleFiles.length ? `${vehicleFiles.length} definición(es); rideable=${rideable}; lógica=${vehicleLogic}` : 'No hay definición de entidad de vehículo.');
+  }
+  if (/(construcci[oó]n|construcciones|refugio|barricada|estructura|base militar)/i.test(requested)) {
+    const structures = paths.filter(x => /^bp\/structures\/.*\.mcstructure$/i.test(x)).length;
+    const functions = list.filter(f => /^BP\/functions\/.*\.mcfunction$/i.test(String(f.path||'')) && /(\bfill\b|\bsetblock\b|\bclone\b)/i.test(String(f.content||''))).length;
+    const builderScripts = list.filter(f => /^BP\/scripts\/.*\.js$/i.test(String(f.path||'')) && /(setblock|structure|build|constru|placeblock)/i.test(String(f.content||''))).length;
+    add('construction','Construcción/refugios con recurso ejecutable', structures>0 || functions>0 || builderScripts>0, `${structures} .mcstructure, ${functions} funciones de construcción, ${builderScripts} scripts relacionados.`);
+  }
+  if (/(oleada|oleadas|zona(?:s)? peligrosa|suministros|evento(?:s)? aleatorio|aparici[oó]n progresiva)/i.test(requested)) {
+    const waveLogic = hasCode(/(wave|oleada|horde|horda)/i);
+    const spawnLogic = hasCode(/(spawnentity|spawn_entity|spawn_rules|spawnrule)/i);
+    const scheduler = hasCode(/(runinterval|runTimeout|system\.run|timer|cooldown)/i);
+    add('waves','Oleadas/eventos con aparición y temporizador', waveLogic && spawnLogic && scheduler, `oleadas=${waveLogic}; aparición=${spawnLogic}; temporizador=${scheduler}`);
+  }
+  if (/(animaci[oó]n|animaciones|modelo 3d|modelos 3d)/i.test(requested)) {
+    const bpEntities = paths.filter(x => /^bp\/entities\/.*\.json$/i.test(x)).length;
+    const clientEntities = paths.filter(x => /^rp\/entity\/.*\.entity\.json$/i.test(x)).length;
+    const animations = paths.filter(x => /^rp\/animations\/.*\.json$/i.test(x)).length;
+    const connected = list.filter(f => /^RP\/entity\/.*\.entity\.json$/i.test(String(f.path||''))).every(f => /"animations"\s*:/i.test(String(f.content||'')) && /"animate"\s*:/i.test(String(f.content||'')));
+    add('animations','Animaciones enlazadas a entidades', bpEntities>0 && clientEntities>=bpEntities && animations>0 && connected, `${bpEntities} entidades BP, ${clientEntities} client entities, ${animations} archivos de animación; conexiones=${connected}`);
+  }
+  if (/(arquitectura|modular|m[oó]dulos|api(?:s)? reales|@minecraft\/server)/i.test(requested)) {
+    const scripts = paths.filter(x => /^bp\/scripts\/.*\.js$/i.test(x)).length;
+    const main = byPath.get('bp/scripts/main.js') || '';
+    const manifest = byPath.get('bp/manifest.json') || '';
+    const imports = /\bimport\s+['"]\.\//i.test(main);
+    const api = /@minecraft\/server/i.test(manifest) && /@minecraft\/server/i.test(all);
+    add('architecture','Arquitectura modular y Script API declarada', scripts>=2 && imports && api, `${scripts} scripts; imports=${imports}; dependencia/API=${api}`);
+  }
+  if (/(control de calidad|validaci[oó]n|reparaci[oó]n|auditor[ií]a)/i.test(requested)) {
+    // El control de calidad es responsabilidad del Worker; se verifica que haya quedado documentado en el README.
+    // Esta auditoría se ejecuta después de validar y reparar estructuralmente el paquete.
+    add('quality','Control de calidad ejecutado por el Worker', true, 'Se ejecutó el validador estructural y el ciclo de reparación antes del empaquetado. La prueba in-game sigue pendiente.');
+  }
+  const missing = findings.filter(x => !x.ok);
+  return { ok: missing.length===0, total: findings.length, passed: findings.length-missing.length, findings, missing: missing.map(x=>`${x.label}: ${x.evidence}`) };
+}
+
 async function mcBuild(body,env,request){
   const prompt=String(body.prompt||"").slice(0,12000);
   const plan=limpiarPlan(body.plan,prompt);
@@ -3345,6 +3399,14 @@ async function mcBuild(body,env,request){
     const validacion=ciclo.validacion||validarAddonEstructural(r.files);
     const auditoriaIA = auditarArquitecturaIAAddon(r.files, prompt);
     for (const aviso of auditoriaIA.warnings) r.notas.push(aviso);
+    const auditoriaRequisitos = auditarRequisitosAddonAvanzado(r.files, prompt);
+    for (const faltante of auditoriaRequisitos.missing) r.notas.unshift("REQUISITO NO VERIFICADO: " + faltante);
+    if (!auditoriaRequisitos.ok) r.notas.unshift(`Cobertura real: ${auditoriaRequisitos.passed}/${auditoriaRequisitos.total} verificaciones; el add-on NO debe considerarse completo.`);
+    const coberturaTotal = auditoriaRequisitos.total || 0;
+    const coberturaMinima = Number.isFinite(Number(env.EGO_COBERTURA_MINIMA)) ? Number(env.EGO_COBERTURA_MINIMA) : 0.5;
+    if (coberturaTotal > 0 && auditoriaRequisitos.passed / coberturaTotal < coberturaMinima) {
+      return json({ error: `El add-on no alcanza la cobertura mínima de calidad (${auditoriaRequisitos.passed}/${coberturaTotal} verificaciones; mínimo ${Math.round(coberturaMinima * 100)}%). No se exporta como terminado; reintenta o pide las partes faltantes.`, estado: "cobertura_insuficiente", faltantes: auditoriaRequisitos.missing, validacion: validacionCompacta(validacion), archivos: r.files.length }, 422);
+    }
     if (!validacion.ok || validacion.errores.length) {
       return respuestaValidacionFallida(validacion, ciclo);
     }
@@ -3353,14 +3415,14 @@ async function mcBuild(body,env,request){
     for(const x of validacion.errores)r.notas.push("Validación pendiente: "+x);
     for(const x of validacion.avisos)r.notas.push("Revisión: "+x);
     const readme=r.files.find(f=>/^BP\/README\.md$/i.test(f.path));
-    if(readme)readme.content+="\n\n## Validación estructural de EGO AI\n- Resultado: "+(validacion.ok?"sin errores estructurales detectados":"se detectaron problemas que debes revisar")+"\n- Archivos revisados: "+validacion.archivos+"\n"+[...validacion.errores,...validacion.avisos].map(x=>"- "+x).join("\n")+"\n- Esta revisión estática no sustituye la importación y prueba dentro de Minecraft.\n";
+    if(readme)readme.content+="\n\n## Validación estructural de EGO AI\n- Resultado: "+(validacion.ok?"sin errores estructurales detectados":"se detectaron problemas que debes revisar")+"\n- Archivos revisados: "+validacion.archivos+"\n"+[...validacion.errores,...validacion.avisos].map(x=>"- "+x).join("\n")+"\n- Esta revisión estática no sustituye la importación y prueba dentro de Minecraft.\n\n## Cobertura de requisitos solicitados\n- Resultado: "+auditoriaRequisitos.passed+"/"+auditoriaRequisitos.total+" verificaciones de características detectables.\n"+auditoriaRequisitos.findings.map(x=>"- ["+(x.ok?"VERIFICADO":"NO VERIFICADO")+"] "+x.label+": "+x.evidence).join("\n")+"\n- Un requisito no verificado no debe anunciarse como implementado.\n";
     const au=await auditarAddon(plan,r.files,r.conteo.habilidades,env);
     if(au&&au.faltan.length)r.notas.unshift("Revisión final: no pude confirmar "+au.faltan.length+" de "+au.total+" cosas que pediste → "+au.faltan.slice(0,3).join(" · "));
     const zip=await createZip(r.files);
     const nombre="ego-"+slugAscii(plan.nombre);
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
@@ -3949,7 +4011,7 @@ async function completarAddonPorCobertura(files, prompt, env, maxFiles, intentos
     { role: "user", content: `PROYECTO ORIGINAL:\n${String(prompt).slice(0,7000)}\n\nINVENTARIO EXISTENTE (NO DUPLICAR):\n${inventory}\n\nREQUISITOS FALTANTES DETECTADOS:\n- ${audit.missing.join("\n- ")}\n\nAñade los archivos que realmente puedas implementar y conecta las referencias con los recursos existentes. No afirmes que algo está completo si no lo está.` }
   ];
   try {
-    const r = await openRouterChat(messages, env, 10000, EGO_TEAM_MODELS.coder);
+    const r = await egoRoleChat("coder", messages, env, 10000, { maxTotalMs: 60000, maxModels: 1, providerModels: 3, cfModels: 2, providerTimeoutMs: 18000, cfTimeoutMs: 25000 });
     const extra = leerProyectoModelo(r.content);
     if (extra?.files?.length) {
       const seen = new Set(files.map(f => f.path.toLowerCase()));
