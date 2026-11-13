@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.36.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.39.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -24,12 +24,14 @@ const EGO_TEAM_MODELS = {
 };
 const CF_MODELS = {
   chat: MODELO_RAPIDO,   // resúmenes y tareas rápidas
-  // Cadenas actualizadas para evitar modelos con retiro anunciado el 20-11-2026.
-  // El acceso y el coste dependen del plan/cuota de Cloudflare; cada modelo se prueba en runtime.
-  codigo:  ["@cf/deepseek-ai/deepseek-v4.1-flash-1017", "@cf/zai-org/glm-5.3", "@cf/qwen/qwen3.8-27b", "@cf/google/gemma-4-26b-a4b-it", MODELO_RAPIDO],
-  razonar: ["@cf/deepseek-ai/deepseek-v4.1-flash-1017", "@cf/zai-org/glm-5.3", "@cf/qwen/qwen3.8-27b", "@cf/google/gemma-4-26b-a4b-it", MODELO_RAPIDO],
+  // Fallbacks ordenados: primero un modelo Cloudflare de disponibilidad amplia;
+  // después Gemma/Qwen. DeepSeek queda al final porque puede no estar habilitado
+  // en todas las cuentas. GLM-5.3 se omite aquí: puede requerir facturación de pago.
+  // Cada modelo se prueba en runtime y un fallo pasa al siguiente.
+  codigo:  [MODELO_RAPIDO, "@cf/google/gemma-4-26b-a4b-it", "@cf/qwen/qwen3.8-27b", "@cf/deepseek-ai/deepseek-v4.1-flash-1017"],
+  razonar: [MODELO_RAPIDO, "@cf/google/gemma-4-26b-a4b-it", "@cf/qwen/qwen3.8-27b", "@cf/deepseek-ai/deepseek-v4.1-flash-1017"],
   rapido:  [MODELO_RAPIDO, "@cf/google/gemma-4-26b-a4b-it", "@cf/qwen/qwen3.8-27b"],
-  vision:  ["@cf/qwen/qwen3.8-27b", "@cf/google/gemma-4-26b-a4b-it", "@cf/deepseek-ai/deepseek-v4.1-flash-1017"]
+  vision:  ["@cf/qwen/qwen3.8-27b", "@cf/google/gemma-4-26b-a4b-it", MODELO_RAPIDO]
 };
 
 // Correo OFICIAL de EGO AI: solo con esta cuenta (sesión verificada por Google) se puede enseñar a EGO.
@@ -922,7 +924,7 @@ async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}) {
 // Si uno o varios proveedores fallan, el equipo continúa con los que sí respondan;
 // si falla la síntesis, se devuelve la mejor respuesta individual disponible.
 async function egoTeamChat(messages, env, maxTokens, task = "reasoning") {
-  if (!routerApiKey(env) || env.EGO_TEAM_MODE === "0") return null;
+  if ((!routerApiKey(env) && !egoExternalProviders(env).length && !env.AI) || env.EGO_TEAM_MODE === "0") return null;
 
   const esProyecto = task === "software-project" || String(task).startsWith("minecraft-bedrock-");
   const roles = esProyecto ? [
@@ -1114,11 +1116,61 @@ async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_M
   } finally { clearTimeout(timer); }
 }
 
+// ===== PROVEEDORES EXTERNOS ADICIONALES (claves independientes en Cloudflare) =====
+// Orden predeterminado para esta instalación: Gemini -> Cohere -> SambaNova -> otros si se agregan.
+// Hugging Face (HF_TOKEN) se conserva para la ruta de imágenes; no se fuerza como chat sin modelo/permisos confirmados.
+// Todos los modelos son configurables por variables EGO_*_MODEL. Los IDs por defecto
+// solo se usan donde existe una opción ampliamente documentada; SambaNova/NVIDIA
+// exigen modelo explícito para evitar llamar IDs que no estén habilitados en la cuenta.
+function egoExternalProviders(env, task="chat") {
+  const defs = [
+    { id:"gemini", key:env.GEMINI_API_KEY||env.GOOGLE_AI_STUDIO_API_KEY, model:env.EGO_GEMINI_MODEL||"gemini-3.8-flash", url:"https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", kind:"openai" },
+    { id:"groq", key:env.GROQ_API_KEY, model:env.EGO_GROQ_MODEL||"openai/gpt-oss-120b", url:"https://api.groq.com/openai/v1/chat/completions", kind:"openai" },
+    { id:"sambanova", key:env.SAMBANOVA_API_KEY, model:env.EGO_SAMBANOVA_MODEL||"Meta-Llama-3.3-70B-Instruct", url:"https://api.sambanova.ai/v1/chat/completions", kind:"openai" },
+    { id:"nvidia", key:env.NVIDIA_NIM_API_KEY||env.NVIDIA_API_KEY, model:env.EGO_NVIDIA_MODEL, url:"https://integrate.api.nvidia.com/v1/chat/completions", kind:"openai" },
+    { id:"cohere", key:env.COHERE_API_KEY, model:env.EGO_COHERE_MODEL||"command-a-03-2025", url:"https://api.cohere.com/v2/chat", kind:"cohere" },
+    { id:"mistral", key:env.MISTRAL_API_KEY, model:env.EGO_MISTRAL_MODEL||"mistral-small-latest", url:"https://api.mistral.ai/v1/chat/completions", kind:"openai" }
+  ];
+  const orden=String(env.EGO_PROVIDER_ORDER||"gemini,cohere,sambanova,groq,nvidia,mistral").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
+  const rank=new Map(orden.map((x,i)=>[x,i]));
+  return defs.filter(x=>String(x.key||"").trim() && String(x.model||"").trim())
+    .sort((a,b)=>(rank.get(a.id)??99)-(rank.get(b.id)??99));
+}
+function contenidoCohere(data) {
+  const c=data?.message?.content;
+  if(Array.isArray(c)) return c.filter(x=>x?.type==="text"||typeof x?.text==="string").map(x=>x.text||"").join("\n").trim();
+  return typeof c==="string"?c.trim():salida(data);
+}
+async function egoExternalChat(provider,messages,env,maxTokens=3000,timeoutMs=18000) {
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),Math.max(4000,Math.min(60000,Number(timeoutMs)||18000)));
+  try {
+    const normalized=messages.map(m=>({role:["system","user","assistant"].includes(m?.role)?m.role:"user",content:typeof m?.content==="string"?m.content:textOf(m?.content)}));
+    let headers={"Authorization":`Bearer ${String(provider.key).trim()}`,"Content-Type":"application/json"},body;
+    if(provider.kind==="cohere") {
+      body={model:provider.model,messages:normalized,max_tokens:Math.max(128,Math.min(4000,Number(maxTokens)||3000)),temperature:0.2};
+    } else {
+      body={model:provider.model,messages:normalized,max_tokens:Math.max(128,Math.min(16000,Number(maxTokens)||3000)),temperature:0.2};
+    }
+    const response=await fetch(provider.url,{method:"POST",headers,body:JSON.stringify(body),signal:controller.signal});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) {
+      const detail=String(data?.error?.message||data?.message||data?.detail||data?.error||"proveedor rechazó la solicitud").slice(0,180);
+      const status=response.status;
+      const category=status===401||status===403?"clave/permisos":status===402?"créditos":status===404?"modelo/ruta":status===429?"cuota 429":status>=500?"servicio temporal":"HTTP";
+      throw new Error(`${provider.id} HTTP ${status} [${category}]: ${detail}`);
+    }
+    const content=provider.kind==="cohere"?contenidoCohere(data):salida(data);
+    if(!content) throw new Error(`${provider.id}: respuesta vacía o formato no reconocido`);
+    return {content,model:`${provider.id}:${provider.model}`};
+  } finally {clearTimeout(timer);}
+}
+
 // Orquestación real del equipo EGO: cada rol usa su modelo asignado y tiene
 // un fallback explícito. Los fallbacks no sustituyen al modelo principal si este responde.
 const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning" };
 async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) {
-  if (!routerApiKey(env) && !env.AI) throw new Error("Falta ROUTER_API_KEY/OPENROUTER_API_KEY o Workers AI para el equipo EGO.");
+  if (!routerApiKey(env) && !egoExternalProviders(env, EGO_ROLE_TASK[role]||"chat").length && !env.AI) throw new Error("No hay proveedores configurados: agrega claves API de Gemini, Groq, SambaNova, NVIDIA NIM, Cohere o Mistral, o conserva OpenRouter/Workers AI.");
   const task = EGO_ROLE_TASK[role] || "chat";
   const envName = `EGO_${String(role).toUpperCase()}_MODEL`;
   const primary = String(env[envName] || EGO_TEAM_MODELS[role] || "").trim();
@@ -1130,7 +1182,25 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
   const orBloqueado = !routerApiKey(env) || (globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
   if (orBloqueado && routerApiKey(env)) failures.push("OpenRouter sin crédito (402), se omite");
-  // Para tareas grandes se usa un presupuesto total: modelo principal, un respaldo y, si queda margen, Workers AI.
+  // Proveedores externos independientes: una clave/cuota agotada no bloquea las demás.
+  // En tareas con presupuesto limitado se reparten los intentos para conservar tiempo para CF.
+  const externos=egoExternalProviders(env,task);
+  const maxExternos=bounded?Math.max(0,Math.min(externos.length,Number(options.providerModels)||4)):Math.min(externos.length,3);
+  for(let i=0;i<maxExternos && Date.now()<deadline;i++){
+    const provider=externos[i];
+    const remaining=deadline-Date.now(); if(remaining<4500) break;
+    const timeout=bounded?Math.max(4000,Math.min(remaining,Number(options.providerTimeoutMs)||15000)):18000;
+    try{
+      const r=await egoExternalChat(provider,messages,env,maxTokens,timeout);
+      if(r.content) return {...r,role,fallos:failures};
+      failures.push(`${provider.id}: respuesta vacía`);
+    }catch(e){
+      const em=String(e?.message||e); failures.push(`${provider.id}: ${em.slice(0,145)}`);
+      // Una cuota agotada, modelo inexistente o clave inválida se salta inmediatamente.
+      // Los fallos temporales también pasan al siguiente proveedor para evitar bloquear el módulo.
+    }
+  }
+  // Para tareas grandes se usa un presupuesto total: OpenRouter, proveedores externos y Workers AI.
   for (let i = 0; i < maxModels && i < models.length && !orBloqueado && Date.now() < deadline; i++) {
     try {
       const remaining = deadline - Date.now();
@@ -1401,12 +1471,14 @@ function limpiarPlan(j,prompt){
 }
 async function candidatosCodigo(env,rol){
   const c=[];
+  for(const provider of egoExternalProviders(env,rol==="razonar"?"reasoning":"code")) c.push({tipo:"ext",id:provider.id,provider});
   if(rol==="razonar" && env.AI) for(const x of CF_MODELS.razonar.slice(0,3)) c.push({tipo:"cf",id:x});
   if(rol!=="razonar" && env.AI){
     const cad=env.PROJECT_CF_MODEL?[String(env.PROJECT_CF_MODEL),...CF_MODELS.codigo.filter(m=>m!==String(env.PROJECT_CF_MODEL))]:CF_MODELS.codigo;
     for(const m of cad.slice(0,4)) c.push({tipo:"cf",id:m});
   }
-  if(routerApiKey(env)) for(const m of openRouterCandidates(env,rol==="razonar"?"reasoning":"code").slice(0,3)) c.push({tipo:"or",id:m});
+  const orEnPausa=globalThis.__egoOrSinCredito && Date.now()-globalThis.__egoOrSinCredito<120000;
+  if(routerApiKey(env) && !orEnPausa) for(const m of openRouterCandidates(env,rol==="razonar"?"reasoning":"code").slice(0,3)) c.push({tipo:"or",id:m});
   return c;
 }
 async function llamarCodigo(env,mensajes,maxTok,desde,rol){
@@ -1417,6 +1489,7 @@ async function llamarCodigo(env,mensajes,maxTok,desde,rol){
     try{
       let raw="";
       if(c.tipo==="cf") raw=(await cfChat(c.id,mensajes,env,maxTok)).content;
+      else if(c.tipo==="ext") raw=(await egoExternalChat(c.provider,mensajes,env,maxTok,22000)).content;
       else{
         const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Authorization":`Bearer ${routerApiKey(env)}`,"Content-Type":"application/json","HTTP-Referer":env.OPENROUTER_SITE_URL||"https://ego-ai.app","X-Title":"EGO AI"},body:JSON.stringify({model:c.id,messages:mensajes,temperature:0.15,max_tokens:Math.min(maxTok,16000)})});
         const data=await r.json().catch(()=>({}));
@@ -1429,7 +1502,11 @@ async function llamarCodigo(env,mensajes,maxTok,desde,rol){
       }
       if(raw&&String(raw).trim()) return {raw:String(raw),model:c.id,idx:i,fallos};
       fallos.push(c.id.split("/").pop()+": vacío");
-    }catch(e){fallos.push(c.id.split("/").pop()+": "+String(e&&e.message||e).slice(0,70));}
+    }catch(e){
+      const em=String(e&&e.message||e);
+      fallos.push(c.id.split("/").pop()+": "+em.slice(0,70));
+      if(c.tipo==="or" && /HTTP 402|CRÉDITOS\/TOKENS INSUFICIENTES/.test(em)) { globalThis.__egoOrSinCredito=Date.now(); break; }
+    }
   }
   throw new Error("Ningún modelo respondió ("+fallos.join(" | ").slice(0,260)+")");
 }
@@ -1709,7 +1786,7 @@ async function mcModelo3d(parte,plan,prompt,env){
     try{
       // El modelador 3D usa la misma ruta acotada del equipo EGO: dos intentos breves,
       // sin recorrer la cadena larga de candidatos de llamarCodigo (causa del timeout de criaturas).
-      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:45000,maxModels:1,perModelMs:29000,cfModels:1,cfTimeoutMs:14000});
+      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:45000,maxModels:1,perModelMs:29000,cfModels:3,cfTimeoutMs:14000});
       const j=extractJson(r.content);let ps=null;
       if(j){const ar=String(j.arquetipo||"").toLowerCase();let base=[];
         if(/human|person|caball|bipedo/.test(ar))base=modeloHumanoide(j);else if(/best|cuadr|animal|lobo|dragon/.test(ar))base=modeloBestia(j);
@@ -1749,7 +1826,7 @@ async function mcPart(body,env){
   for(let intento=0;intento<2;intento++){
     if(intento===1&&Date.now()-t0>(esEntidades?115000:70000))break;
     let r;
-    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")+(esEntidades?"\n\nMODO ENTIDADES ROBUSTO: prioriza terminar archivos completos y válidos. Genera solo las entidades solicitadas en esta parte, evita explicaciones, JSON repetido y comentarios extensos. Cada entidad debe tener su archivo BP y referencias coherentes; no inventes recursos binarios. Si el plan contiene muchas criaturas, prioriza las primeras entidades completas antes que dejar una respuesta truncada.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,maxTokensParte,{maxTotalMs:104000,maxModels:2,perModelMs:41000,cfModels:1,cfTimeoutMs:26000}),tmoMc(restante(timeoutParte))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
+    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")+(esEntidades?"\n\nMODO ENTIDADES ROBUSTO: prioriza terminar archivos completos y válidos. Genera solo las entidades solicitadas en esta parte, evita explicaciones, JSON repetido y comentarios extensos. Cada entidad debe tener su archivo BP y referencias coherentes; no inventes recursos binarios. Si el plan contiene muchas criaturas, prioriza las primeras entidades completas antes que dejar una respuesta truncada.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,maxTokensParte,{maxTotalMs:104000,maxModels:1,perModelMs:12000,providerModels:6,providerTimeoutMs:10000,cfModels:3,cfTimeoutMs:10000}),tmoMc(restante(timeoutParte))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
     catch(e){ if(mejor) break; const tm=String(e&&e.message||e);return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+(tm==="tiempo"||/abort|tiempo/i.test(tm)?"el proveedor no terminó esta parte dentro del presupuesto de tiempo; se puede reintentar esta parte en modo compacto sin descartar las demás":tm.slice(0,260)),codigo:/tiempo|abort/i.test(tm)?"tiempo":"modelo",detalle:tm.slice(0,420),parte:parte.tipo},502); }
     modelo=r.model; fallosM=(r.fallos||[]); desde=r.idx+(intento===0?1:0);
     const p=leerProyectoModelo(r.raw);
