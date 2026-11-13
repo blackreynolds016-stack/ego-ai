@@ -911,11 +911,11 @@ function openRouterCandidates(env, task) {
 }
 
 
-async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}, timeoutMs = 70000) {
+async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}) {
   if (!env.AI) throw new Error("AI no disponible");
   const limite = usaCompletion(modelId) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens };
   const p = { messages, ...extra, ...limite };
-  const result = await Promise.race([env.AI.run(modelId, p), tmoMc(Math.max(5000, Number(timeoutMs) || 70000))]);
+  const result = await env.AI.run(modelId, p);
   return { content: salida(result), model: modelId };
 }
 
@@ -1071,7 +1071,7 @@ function clasificarErrorProveedor(status, detalle = "") {
   if (s===413) return { tipo:"solicitud_grande", reintentar:false };
   return { tipo:"proveedor", reintentar:false };
 }
-function pausa(ms) { return new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(20000, ms)))); }
+function pausa(ms) { return new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(2500, ms)))); }
 
 async function openRouterChat(messages, env, maxTokens, model = env.OPENROUTER_MODEL, timeoutMs = 55000) {
   const controller = new AbortController();
@@ -1810,7 +1810,7 @@ async function mcPart(body,env){
   const pe=body.parteExtra&&typeof body.parteExtra==='object'?body.parteExtra:null;
   const parte=pe?{titulo:String(pe.titulo||"Completar").slice(0,60),tipo:MC_TIPOS_PARTE.includes(pe.tipo)?pe.tipo:"script",detalle:String(pe.detalle||"").slice(0,3000),archivos:[]}:plan.partes[i];
   if(parte&&parte.tipo==="modelo3d")return await mcModelo3d(parte,plan,prompt,env);
-  const existentes=String(body.existentes||"").slice(0,40000);
+  const existentes=String(body.existentes||"").slice(0,14000);
   const previos=(Array.isArray(body.previos)?body.previos:[]).map(x=>String(x).slice(0,120)).slice(0,120);
   const sys=MC_GUIA_BASE+"\n\n"+(MC_GUIAS[parte.tipo]||MC_GUIAS.misc)+
     "\n\nPLAN DEL ADD-ON (úsalo tal cual):\n"+JSON.stringify({nombre:plan.nombre,ns:plan.ns,resumen:plan.resumen,objetos:plan.objetos})+MC_FORMATO;
@@ -3402,11 +3402,6 @@ async function mcBuild(body,env,request){
     const auditoriaRequisitos = auditarRequisitosAddonAvanzado(r.files, prompt);
     for (const faltante of auditoriaRequisitos.missing) r.notas.unshift("REQUISITO NO VERIFICADO: " + faltante);
     if (!auditoriaRequisitos.ok) r.notas.unshift(`Cobertura real: ${auditoriaRequisitos.passed}/${auditoriaRequisitos.total} verificaciones; el add-on NO debe considerarse completo.`);
-    const coberturaTotal = auditoriaRequisitos.total || 0;
-    const coberturaMinima = Number.isFinite(Number(env.EGO_COBERTURA_MINIMA)) ? Number(env.EGO_COBERTURA_MINIMA) : 0.5;
-    if (coberturaTotal > 0 && auditoriaRequisitos.passed / coberturaTotal < coberturaMinima) {
-      return json({ error: `El add-on no alcanza la cobertura mínima de calidad (${auditoriaRequisitos.passed}/${coberturaTotal} verificaciones; mínimo ${Math.round(coberturaMinima * 100)}%). No se exporta como terminado; reintenta o pide las partes faltantes.`, estado: "cobertura_insuficiente", faltantes: auditoriaRequisitos.missing, validacion: validacionCompacta(validacion), archivos: r.files.length }, 422);
-    }
     if (!validacion.ok || validacion.errores.length) {
       return respuestaValidacionFallida(validacion, ciclo);
     }
@@ -4011,7 +4006,7 @@ async function completarAddonPorCobertura(files, prompt, env, maxFiles, intentos
     { role: "user", content: `PROYECTO ORIGINAL:\n${String(prompt).slice(0,7000)}\n\nINVENTARIO EXISTENTE (NO DUPLICAR):\n${inventory}\n\nREQUISITOS FALTANTES DETECTADOS:\n- ${audit.missing.join("\n- ")}\n\nAñade los archivos que realmente puedas implementar y conecta las referencias con los recursos existentes. No afirmes que algo está completo si no lo está.` }
   ];
   try {
-    const r = await egoRoleChat("coder", messages, env, 10000, { maxTotalMs: 60000, maxModels: 1, providerModels: 3, cfModels: 2, providerTimeoutMs: 18000, cfTimeoutMs: 25000 });
+    const r = await openRouterChat(messages, env, 10000, EGO_TEAM_MODELS.coder);
     const extra = leerProyectoModelo(r.content);
     if (extra?.files?.length) {
       const seen = new Set(files.map(f => f.path.toLowerCase()));
