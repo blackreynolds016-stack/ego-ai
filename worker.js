@@ -1185,9 +1185,13 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   // Proveedores externos independientes: una clave/cuota agotada no bloquea las demás.
   // En tareas con presupuesto limitado se reparten los intentos para conservar tiempo para CF.
   const externos=egoExternalProviders(env,task);
-  const maxExternos=bounded?Math.max(0,Math.min(externos.length,Number(options.providerModels)||4)):Math.min(externos.length,3);
+  // providerOffset permite que un reintento de módulo empiece por el proveedor
+  // siguiente, en vez de atascarse repitiendo el que acaba de fallar.
+  const providerOffset=Math.max(0,Math.min(externos.length,Number(options.providerOffset)||0));
+  const externosDisponibles=externos.slice(providerOffset);
+  const maxExternos=bounded?Math.max(0,Math.min(externosDisponibles.length,Number(options.providerModels)||4)):Math.min(externosDisponibles.length,3);
   for(let i=0;i<maxExternos && Date.now()<deadline;i++){
-    const provider=externos[i];
+    const provider=externosDisponibles[i];
     const remaining=deadline-Date.now(); if(remaining<4500) break;
     const timeout=bounded?Math.max(4000,Math.min(remaining,Number(options.providerTimeoutMs)||15000)):18000;
     try{
@@ -1818,33 +1822,83 @@ async function mcPart(body,env){
     `\nPedido original del usuario (para mantener fidelidad):\n${prompt}`;
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
-  // Las criaturas son una de las partes más costosas: se reduce el tamaño de
-  // respuesta solicitado y se da más margen a la cascada de modelos/fallbacks.
-  const maxTokensParte=ligero?5500:(esEntidades?6000:10000);
-  const timeoutParte=112000; // presupuesto máximo de generación de una parte; el cliente deja margen para recibir el error/JSON.
-  const restante=(tope)=>Math.max(5000,tope-(Date.now()-t0));
-  for(let intento=0;intento<2;intento++){
-    if(intento===1&&Date.now()-t0>(esEntidades?115000:70000))break;
+  const maxTokensParte=ligero?4200:(esEntidades?5200:7600);
+  const timeoutParte=112000;
+  const restante=(tope)=>Math.max(0,tope-(Date.now()-t0));
+  // Hasta tres rondas: normal, compacta y compacta de rescate.
+  // Cada ronda rota el punto de inicio de proveedores y conserva el mejor
+  // resultado parcial validado para no perder archivos útiles.
+  for(let intento=0;intento<3;intento++){
+    const quedan=restante(timeoutParte);
+    if(quedan<9000)break;
     let r;
-    try{r=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys+(ligero?"\n\nMODO RÁPIDO: entrega archivos completos pero compactos; sin comentarios largos ni datos de relleno.":"")+(esEntidades?"\n\nMODO ENTIDADES ROBUSTO: prioriza terminar archivos completos y válidos. Genera solo las entidades solicitadas en esta parte, evita explicaciones, JSON repetido y comentarios extensos. Cada entidad debe tener su archivo BP y referencias coherentes; no inventes recursos binarios. Si el plan contiene muchas criaturas, prioriza las primeras entidades completas antes que dejar una respuesta truncada.":"")},{role:"user",content:user+(errores.length?"\n\nTU RESPUESTA ANTERIOR TUVO ESTOS ERRORES; corrígelos y devuelve todos los archivos otra vez:\n- "+errores.join("\n- "):"")}],env,maxTokensParte,{maxTotalMs:104000,maxModels:1,perModelMs:12000,providerModels:6,providerTimeoutMs:10000,cfModels:3,cfTimeoutMs:10000}),tmoMc(restante(timeoutParte))]);r={raw:r.content,model:r.model,idx:0,fallos:r.fallos||[]};}
-    catch(e){ if(mejor) break; const tm=String(e&&e.message||e);return json({error:"No se pudo generar la parte «"+parte.titulo+"»: "+(tm==="tiempo"||/abort|tiempo/i.test(tm)?"el proveedor no terminó esta parte dentro del presupuesto de tiempo; se puede reintentar esta parte en modo compacto sin descartar las demás":tm.slice(0,260)),codigo:/tiempo|abort/i.test(tm)?"tiempo":"modelo",detalle:tm.slice(0,420),parte:parte.tipo},502); }
-    modelo=r.model; fallosM=(r.fallos||[]); desde=r.idx+(intento===0?1:0);
-    const p=leerProyectoModelo(r.raw);
-    errores=[]; const files=[];
-    if(!p||!p.files.length){errores.push("No usaste el formato '=== ARCHIVO: ruta ===' ... '=== FIN ==='.");continue;}
-    const vistos=new Set();
-    for(const f of p.files){
-      const path=safeProjectPath(f.path);
-      if(!path||!/^(BP|RP)\//.test(path)||/manifest\.json$|\.(png|jpg|ogg|zip|mcaddon)$/i.test(path)||vistos.has(path)||typeof f.content!=="string") continue;
-      vistos.add(path);
-      if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path+": JSON inválido ("+t.error+")");continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
-      else if(/\.js$/i.test(path)){const bal=balanceJs(f.content);if(bal){errores.push(path+": "+bal);}for(const pr of lintScriptApi(f.content, "2.10.0"))errores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server.");files.push({path,content:f.content});}
-      else if (f.content.length > 300000) errores.push(path + ": archivo supera 300000 caracteres; no se truncó.");
-      else files.push({path,content:f.content});
+    const compacto=intento>0||ligero;
+    const userIntento=compacto
+      ? (user.slice(0,22000)+
+         "\n\nREINTENTO COMPACTO "+intento+": completa solo los archivos imprescindibles de esta parte. " +
+         "No repitas archivos de otras partes, no añadas explicaciones ni comentarios. " +
+         "Devuelve cada archivo completo con el formato exacto. Si no cabe todo, prioriza archivos funcionales y dependencias obligatorias.")
+      : user;
+    const presupuesto=Math.min(intento===0?54000:Math.max(10000,quedan-5000),quedan-3000);
+    const timeoutProveedor=Math.max(7000,Math.min(16000,Math.floor(presupuesto/3)));
+    try{
+      const resultado=await Promise.race([
+        egoRoleChat("coder",[
+          {role:"system",content:sys+
+            (compacto?"\n\nMODO COMPACTO DE RECUPERACIÓN: prioriza archivos esenciales completos, respuestas breves y dependencias correctas; no sacrifiques sintaxis ni referencias.":"")+
+            (esEntidades?"\n\nMODO ENTIDADES ROBUSTO: cada entidad debe tener definición BP y sus referencias RP coherentes. No inventes recursos binarios.":"")},
+          {role:"user",content:userIntento+(errores.length?"\n\nERRORES A CORREGIR:\n- "+errores.slice(0,8).join("\n- "):"")}
+        ],env,maxTokensParte,{
+          maxTotalMs:presupuesto,
+          maxModels:1,
+          perModelMs:Math.min(18000,presupuesto),
+          providerOffset:intento,
+          providerModels:3,
+          providerTimeoutMs:timeoutProveedor,
+          cfModels:2,
+          cfTimeoutMs:Math.min(9000,timeoutProveedor)
+        }),
+        tmoMc(Math.max(7000,presupuesto+1500))
+      ]);
+      r={raw:resultado.content,model:resultado.model,idx:0,fallos:resultado.fallos||[]};
+    }catch(e){
+      const tm=String(e&&e.message||e);
+      errores.push("Intento "+(intento+1)+": "+tm.slice(0,180));
+      if(restante(timeoutParte)>9000)continue;
+      break;
     }
-    if(!files.length&&!errores.length)errores.push("No devolviste archivos BP/ o RP/ válidos.");
-    if(!mejor||errores.length<mejor.errores.length||(errores.length===mejor.errores.length&&files.length>=mejor.files.length))mejor={files,errores:errores.slice()};
-    if(!errores.length) break;
+    modelo=r.model||modelo;
+    fallosM=[...fallosM,...(r.fallos||[])].slice(-12);
+    desde=r.idx||desde;
+    const p=leerProyectoModelo(r.raw);
+    const nuevosErrores=[],files=[];
+    if(!p||!p.files.length){
+      nuevosErrores.push("El proveedor no devolvió archivos con el formato '=== ARCHIVO: ruta ===' y '=== FIN ==='.");
+    }else{
+      const vistos=new Set();
+      for(const f of p.files){
+        const path=safeProjectPath(f.path);
+        if(!path||!/^(BP|RP)\//.test(path)||/manifest\.json$|\.(png|jpg|ogg|zip|mcaddon)$/i.test(path)||vistos.has(path)||typeof f.content!=="string")continue;
+        vistos.add(path);
+        if(/\.json$/i.test(path)){
+          const t=jsonTolerante(f.content);
+          if(!t.ok){nuevosErrores.push(path+": JSON inválido ("+t.error+")");continue;}
+          files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});
+        }else if(/\.js$/i.test(path)){
+          const bal=balanceJs(f.content);
+          if(bal)nuevosErrores.push(path+": "+bal);
+          for(const pr of lintScriptApi(f.content,"2.10.0"))nuevosErrores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server.");
+          files.push({path,content:f.content});
+        }else if(f.content.length>300000)nuevosErrores.push(path+": archivo supera 300000 caracteres; no se truncó.");
+        else files.push({path,content:f.content});
+      }
+      if(!files.length&&!nuevosErrores.length)nuevosErrores.push("No devolviste archivos BP/ o RP/ válidos.");
+    }
+    if(!mejor||nuevosErrores.length<mejor.errores.length||
+       (nuevosErrores.length===mejor.errores.length&&files.length>mejor.files.length))
+      mejor={files,errores:nuevosErrores.slice()};
+    errores=nuevosErrores;
+    if(!errores.length&&files.length)break;
   }
   // ---- Reasoner + auditor independientes en paralelo; coder repara si hay defectos ----
   let revisado="", modelosRevision={};
@@ -1875,7 +1929,13 @@ async function mcPart(body,env){
       }else revisado="revisado por auditor + reasoner";
     }catch(e){revisado="revisión colaborativa incompleta: "+String(e&&e.message||e).slice(0,120);}
   }
-  if(!mejor||!mejor.files.length) return json({error:"La parte «"+parte.titulo+"» no produjo archivos válidos.",detalle:errores.slice(0,4)},502);
+  if(!mejor||!mejor.files.length) return json({
+    error:"La parte «"+parte.titulo+"» no produjo archivos válidos después de los reintentos automáticos.",
+    codigo:"proveedores_agotados_o_salida_invalida",
+    detalle:[...errores,...fallosM].slice(0,8),
+    parte:parte.tipo,
+    reintentos:3
+  },502);
   return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:mejor.errores.slice(0,6),parte:i,titulo:parte.titulo});
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
