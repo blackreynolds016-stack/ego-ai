@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.39.0 — CÓDIGO, MATEMÁTICAS, CIENCIAS Y CREACIÓN (visión y video)
+// EGO AI WORKER v14.41.0 — REPARACIÓN MINECRAFT Y VALIDACIÓN (visión y video)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -4584,6 +4584,90 @@ function repararDeterministico(files) {
     d.spawn_egg = { base_color: "#3a3a4a", overlay_color: "#8a8aa0" };
     f.content = JSON.stringify(j, null, 2); hecho(p, "se añadió spawn_egg (huevo de aparición) con colores por defecto");
   }
+  // Reparaciones Minecraft v14.41: recetas en formato array, referencias de loot y typo conocido.
+  // 1) Las recetas Bedrock pueden contener arrays por tipo (minecraft:recipe_shaped: [...]).
+  //    Se eliminan solo las entradas cuyo resultado personalizado no existe; las válidas se conservan.
+  const itemIds = new Set();
+  for (const f of files) {
+    if (!/^BP\/(?:items|blocks)\/.+\.json$/i.test(f.path) || typeof f.content !== "string") continue;
+    try {
+      const j = JSON.parse(f.content);
+      const root = j["minecraft:item"] || j["minecraft:block"];
+      const id = root && root.description && root.description.identifier;
+      if (id) itemIds.add(id);
+    } catch {}
+  }
+  for (const f of files) {
+    if (!/^BP\/recipes\/.+\.json$/i.test(f.path) || typeof f.content !== "string") continue;
+    let j; try { j = JSON.parse(f.content); } catch { continue; }
+    let changed = false;
+    for (const [kind, value] of Object.entries(j)) {
+      if (!/^minecraft:recipe_/.test(kind)) continue;
+      const list = Array.isArray(value) ? value : [value];
+      const kept = list.filter(recipe => {
+        const resultId = recipe && (recipe.result && recipe.result.item || recipe.output);
+        if (typeof resultId === "string" && resultId.includes(":") && !resultId.startsWith("minecraft:") && !itemIds.has(resultId)) {
+          hecho(f.path, `se retiró una receta cuyo resultado ${resultId} no tiene definición BP; evita recetas que fabrican objetos inexistentes`);
+          changed = true; return false;
+        }
+        return true;
+      });
+      if (kept.length !== list.length) j[kind] = Array.isArray(value) ? kept : (kept[0] || null);
+      // Quita claves de receta que quedaron vacías.
+      if (Array.isArray(j[kind]) && j[kind].length === 0) delete j[kind];
+      if (j[kind] === null) delete j[kind];
+    }
+    if (changed) f.content = JSON.stringify(j, null, 2) + "\n";
+  }
+  // 2) Quita componentes minecraft:loot que apuntan a tablas inexistentes (no inventa drops falsos).
+  const paths = new Set(files.map(f => f.path));
+  for (const f of files) {
+    if (!/^BP\/entities\/.+\.json$/i.test(f.path) || typeof f.content !== "string") continue;
+    let j; try { j = JSON.parse(f.content); } catch { continue; }
+    const e = j["minecraft:entity"], c = e && e.components;
+    const loot = c && c["minecraft:loot"];
+    const table = typeof loot === "string" ? loot : loot && loot.table;
+    if (typeof table !== "string") continue;
+    const target = "BP/" + table.replace(/^\//, "");
+    if (!paths.has(target)) {
+      delete c["minecraft:loot"];
+      f.content = JSON.stringify(j, null, 2) + "\n";
+      hecho(f.path, `se quitó una referencia a tabla de botín inexistente (${target}); la entidad queda sin loot personalizado`);
+    }
+  }
+  // 3) Corrige un error real frecuente: weaponCooldown declarado en plural y leído en singular.
+  for (const f of files) {
+    if (!/^BP\/scripts\/.+\.js$/i.test(f.path) || typeof f.content !== "string") continue;
+    if (/\bconst\s+weaponCooldowns\s*=/.test(f.content) && /\bweaponCooldown\.get\(/.test(f.content)) {
+      f.content = f.content.replace(/\bweaponCooldown\.get\(/g, "weaponCooldowns.get(");
+      hecho(f.path, "se corrigió weaponCooldown.get a weaponCooldowns.get (variable declarada en plural)");
+    }
+  }
+  // 4) Fallback honesto de estructuras: función Bedrock invocable, nunca un .mcstructure falso.
+  const readme = files.find(f => /^BP\/README\.md$/i.test(f.path));
+  const pideEstructuras = !!(readme && /estructura|construcci|ruina|refugio/i.test(String(readme.content || "")));
+  const tieneEstructura = files.some(f => /^BP\/(?:structures\/.+\.mcstructure|functions\/.+\.mcfunction)$/i.test(f.path));
+  if (pideEstructuras && !tieneEstructura) {
+    const fn = "BP/functions/ego_ruina.mcfunction";
+    const contenido = [
+      "# Refugio/ruina de emergencia EGO AI (función de construcción, no archivo .mcstructure)",
+      "fill ~-4 ~-1 ~-4 ~4 ~-1 ~4 minecraft:stone_bricks",
+      "fill ~-4 ~ ~-4 ~4 ~3 ~-4 minecraft:cracked_stone_bricks",
+      "fill ~-4 ~ ~4 ~4 ~3 ~4 minecraft:stone_bricks",
+      "fill ~-4 ~ ~-3 ~-4 ~3 ~3 minecraft:stone_bricks",
+      "fill ~4 ~ ~-3 ~4 ~3 ~3 minecraft:stone_bricks",
+      "fill ~-3 ~4 ~-3 ~3 ~4 ~3 minecraft:oak_planks",
+      "fill ~-1 ~ ~-4 ~1 ~2 ~-4 minecraft:air",
+      "fill ~-1 ~ ~-1 ~1 ~2 ~1 minecraft:air",
+      "setblock ~-2 ~ ~-2 minecraft:chest",
+      "setblock ~2 ~ ~2 minecraft:barrel"
+    ].join("\n") + "\n";
+    files.push({ path: fn, content: contenido });
+    hecho(fn, "se añadió una función de construcción de refugio como respaldo verificable; no se presenta como .mcstructure importable");
+    if (readme) {
+      readme.content = String(readme.content || "") + "\n\n### Estructura de respaldo\n- Se incluye `BP/functions/ego_ruina.mcfunction`, una función de comandos para construir un refugio sencillo. Ejecuta `/function ego_ruina` dentro del mundo.\n- Esta función no es un archivo binario `.mcstructure` ni se genera automáticamente al entrar al mundo.\n";
+    }
+  }
   return cambios;
 }
 
@@ -4831,6 +4915,20 @@ function validarAddonEstructural(files) {
     };
     walk(root, "");
   }
+  // Referencias de botín: evita que entidades/bloques apunten a archivos que no están empaquetados.
+  for (const [path, f] of porRuta) {
+    if (!/^BP\/(?:entities|blocks)\/.+\.json$/i.test(path) || typeof f.content !== "string") continue;
+    try {
+      const j = JSON.parse(f.content);
+      const root = j["minecraft:entity"] || j["minecraft:block"];
+      const loot = root?.components?.["minecraft:loot"];
+      const table = typeof loot === "string" ? loot : loot?.table;
+      if (typeof table === "string") {
+        const target = "BP/" + table.replace(/^\//, "");
+        if (!porRuta.has(target)) errores.push(`${path}: tabla de botín inexistente ${target}.`);
+      }
+    } catch {}
+  }
   // Spawn rules: una regla no crea una entidad; su identifier debe existir en BP/entities.
   const entityIds = new Set();
   for (const [path,f] of porRuta) if (/^BP\/entities\/.+\.json$/i.test(path) && typeof f.content === "string") {
@@ -5048,7 +5146,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.36.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.41.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
