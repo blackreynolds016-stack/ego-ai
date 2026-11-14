@@ -1105,7 +1105,7 @@ function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.pa
 /* ===== Generación modular de add-ons (coordinada con el Worker: ~112 s por módulo, 2 trabajos a la vez) ===== */
 const ADDON_JOBS=new Map();let ADDON_SEQ=0;
 const T_PLAN=165000,T_PART=140000,T_BUILD=170000;
-async function leerErrorHttp(rr){let msg="";try{const t=await rr.text();try{const j=JSON.parse(t);msg=String(j.error||j.message||"").trim();if(j.codigo)msg+=" ["+j.codigo+"]"}catch(e){msg=t.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().slice(0,200)}}catch(e){}
+async function leerErrorHttp(rr){let msg="";try{const t=await rr.text();try{const j=JSON.parse(t);msg=String(j.error||j.message||"").trim();if(j.codigo)msg+=" ["+j.codigo+"]";var dt=[].concat(Array.isArray(j.detalle)?j.detalle:[],j.diagnostico&&Array.isArray(j.diagnostico.erroresProveedores)?j.diagnostico.erroresProveedores:[]);var vistosD={};dt=dt.filter(function(x){x=String(x);if(vistosD[x])return false;vistosD[x]=1;return true}).slice(0,6);if(dt.length)msg+=" — Motivos: "+dt.map(function(x){return String(x).slice(0,150)}).join(" | ")}catch(e){msg=t.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().slice(0,200)}}catch(e){}
 const st=rr.status,ex=(st===524||st===522||st===504)?" — el servidor cortó la conexión por tiempo":st===429?" — límite de uso del proveedor":"";
 return "HTTP "+st+(msg?": "+msg.slice(0,300):"")+ex}
 function nuevoCtrl(job){if(!job.ctrls)job.ctrls=new Set();ctrl={abort:function(){job.ctrls.forEach(function(a){try{a.abort()}catch(e){}})}}}
