@@ -6,10 +6,11 @@
  *  - Reparación: paso determinista previo (JSON, entry del manifest, rutas de atlas, spawn_egg) + modelos reparadores con respaldo,
  *    creación de archivos faltantes permitidos, rechazo de parches destructivos, reversión si no hay progreso, historial y modelos usados.
  *  - Respuesta 422 con criticos[] {archivo, problema, causa, solucion}, advertencias[] y reparacion{}; cabeceras compactas (JSON válido).
- *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
+ *  - v14.45: failover valida el formato de respuesta; auditoría semántica y reparación de requisitos; no empaqueta cobertura incompleta.
+ *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.44.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
+// EGO AI WORKER v14.45.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1178,6 +1179,15 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const fallbacks = task === "code" ? [OR_FREE.code, OR_FREE.fallback] : [OR_FREE.reasoning, OR_FREE.fallback];
   const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
   const failures = [];
+  // Un HTTP 200 con texto no equivale a una respuesta utilizable. Las tareas
+  // estructuradas pueden aportar validateContent para que el failover continúe
+  // cuando el proveedor no respeta el protocolo esperado.
+  const responseIsUsable = (content, model) => {
+    if (!content || !String(content).trim()) return false;
+    if (typeof options.validateContent !== "function") return true;
+    try { return options.validateContent(String(content), String(model || "")) === true; }
+    catch (_) { return false; }
+  };
   const bounded = Number.isFinite(Number(options.maxTotalMs));
   const deadline = bounded ? Date.now() + Math.max(5000, Number(options.maxTotalMs)) : Infinity;
   const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
@@ -1205,8 +1215,8 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
     const timeout=bounded?Math.max(4000,Math.min(remaining-2500,configuredTimeout)):18000;
     try{
       const r=await egoExternalChat(provider,messages,env,maxTokens,timeout);
-      if(r.content) return {...r,role,fallos:failures};
-      failures.push(`${provider.id}: respuesta vacía`);
+      if(responseIsUsable(r.content, `${provider.id}:${provider.model}`)) return {...r,role,fallos:failures};
+      failures.push(`${provider.id}: respuesta vacía o formato inválido; se continúa con el siguiente proveedor`);
     }catch(e){
       const em=String(e?.message||e); failures.push(`${provider.id}: ${em.slice(0,145)}`);
       // Los errores de un proveedor quedan aislados: se continúa con el siguiente.
@@ -1219,8 +1229,8 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
       const defaultTimeout = Math.min(100000, 25000 + Number(maxTokens || 3000) * 8);
       const timeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.perModelMs) || 42000)) : (i === 0 ? defaultTimeout : Math.round(defaultTimeout * 0.6));
       const r = await openRouterChat(messages, env, maxTokens, models[i], timeout);
-      if (r.content) return { ...r, role, fallos: failures };
-      failures.push(`${models[i]}: respuesta vacía`);
+      if (responseIsUsable(r.content, models[i])) return { ...r, role, fallos: failures };
+      failures.push(`${models[i]}: respuesta vacía o formato inválido`);
     } catch (e) {
       const em = String(e?.message || e);
       failures.push(`${models[i]}: ${em.slice(0, 120)}`);
@@ -1236,8 +1246,8 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
       const cfTimeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.cfTimeoutMs) || 30000)) : 70000;
       try {
         const r = await Promise.race([cfChat(id, messages, env, Math.min(Number(maxTokens || 3000), 8000)), tmoMc(cfTimeout)]);
-        if (r && r.content) return { ...r, model: `cf:${id}`, role, fallos: failures };
-        failures.push(`${id}: respuesta vacía`);
+        if (r && responseIsUsable(r.content, `cf:${id}`)) return { ...r, model: `cf:${id}`, role, fallos: failures };
+        failures.push(`${id}: respuesta vacía o formato inválido`);
       } catch (e) { failures.push(`${id}: ${String(e?.message || e).slice(0, 80)}`); }
     }
   }
@@ -1270,6 +1280,7 @@ function lintScriptApi(texto, verSrv="2.10.0"){
   const es210=/^2\.10(?:\.|$)/.test(String(verSrv));
   const apiNo210=new Set(["spawnXp","fade","pause","resume","seek","setPitch","setVolume","lineGapHeight","getClock","worldClockOnPaused","worldClockOnResumed","worldClockOnTimeMarker","worldClockOnTimeModified","worldClockOnRestart","TimeMarker","TimeMarkerOptions","WorldClock","WorldClockAddTimeMarkerError","WorldClockEventOptions","WorldClockInvalidRegistryError","WorldClockInvalidTimeMarkerError","WorldClockNotFoundError","WorldClockOnPausedAfterEvent","WorldClockOnPausedAfterEventSignal","WorldClockOnRestartBeforeEvent","WorldClockOnRestartBeforeEventSignal","WorldClockOnResumedAfterEvent","WorldClockOnResumedAfterEventSignal","WorldClockOnTimeMarkerAfterEvent","WorldClockOnTimeMarkerAfterEventSignal","WorldClockOnTimeModifiedAfterEvent","WorldClockOnTimeModifiedAfterEventSignal","WorldClockRegistrationError","WorldClockRegistrationOptions","WorldClockRegistry","WorldClockReloadNewWorldClockError","WorldClockReloadTimeMarkerError","WorldClockRemoveMinecraftTimeMarkerError","WorldClockRewindError","WorldClockTimeMarkerEventOptions","WorldClockTimeMarkerNotFoundError","button1WithOptions","button2WithOptions"]);
   const sin=String(texto).replace(/\/\*[\s\S]*?\*\//g,"").replace(/\/\/[^\n]*/g,"").replace(/`(?:\\.|[^`\\])*`/g,'""').replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g,'""');
+  if(/\bkillingBlow\s*\.\s*damagingEntity\b/.test(sin))prob.push("EntityDieAfterEvent no expone killingBlow.damagingEntity; usa event.damageSource?.damagingEntity");
   const conocidos=new Set([...api.members,...api.ui_members,...api.exports,...api.ui_exports,...MC_JS_CONOCIDOS]);
   if(es210)for(const n of apiNo210)conocidos.delete(n);
   const locales=new Set();
@@ -1860,8 +1871,9 @@ async function mcPart(body,env){
           maxTotalMs:presupuesto,
           maxModels:2,
           perModelMs:Math.min(8500,presupuesto),
-          providerOffset:intento*2,
-          providerModels:(errores.length&&egoExternalProviders(env,"code").length<=2)?0:Math.min(2,externosParaModulo(env)),
+          providerOffset:intento,
+          providerModels:Math.min(2,egoExternalProviders(env,"code").length),
+          validateContent:(content)=>{const parsed=leerProyectoModelo(content);return !!(parsed&&parsed.files&&parsed.files.length);},
           providerTimeoutMs:timeoutProveedor,
           cfModels:1,
           cfTimeoutMs:Math.min(5000,timeoutProveedor)
@@ -3380,6 +3392,40 @@ function auditarRequisitosAddonAvanzado(files, prompt, qualityEvidence = {}) {
     const api = /@minecraft\/server/i.test(manifest) && /@minecraft\/server/i.test(all);
     add('architecture','Arquitectura modular y Script API declarada', scripts>=2 && imports && api, `${scripts} scripts; imports=${imports}; dependencia/API=${api}`);
   }
+  // Los objetos solicitados deben existir como definiciones BP/items y estar
+  // conectados a una mecánica real; README y nombres mencionados no cuentan.
+  const itemDefs=[];
+  for(const f of list){
+    if(!/^BP\/items\/.+\.json$/i.test(String(f.path||'')))continue;
+    try{const j=JSON.parse(String(f.content||''));const root=j['minecraft:item'];const id=root?.description?.identifier;if(id)itemDefs.push({id:String(id).toLowerCase(),root,content:String(f.content||'').toLowerCase(),path:f.path});}catch{}
+  }
+  const scriptFiles=list.filter(f=>/^BP\/scripts\/.+\.js$/i.test(String(f.path||'')));
+  const scripts=scriptFiles.map(f=>String(f.content||'').toLowerCase()).join('\n');
+  const recipes=list.filter(f=>/^BP\/recipes\/.+\.json$/i.test(String(f.path||'')));
+  const checks=[
+    {key:'medkit',rx:/(botiqu[ií]n|kit\s+m[eé]dico|medkit)/i,id:/botiqu[ií]n|medkit|kit[_ ]?med/i,logic:/curarvida|itemuse/},
+    {key:'canned_food',rx:/(comida[_ ]enlatada|alimento enlatado|conserva)/i,id:/comida[_ ]?enlatada|conserva/i,logic:/minecraft:food/}
+  ];
+  for(const c of checks){
+    if(!c.rx.test(requested))continue;
+    const def=itemDefs.find(x=>c.id.test(x.id));
+    add('item_'+c.key, c.key==='medkit'?'Botiquín solicitado con definición y uso':'Comida enlatada solicitada con definición de alimento',
+      !!def && (c.key==='medkit' ? scripts.includes(def.id) : true) && c.logic.test(def.content+'\n'+scripts),
+      def ? `definición=${def.id}; referencia_en_script=${scripts.includes(def.id)}; mecánica=${c.logic.test(def.content+'\n'+scripts)}` : 'No existe una definición correspondiente en BP/items/*.json.');
+  }
+  if(/(receta|recetas|crafting|fabricaci[oó]n|fabricar|craftear)/i.test(requested)){
+    add('recipes','Recetas de fabricación solicitadas',recipes.length>0,`${recipes.length} archivo(s) en BP/recipes.`);
+  }
+  // Toda referencia ego:<id> usada como objeto en scripts debe tener una definición
+  // BP/items. Se excluyen IDs de entidades usados en spawnEntity/summon.
+  const customItemRefs=new Set();
+  for(const f of scriptFiles){
+    const code=String(f.content||'');
+    for(const m of code.matchAll(/(?:ItemStack\s*\(\s*|addItem\s*\(\s*|countar?\s*\(\s*|quitar\s*\(\s*|dar\s*\(\s*)["'](ego:[a-z0-9_]+)["']/gi))customItemRefs.add(m[1].toLowerCase());
+  }
+  for(const id of customItemRefs){
+    if(!itemDefs.some(x=>x.id===id))add('missing_item_'+id,`Referencia a objeto personalizado ${id}`,false,`Un script usa ${id}, pero no existe en BP/items/*.json.`);
+  }
   if (/(control de calidad|validaci[oó]n|reparaci[oó]n|auditor[ií]a)/i.test(requested)) {
     // No se aprueba por defecto: debe existir resultado real del validador.
     const v=qualityEvidence.validacion;
@@ -3391,6 +3437,39 @@ function auditarRequisitosAddonAvanzado(files, prompt, qualityEvidence = {}) {
   }
   const missing = findings.filter(x => !x.ok);
   return { ok: missing.length===0, total: findings.length, passed: findings.length-missing.length, findings, missing: missing.map(x=>`${x.label}: ${x.evidence}`) };
+}
+
+async function repararCoberturaRequisitosAddon(files,prompt,env){
+  const evidence={validacion:{ok:true,errores:[]},repairState:"pendiente"};
+  let audit=auditarRequisitosAddonAvanzado(files,prompt,evidence);
+  if(audit.ok||env.EGO_AUTO_REPAIR==="0")return {audit,rounds:0,models:[]};
+  const models=[];
+  for(let round=0;round<3&&!audit.ok;round++){
+    const relevant=files.filter(f=>/^(BP\/(items|recipes|scripts|entities)|RP\/(entity|animations|models|textures))\//i.test(f.path));
+    const context=relevant.map(f=>`=== ARCHIVO: ${f.path} ===\n${String(f.content||'').slice(0,9000)}\n=== FIN ===`).join("\n").slice(0,26000);
+    const messages=[
+      {role:"system",content:`Eres un reparador de add-ons de Minecraft Bedrock. Corrige exclusivamente los requisitos faltantes indicados. Devuelve los archivos completos afectados con el formato exacto === ARCHIVO: ruta === contenido === FIN ===. Puedes añadir archivos nuevos. No escribas README ni manifiestos. No inventes APIs. Respeta los IDs ya usados, no borres funciones válidas y asegúrate de que cada receta tenga su ítem resultado definido. Si se pide un botiquín, debe existir BP/items/<archivo>.json y una mecánica real conectada; si se pide comida, debe tener minecraft:food. Usa @minecraft/server ${String(env.MC_SERVER_VERSION||"2.10.0")}.`},
+      {role:"user",content:`PROMPT ORIGINAL:\n${String(prompt).slice(0,6500)}\n\nFALTANTES DETECTADOS:\n- ${audit.missing.join("\n- ")}\n\nARCHIVOS ACTUALES:\n${context}\n\nDevuelve solo los archivos completos corregidos o añadidos. No declares que están hechos si no los implementas.`}
+    ];
+    try{
+      const result=await egoRoleChat("coder",messages,env,6500,{
+        maxTotalMs:45000,maxModels:2,perModelMs:10000,
+        providerModels:Math.min(2,egoExternalProviders(env,"code").length),
+        providerTimeoutMs:12000,providerOffset:round,cfModels:1,cfTimeoutMs:7000,
+        validateContent:(content)=>{const parsed=parsearSalidaMc(content,env.MC_SERVER_VERSION||"2.10.0");return parsed.files.length>0&&parsed.errores.length===0;}
+      });
+      const parsed=parsearSalidaMc(result.content,env.MC_SERVER_VERSION||"2.10.0");
+      if(parsed.errores.length||!parsed.files.length){models.push("respuesta de reparación inválida");continue;}
+      for(const patch of parsed.files){
+        if(!/^(BP|RP)\//.test(patch.path))continue;
+        const ix=files.findIndex(f=>f.path.toLowerCase()===patch.path.toLowerCase());
+        if(ix>=0)files[ix]={path:patch.path,content:patch.content};else files.push(patch);
+      }
+      models.push(result.model||"proveedor sin identificar");
+      audit=auditarRequisitosAddonAvanzado(files,prompt,evidence);
+    }catch(e){models.push(String(e?.message||e).slice(0,100));}
+  }
+  return {audit,rounds:models.length,models};
 }
 
 async function mcBuild(body,env,request){
@@ -3415,19 +3494,24 @@ async function mcBuild(body,env,request){
     for(const x of npcAI.avisos)r.notas.push(x);
     r.conteo.scripts=r.files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)).length;
     for(const x of vz.fallos)r.notas.push("Voz: "+x);
+    const reparacionCobertura=await repararCoberturaRequisitosAddon(r.files,prompt,env);
     const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
-    const validacion=ciclo.validacion||validarAddonEstructural(r.files);
+    const validacion=ciclo.validacion||validarAddonEstructural(r.files,env.MC_SERVER_VERSION||"2.10.0");
     const auditoriaIA = auditarArquitecturaIAAddon(r.files, prompt);
     for (const aviso of auditoriaIA.warnings) r.notas.push(aviso);
     const auditoriaRequisitos = auditarRequisitosAddonAvanzado(r.files, prompt, {
       validacion,
       repairState: ciclo && ciclo.informe ? ciclo.informe.estado : "no disponible"
     });
-    for (const faltante of auditoriaRequisitos.missing) r.notas.unshift("REQUISITO NO VERIFICADO: " + faltante);
-    if (!auditoriaRequisitos.ok) r.notas.unshift(`Cobertura real: ${auditoriaRequisitos.passed}/${auditoriaRequisitos.total} verificaciones; el add-on NO debe considerarse completo.`);
     if (!validacion.ok || validacion.errores.length) {
       return respuestaValidacionFallida(validacion, ciclo);
     }
+    if (!auditoriaRequisitos.ok) {
+      return json({error:"El add-on no se empaquetó como completo porque siguen faltando requisitos funcionales.",codigo:"cobertura_funcional_incompleta",cobertura:auditoriaRequisitos,recuperacion:{rondas:reparacionCobertura.rounds,modelos:reparacionCobertura.models}},422);
+    }
+    for (const faltante of auditoriaRequisitos.missing) r.notas.unshift("REQUISITO NO VERIFICADO: " + faltante);
+    if (!auditoriaRequisitos.ok) r.notas.unshift(`Cobertura real: ${auditoriaRequisitos.passed}/${auditoriaRequisitos.total} verificaciones; el add-on NO debe considerarse completo.`);
+    if(reparacionCobertura.rounds)r.notas.push(`Reparación de cobertura: ${reparacionCobertura.rounds} intento(s); proveedores: ${reparacionCobertura.models.join(", ")}`);
     for(const x of ciclo.informe.cambios)r.notas.push(`Auto-reparación ronda ${x.ronda}: ${x.path}`);
     for(const x of ciclo.informe.avisosFinales)r.notas.push("Auto-reparación: "+x);
     for(const x of validacion.errores)r.notas.push("Validación pendiente: "+x);
@@ -4020,7 +4104,7 @@ function auditarCoberturaAddon(files, prompt) {
 
 async function completarAddonPorCobertura(files, prompt, env, maxFiles, intentos) {
   const audit = auditarCoberturaAddon(files, prompt);
-  if (audit.ok || !routerApiKey(env) || env.EGO_ADDON_COMPLETION === "0") return audit;
+  if (audit.ok || (!routerApiKey(env) && !egoExternalProviders(env, "code").length && !env.AI) || env.EGO_ADDON_COMPLETION === "0") return audit;
   const remaining = Math.max(0, maxFiles - files.length);
   if (!remaining) { audit.missing.push("Se alcanzó el límite de archivos antes de completar los requisitos."); return audit; }
   const inventory = files.map(f => `${f.path} (${String(f.content || "").length} caracteres)`).join("\n").slice(0, 9000);
@@ -4029,7 +4113,12 @@ async function completarAddonPorCobertura(files, prompt, env, maxFiles, intentos
     { role: "user", content: `PROYECTO ORIGINAL:\n${String(prompt).slice(0,7000)}\n\nINVENTARIO EXISTENTE (NO DUPLICAR):\n${inventory}\n\nREQUISITOS FALTANTES DETECTADOS:\n- ${audit.missing.join("\n- ")}\n\nAñade los archivos que realmente puedas implementar y conecta las referencias con los recursos existentes. No afirmes que algo está completo si no lo está.` }
   ];
   try {
-    const r = await openRouterChat(messages, env, 10000, EGO_TEAM_MODELS.coder);
+    const r = await egoRoleChat("coder", messages, env, 10000, {
+      maxTotalMs: 55000, maxModels: 2, perModelMs: 11000,
+      providerModels: Math.min(2, egoExternalProviders(env, "code").length),
+      providerTimeoutMs: 12000, providerOffset: 0, cfModels: 1, cfTimeoutMs: 8000,
+      validateContent:(content)=>{const parsed=leerProyectoModelo(content);return !!(parsed&&parsed.files&&parsed.files.length);}
+    });
     const extra = leerProyectoModelo(r.content);
     if (extra?.files?.length) {
       const seen = new Set(files.map(f => f.path.toLowerCase()));
@@ -4167,6 +4256,9 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     const name=String(parsed.name|| (minecraft?"ego-bedrock-addon":"ego-project")).replace(/[^\w.-]/g,"-").slice(0,60)||"ego-project";
     const readmeExists=files.some(f=>/^README\.md$/i.test(f.path));
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
+    if (minecraft && mcKind === "addon" && coberturaAddon && !coberturaAddon.ok) {
+      return json({error:"El add-on no se empaquetó porque la cobertura solicitada sigue incompleta.",codigo:"cobertura_funcional_incompleta",cobertura:coberturaAddon,intentos},422);
+    }
     if(minecraft && mcKind !== "addon") {
       const cicloGeneral = await cicloReparacionAutomatica(files, env, { minecraft: false });
       const revisionGeneral = validarProyectoMinecraftGeneral(files, mcKind, env.MC_SERVER_VERSION || "2.10.0");
@@ -4806,7 +4898,8 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
         maxTotalMs: 28000, maxModels: 2, perModelMs: 6500,
         providerModels: Math.min(2, egoExternalProviders(env, "code").length),
         providerTimeoutMs: 6500, cfModels: 1, cfTimeoutMs: 5000,
-        providerOffset: (ronda - 1) * 2
+        providerOffset: ronda - 1,
+        validateContent:(content)=>{const parsed=extractJson(content);return !!(parsed&&Array.isArray(parsed.patches));}
       });
       let p = extractJson(respuesta.content);
       // HTTP 200 con texto que no respeta el protocolo también es fallo:
