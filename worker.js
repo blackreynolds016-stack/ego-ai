@@ -7,10 +7,11 @@
  *    creación de archivos faltantes permitidos, rechazo de parches destructivos, reversión si no hay progreso, historial y modelos usados.
  *  - Respuesta 422 con criticos[] {archivo, problema, causa, solucion}, advertencias[] y reparacion{}; cabeceras compactas (JSON válido).
  *  - v14.45: failover valida el formato de respuesta; auditoría semántica y reparación de requisitos; no empaqueta cobertura incompleta.
+ *  - v14.46: registra fallos de módulos con proveedor, validación, tiempo y errores; alinea versión de health/diag/raíz.
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.45.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
+// EGO AI WORKER v14.46.0 — DIAGNÓSTICO DE FALLOS POR MÓDULO
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1951,14 +1952,29 @@ async function mcPart(body,env){
       }else revisado="revisado por auditor + reasoner";
     }catch(e){revisado="revisión colaborativa incompleta: "+String(e&&e.message||e).slice(0,120);}
   }
-  if(!mejor||!mejor.files.length||mejor.errores.length) return json({
-    error:"La parte «"+parte.titulo+"» no produjo un conjunto de archivos completamente válido después de los reintentos automáticos.",
-    codigo:"proveedores_agotados_o_salida_invalida",
-    detalle:[...((mejor&&mejor.errores)||errores),...fallosM].slice(0,10),
-    archivosValidosConservados:mejor?mejor.files.length:0,
-    parte:parte.tipo,
-    reintentos:3
-  },502);
+  if(!mejor||!mejor.files.length||mejor.errores.length) {
+    const diagnostico={
+      parte:parte.tipo,
+      titulo:parte.titulo,
+      modelo:modelo||"ninguno",
+      duracionMs:Date.now()-t0,
+      archivosValidosConservados:mejor?mejor.files.length:0,
+      erroresValidacion:((mejor&&mejor.errores)||errores).slice(0,8),
+      erroresProveedores:fallosM.slice(-10),
+      reintentos:3
+    };
+    // Cloudflare Observability mostrará ahora la causa interna del 502, no solo POST /.
+    console.error("EGO_ADDON_PART_FAILED",JSON.stringify(diagnostico).slice(0,5000));
+    return json({
+      error:"La parte «"+parte.titulo+"» no produjo un conjunto de archivos completamente válido después de los reintentos automáticos.",
+      codigo:"proveedores_agotados_o_salida_invalida",
+      detalle:[...diagnostico.erroresValidacion,...diagnostico.erroresProveedores].slice(0,10),
+      diagnostico,
+      archivosValidosConservados:diagnostico.archivosValidosConservados,
+      parte:parte.tipo,
+      reintentos:3
+    },502);
+  }
   return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:[],parte:i,titulo:parte.titulo});
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
@@ -3633,7 +3649,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.36.0",
+    version: "14.46.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -5307,7 +5323,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.36.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.46.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -5336,7 +5352,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.41.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.46.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
