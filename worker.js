@@ -1222,7 +1222,7 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   };
   const bounded = Number.isFinite(Number(options.maxTotalMs));
   const deadline = bounded ? Date.now() + Math.max(5000, Number(options.maxTotalMs)) : Infinity;
-  const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
+  const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : Math.min(models.length, 3);
   const orBloqueado = !routerApiKey(env) || !models.length;
   if (sinCred && routerApiKey(env)) failures.push("OpenRouter sin crédito (402): se omiten los modelos de pago y se usan solo los :free");
   // Proveedores externos independientes: una clave/cuota agotada no bloquea las demás.
@@ -1607,15 +1607,20 @@ Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (í
     const mensajesPlan=[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}];
     // Planner diseña; reasoner y auditor revisan en paralelo. Sus observaciones
     // quedan adjuntas al plan para que el generador las respete en cada módulo.
-    const r=await egoRoleChat("planner",mensajesPlan,env,6000);
+    // v14.47: planificación con presupuesto fijo (antes sin límite: podía pasar de 165 s y la app abortaba)
+    const r=await Promise.race([
+      egoRoleChat("planner",mensajesPlan,env,6000,{maxTotalMs:85000,maxModels:3,perModelMs:40000,providerTimeoutMs:30000,providerModels:3,cfModels:1,cfTimeoutMs:35000,
+        validateContent:(c)=>{try{const j=extractJson(c);return !!(j&&typeof j==="object"&&Array.isArray(j.partes||j.objetos||[]));}catch(_){return false;}}}),
+      tmoMc(90000)
+    ]);
     const plan=limpiarPlan(extractJson(r.content),prompt);
     const revisionMsgs=[
       {role:"system",content:"Eres el revisor técnico de un plan Minecraft Bedrock. Detecta requisitos omitidos, incompatibilidades y dependencias. Devuelve observaciones concretas y breves; no reescribas el plan."},
       {role:"user",content:"SOLICITUD:\n"+prompt+"\nPLAN:\n"+JSON.stringify(plan).slice(0,14000)}
     ];
     const [revTecnica,revAuditoria]=await Promise.all([
-      egoRoleChat("reasoner",revisionMsgs,env,1600).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
-      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
+      Promise.race([egoRoleChat("reasoner",revisionMsgs,env,1600,{maxTotalMs:22000,maxModels:2,perModelMs:12000,providerTimeoutMs:12000,providerModels:1,cfModels:0}),tmoMc(24000)]).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
+      Promise.race([egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600,{maxTotalMs:22000,maxModels:2,perModelMs:12000,providerTimeoutMs:12000,providerModels:1,cfModels:0}),tmoMc(24000)]).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
     ]);
     plan.revisionEquipo={planner:r.model,reasoner:revTecnica.content,auditor:revAuditoria.content};
     const inferred=crearPartesRespaldoMinecraft(prompt);
@@ -5587,7 +5592,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.46.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.47.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
