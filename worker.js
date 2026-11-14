@@ -7,22 +7,9 @@
  *    creación de archivos faltantes permitidos, rechazo de parches destructivos, reversión si no hay progreso, historial y modelos usados.
  *  - Respuesta 422 con criticos[] {archivo, problema, causa, solucion}, advertencias[] y reparacion{}; cabeceras compactas (JSON válido).
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
- *
- * v14.45.0 — CORRECCIÓN DE REGRESIÓN:
- *  - OR_FREE restaurado a los IDs originales (nemotron-3.5-lightning:free, nemotron-3-ultra-550b-a55b:free,
- *    nemotron-3.5-super-vl:free): los sustitutos de la v14.44 probablemente no existían (404).
- *  - egoRoleChat: cuando el llamador no pasa opciones se conservan los presupuestos generosos
- *    originales (todos los modelos OR, 3 modelos CF, 70 s por modelo CF, fórmula 25 s + tokens×8
- *    para OR), solo que con tope de 95 s para no reventar el edge proxy.
- *  - mcPart: primer intento con 52 s de presupuesto (44 s para el modelo OR primario, que escribe
- *    ~7600 tokens en 40-50 s); intentos compactos de 28 s; timeoutParte 90 s.
- *  - mcPlan: planner con 55 s para CF llama (el plan de 6000 tokens tarda 45-60 s); revisiones
- *    omitidas si el planner consumió el presupuesto.
- *  - Se conserva de la v14.44: devolver 200 con archivos parciales en mcPart, reserva de hueco
- *    para modelos 3D en dividirTrabajoGrande, timeout de cfChat y catch con diagnóstico de mcBuild.
  */
 // ============================================================
-// EGO AI WORKER v14.45.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
+// EGO AI WORKER v14.44.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -903,9 +890,7 @@ function salida(r) {
 
 const usaCompletion = id => /kimi|deepseek-v4|qwen3\.8/.test(id);
 
-// Modelos gratuitos de OpenRouter: se restauran los IDs originales del sistema, que sí
-// existen (Nemotron 3.5 Lightning / 3 Ultra / 3.5 Super VL en la colección free de OpenRouter).
-// Los que reemplacé antes (deepseek-r1:free, meta-llama:free) probablemente ya no existen → 404 → caídas.
+// Modelos gratuitos de OpenRouter; el router dinámico permite fallback cuando cambian los endpoints.
 const OR_FREE = {
   chat: "nvidia/nemotron-3.5-lightning:free",
   code: "cohere/north-mini-code:free",
@@ -926,16 +911,11 @@ function openRouterCandidates(env, task) {
 }
 
 
-// cfChat ahora tiene un timeout por defecto de 45 s para que un modelo que se cuelga
-// no bloquee todo el Worker (causa nº1 de los HTTP 502 por límite de wall-clock).
-async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}, timeoutMs = 45000) {
+async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}) {
   if (!env.AI) throw new Error("AI no disponible");
   const limite = usaCompletion(modelId) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens };
   const p = { messages, ...extra, ...limite };
-  const result = await Promise.race([
-    env.AI.run(modelId, p),
-    new Promise((_, rej) => setTimeout(() => rej(new Error("cfChat timeout " + modelId + " (>" + timeoutMs + "ms)")), timeoutMs))
-  ]);
+  const result = await env.AI.run(modelId, p);
   return { content: salida(result), model: modelId };
 }
 
@@ -1198,14 +1178,9 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const fallbacks = task === "code" ? [OR_FREE.code, OR_FREE.fallback] : [OR_FREE.reasoning, OR_FREE.fallback];
   const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
   const failures = [];
-  // Siempre hay un deadline (95 s máx., por debajo del corte del edge proxy de Cloudflare)
-  // PERO cuando el llamador no pasa opciones se conservan los presupuestos GENEROSOS
-  // originales: todos los modelos OR, 3 modelos CF, 70 s para CF y la fórmula antigua
-  // para OpenRouter. La versión anterior recortaba esto a 42 s / 1 modelo CF / 30 s
-  // y rompía las rutas que sí funcionaban (planner vía CF, equipo EGO, etc.).
-  const bounded = true;
-  const deadline = Date.now() + Math.max(8000, Math.min(95000, Number(options.maxTotalMs) || 95000));
-  const maxModels = Math.max(1, Math.min(models.length, options.maxModels !== undefined ? (Number(options.maxModels) || 1) : models.length));
+  const bounded = Number.isFinite(Number(options.maxTotalMs));
+  const deadline = bounded ? Date.now() + Math.max(5000, Number(options.maxTotalMs)) : Infinity;
+  const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
   const orBloqueado = !routerApiKey(env) || (globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
   if (orBloqueado && routerApiKey(env)) failures.push("OpenRouter sin crédito (402), se omite");
   // Proveedores externos independientes: una clave/cuota agotada no bloquea las demás.
@@ -1218,9 +1193,11 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const providerOffset=nExternos?((Math.floor(Number(options.providerOffset)||0)%nExternos)+nExternos)%nExternos:0;
   const externosOrdenados=nExternos?externos.map((_,i)=>externos[(providerOffset+i)%nExternos]):[];
   const requestedExternalCount = options.providerModels === undefined || options.providerModels === null
-    ? Math.min(3, externosOrdenados.length)
+    ? externosOrdenados.length
     : Math.max(0, Math.floor(Number(options.providerModels) || 0));
-  const maxExternos = Math.max(0, Math.min(externosOrdenados.length, requestedExternalCount));
+  const maxExternos=bounded
+    ? Math.max(0,Math.min(externosOrdenados.length,requestedExternalCount))
+    : Math.min(externosOrdenados.length,3);
   for(let i=0;i<maxExternos && Date.now()<deadline;i++){
     const provider=externosOrdenados[i];
     const remaining=deadline-Date.now(); if(remaining<3500) break;
@@ -1240,7 +1217,7 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
     try {
       const remaining = deadline - Date.now();
       const defaultTimeout = Math.min(100000, 25000 + Number(maxTokens || 3000) * 8);
-      const timeout = Math.max(5000, Math.min(remaining, Number(options.perModelMs) || (i === 0 ? defaultTimeout : Math.round(defaultTimeout * 0.6))));
+      const timeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.perModelMs) || 42000)) : (i === 0 ? defaultTimeout : Math.round(defaultTimeout * 0.6));
       const r = await openRouterChat(messages, env, maxTokens, models[i], timeout);
       if (r.content) return { ...r, role, fallos: failures };
       failures.push(`${models[i]}: respuesta vacía`);
@@ -1252,11 +1229,11 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   }
   if (env.AI && Date.now() < deadline && options.cfModels !== 0) {
     const cadenaBase = task === "code" ? CF_MODELS.codigo : CF_MODELS.razonar;
-    const cantidad = Math.max(1, Math.min(cadenaBase.length, options.cfModels !== undefined ? (Number(options.cfModels) || 1) : 3));
+    const cantidad = bounded ? Math.max(1, Math.min(cadenaBase.length, Number(options.cfModels) || 1)) : 3;
     for (const id of cadenaBase.slice(0, cantidad)) {
       const remaining = deadline - Date.now();
       if (remaining < 5000) break;
-      const cfTimeout = Math.max(5000, Math.min(remaining, Number(options.cfTimeoutMs) || 70000));
+      const cfTimeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.cfTimeoutMs) || 30000)) : 70000;
       try {
         const r = await Promise.race([cfChat(id, messages, env, Math.min(Number(maxTokens || 3000), 8000)), tmoMc(cfTimeout)]);
         if (r && r.content) return { ...r, model: `cf:${id}`, role, fallos: failures };
@@ -1569,17 +1546,12 @@ function dividirTrabajoGrande(base,prompt){
       {titulo:"Núcleo: main.js y eventos base",tipo:"script",detalle:String(orig.detalle||"").slice(0,900)+"\n\n"+contrato+"\nEsta parte escribe BP/scripts/main.js y BP/scripts/eventos.js (eventos de jugador/entidad, daño y muerte).",archivos:["BP/scripts/main.js","BP/scripts/eventos.js"]},
       {titulo:"Sistemas de juego (módulo)",tipo:"script",detalle:String(orig.detalle||"").slice(0,900)+"\n\n"+contrato+"\nEsta parte escribe SOLO BP/scripts/sistemas.js (supervivencia, progresión, misiones y estados). NO escribas main.js.",archivos:["BP/scripts/sistemas.js"]});
   }
-  // Reservar espacio para las partes 3D ANTES del slice para que no se corten.
-  // Antes: si base.partes llegaba a 14, los modelos 3D se perdían → add-on sin modelo 3D.
-  const cupo3d = antes3d.length;
-  const limite = Math.max(1, 14 - cupo3d);
-  base.partes = [...base.partes.slice(0, limite), ...antes3d];
+  base.partes=[...base.partes,...antes3d].slice(0,14);
   return base;
 }
 async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
-  const t0=Date.now();
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
 {"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","icono":"arma_fuego|pistola|rifle|escopeta|francotirador|botiquin|municion|armadura|escudo|espada|hacha|pico|vara|reloj|libro|corona|botella|anillo|lingote|orbe|gema: cómo se ve el ítem","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"poderes_jugador":[],"modelos3d":[],"sonidos":[],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
 ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enumera en "requisitos" TODO lo que pidió (nada más, nada menos). Cada objeto, habilidad y parte del plan debe servir a un requisito. No interpretes a tu gusto: si el usuario no lo dijo, no lo agregues.
@@ -1591,23 +1563,16 @@ Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (í
     const mensajesPlan=[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}];
     // Planner diseña; reasoner y auditor revisan en paralelo. Sus observaciones
     // quedan adjuntas al plan para que el generador las respete en cada módulo.
-    // Planner: el plan (6000 tokens) lo escribe sobre todo CF llama-3.3-70b, que necesita
-    // 45-60 s. Se le dan 55 s de cfTimeoutMs (mi versión anterior le daba 40 s y el plan
-    // caía siempre al respaldo). Los OR primarios (nemotron) fallan rápido (404/vacío)
-    // y no consumen el presupuesto.
-    const r=await egoRoleChat("planner",mensajesPlan,env,6000,{maxTotalMs:75000,maxModels:2,perModelMs:16000,cfModels:2,cfTimeoutMs:55000});
+    const r=await egoRoleChat("planner",mensajesPlan,env,6000);
     const plan=limpiarPlan(extractJson(r.content),prompt);
-    const tPlanner=Date.now()-t0;
     const revisionMsgs=[
       {role:"system",content:"Eres el revisor técnico de un plan Minecraft Bedrock. Detecta requisitos omitidos, incompatibilidades y dependencias. Devuelve observaciones concretas y breves; no reescribas el plan."},
       {role:"user",content:"SOLICITUD:\n"+prompt+"\nPLAN:\n"+JSON.stringify(plan).slice(0,14000)}
     ];
-    // Si el planner consumió casi todo el presupuesto, se saltan las revisiones para que
-    // mcPlan no supere los 100 s del edge proxy de Cloudflare (524).
-    const [revTecnica,revAuditoria]=tPlanner<45000?await Promise.all([
-      egoRoleChat("reasoner",revisionMsgs,env,1600,{maxTotalMs:18000,maxModels:1,perModelMs:15000,cfModels:1,cfTimeoutMs:16000}).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
-      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600,{maxTotalMs:18000,maxModels:1,perModelMs:15000,cfModels:1,cfTimeoutMs:16000}).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
-    ]):[{content:"omitida por presupuesto de tiempo",fallos:[]},{content:"omitida por presupuesto de tiempo",fallos:[]}];
+    const [revTecnica,revAuditoria]=await Promise.all([
+      egoRoleChat("reasoner",revisionMsgs,env,1600).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
+      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
+    ]);
     plan.revisionEquipo={planner:r.model,reasoner:revTecnica.content,auditor:revAuditoria.content};
     const inferred=crearPartesRespaldoMinecraft(prompt);
     const tipos=new Set(plan.partes.filter(x=>x.tipo!=="misc").map(x=>x.tipo));
@@ -1833,7 +1798,7 @@ async function mcModelo3d(parte,plan,prompt,env){
     try{
       // El modelador 3D usa la misma ruta acotada del equipo EGO: dos intentos breves,
       // sin recorrer la cadena larga de candidatos de llamarCodigo (causa del timeout de criaturas).
-      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:t===0?50000:40000,maxModels:2,perModelMs:t===0?32000:26000,providerModels:t>0?0:Math.min(1,egoExternalProviders(env,"code").length),providerTimeoutMs:10000,cfModels:2,cfTimeoutMs:t===0?26000:22000,providerOffset:t*2});
+      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:45000,maxModels:2,perModelMs:7000,providerModels:t>0?0:Math.min(2,egoExternalProviders(env,"code").length),providerTimeoutMs:8500,cfModels:1,cfTimeoutMs:5000,providerOffset:t*2});
       const j=extractJson(r.content);let ps=null;
       if(j){const ar=String(j.arquetipo||"").toLowerCase();let base=[];
         if(/human|person|caball|bipedo/.test(ar))base=modeloHumanoide(j);else if(/best|cuadr|animal|lobo|dragon/.test(ar))base=modeloBestia(j);
@@ -1866,16 +1831,14 @@ async function mcPart(body,env){
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
   const maxTokensParte=ligero?4200:(esEntidades?5200:7600);
-  // timeoutParte = 90 s: por debajo del corte del edge proxy de Cloudflare (~100 s → 524).
-  // El frontal de la app espera ~2 min por parte, así que 90 s + reintento del frontal cabe.
-  const timeoutParte=90000;
+  const timeoutParte=150000;
   const restante=(tope)=>Math.max(0,tope-(Date.now()-t0));
   // Hasta tres rondas: normal, compacta y compacta de rescate.
   // Cada ronda rota el punto de inicio de proveedores y conserva el mejor
   // resultado parcial validado para no perder archivos útiles.
   for(let intento=0;intento<3;intento++){
     const quedan=restante(timeoutParte);
-    if(quedan<12000)break;
+    if(quedan<9000)break;
     let r;
     const compacto=intento>0||ligero;
     const userIntento=compacto
@@ -1884,13 +1847,8 @@ async function mcPart(body,env){
          "No repitas archivos de otras partes, no añadas explicaciones ni comentarios. " +
          "Devuelve cada archivo completo con el formato exacto. Si no cabe todo, prioriza archivos funcionales y dependencias obligatorias.")
       : user;
-    // Estructura de presupuesto: intento 0 = 52 s (una oportunidad REAL de 44 s para el
-    // modelo OR primario tipo GLM-5.3-flash, que escribe ~7600 tokens en 40-50 s),
-    // intentos 1+ = 28 s (compacto, ~4200 tokens en ~25 s).
-    // La versión intermedia daba 26 s al primer intento: el OR primario no terminaba
-    // y ya no quedaba tiempo para CF → todo fallaba.
-    const presupuesto=Math.min(intento===0?52000:28000,quedan-3000);
-    const timeoutProveedor=Math.max(6000,Math.min(8000,Math.floor(presupuesto/6.5)));
+    const presupuesto=Math.min(46000,quedan-3500);
+    const timeoutProveedor=Math.max(6500,Math.min(8500,Math.floor(presupuesto/5.2)));
     try{
       const resultado=await Promise.race([
         egoRoleChat("coder",[
@@ -1901,22 +1859,20 @@ async function mcPart(body,env){
         ],env,maxTokensParte,{
           maxTotalMs:presupuesto,
           maxModels:2,
-          perModelMs:intento===0?Math.min(44000,presupuesto):Math.min(26000,presupuesto),
+          perModelMs:Math.min(8500,presupuesto),
           providerOffset:intento*2,
-          providerModels:(errores.length&&egoExternalProviders(env,"code").length<=2)?0:Math.min(intento===0?1:2,externosParaModulo(env)),
+          providerModels:(errores.length&&egoExternalProviders(env,"code").length<=2)?0:Math.min(2,externosParaModulo(env)),
           providerTimeoutMs:timeoutProveedor,
-          // CF de respaldo: si el OR primario falla rápido (404/vacío), CF llama-3.3-70b
-          // aprovecha el tiempo restante del presupuesto.
-          cfModels:2,
-          cfTimeoutMs:Math.min(intento===0?34000:22000,presupuesto)
+          cfModels:1,
+          cfTimeoutMs:Math.min(5000,timeoutProveedor)
         }),
-        tmoMc(Math.max(7000,presupuesto+2000))
+        tmoMc(Math.max(7000,presupuesto+1500))
       ]);
       r={raw:resultado.content,model:resultado.model,idx:0,fallos:resultado.fallos||[]};
     }catch(e){
       const tm=String(e&&e.message||e);
       errores.push("Intento "+(intento+1)+": "+tm.slice(0,180));
-      if(restante(timeoutParte)>24000)continue;
+      if(restante(timeoutParte)>9000)continue;
       break;
     }
     modelo=r.model||modelo;
@@ -1974,32 +1930,24 @@ async function mcPart(body,env){
         }
       }
       const probs=problemas.slice(0,8);
-      // Puertas de tiempo ajustadas a timeoutParte=90 s: la revisión solo corre si llegó
-      // antes de 58 s y la reparación solo si hay margen (total < 88 s, bajo el corte de 100 s).
-      if(probs.length&&Date.now()-t0>88000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
-      else if(probs.length&&Date.now()-t0<66000){
-        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:22000,maxModels:1,perModelMs:20000,cfModels:0}),tmoMc(24000)]);
+      if(probs.length&&Date.now()-t0>130000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
+      else if(probs.length&&Date.now()-t0<76000){
+        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:30000,maxModels:1,perModelMs:26000,cfModels:0}),tmoMc(32000)]);
         const np=parsearSalidaMc(rr.content, env.MC_SERVER_VERSION||"2.10.0");
         if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="auditor y reasoner detectaron "+probs.length+" problema(s); coder aplicó una corrección que pasó la validación básica";}
         else revisado="auditoría detectó "+probs.length+" problema(s), pero la reparación no pasó; se conserva la versión anterior y se informa la limitación";
       }else revisado="revisado por auditor + reasoner";
     }catch(e){revisado="revisión colaborativa incompleta: "+String(e&&e.message||e).slice(0,120);}
   }
-  // ANTES: si cualquier archivo tenía error, se devolvía 502 y se perdían TODOS los
-  // archivos válidos → add-ons incompletos. AHORA: si hay al menos 1 archivo válido
-  // se devuelve 200 con los archivos buenos y los errores como avisos. Solo se devuelve
-  // 502 si no se obtuvo NINGÚN archivo válido.
-  if(!mejor||!mejor.files.length) return json({
-    error:"La parte «"+parte.titulo+"» no produjo archivos válidos después de los reintentos automáticos.",
+  if(!mejor||!mejor.files.length||mejor.errores.length) return json({
+    error:"La parte «"+parte.titulo+"» no produjo un conjunto de archivos completamente válido después de los reintentos automáticos.",
     codigo:"proveedores_agotados_o_salida_invalida",
     detalle:[...((mejor&&mejor.errores)||errores),...fallosM].slice(0,10),
-    archivosValidosConservados:0,
+    archivosValidosConservados:mejor?mejor.files.length:0,
     parte:parte.tipo,
     reintentos:3
   },502);
-  // Hay archivos válidos: devolver 200 aunque algunos archivos tuvieran errores.
-  // Los errores se informan como avisos para que el ciclo de reparación final los corrija.
-  return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:mejor.errores.slice(0,8),parte:i,titulo:parte.titulo,erroresParciales:mejor.errores.length});
+  return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:[],parte:i,titulo:parte.titulo});
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
 function balanceJs(src){
@@ -3495,8 +3443,7 @@ async function mcBuild(body,env,request){
     return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
-    // Diagnóstico mejorado: antes el error se truncaba a 160 chars y el usuario no sabía dónde falló.
-    return json({error:"No se pudo armar el add-on.",etapa:String(e&&e.message||e).slice(0,300),archivos_procesados:entrada.length,pista:"Revisa los logs del Worker en Cloudflare para más detalle. Si el error persiste, prueba a generar el add-on en pasos separados (mc_plan → mc_part por cada parte → mc_build)."},500);
+    return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
   }
 }
 
@@ -4826,10 +4773,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     return { validacion, informe };
   };
   if (!informe.habilitado) { if (validacion.errores.length || validacion.avisos.length) informe.avisosFinales.push("Reparación con IA desactivada: no hay proveedor de chat disponible o EGO_AUTO_REPAIR=0; solo se aplicaron reparaciones deterministas."); return cerrar(); }
-  // Rondas de reparación: por defecto 1 para que mcBuild (postproceso + reparación +
-  // auditoría + ZIP) quepan en los ~100 s del edge proxy. Se puede subir a 2 con la
-  // variable EGO_AUTO_REPAIR_ROUNDS=2 si tu plan de Cloudflare lo tolera.
-  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 1), 2));
+  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 3), 3));
   const modelosReparador = [...new Set([EGO_TEAM_MODELS.coder, EGO_TEAM_MODELS.reasoner, EGO_TEAM_MODELS.planner].filter(Boolean))];
   const rutaCreable = p => /^(?:BP|RP)\/(?:entities|entity|items|blocks|recipes|loot_tables|spawn_rules|animations|animation_controllers|render_controllers|models\/entity|texts|sounds|scripts|functions|trading)\/.+\.(?:json|js|lang|mcfunction)$/i.test(p) && !/manifest\.json$/i.test(p);
   for (let ronda = 1; ronda <= maxRondas; ronda++) {
@@ -4859,9 +4803,9 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     // cuando OpenRouter no tenía crédito aunque Gemini/Cohere/SambaNova sí.
     try {
       let respuesta = await egoRoleChat("coder", messages, env, 6500, {
-        maxTotalMs: 24000, maxModels: 2, perModelMs: 18000,
+        maxTotalMs: 28000, maxModels: 2, perModelMs: 6500,
         providerModels: Math.min(2, egoExternalProviders(env, "code").length),
-        providerTimeoutMs: 12000, cfModels: 2, cfTimeoutMs: 18000,
+        providerTimeoutMs: 6500, cfModels: 1, cfTimeoutMs: 5000,
         providerOffset: (ronda - 1) * 2
       });
       let p = extractJson(respuesta.content);
@@ -4870,8 +4814,8 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
       if (!p || !Array.isArray(p.patches)) {
         informe.avisosFinales.push(`Ronda ${ronda}: la primera respuesta no respetó el JSON de reparación; se intenta otro proveedor.`);
         respuesta = await egoRoleChat("coder", messages, env, 1800, {
-          maxTotalMs: 16000, maxModels: 2, perModelMs: 12000,
-          providerModels: 0, cfModels: 2, cfTimeoutMs: 14000
+          maxTotalMs: 18000, maxModels: 2, perModelMs: 5000,
+          providerModels: 0, cfModels: 1, cfTimeoutMs: 5000
         });
         p = extractJson(respuesta.content);
       }
