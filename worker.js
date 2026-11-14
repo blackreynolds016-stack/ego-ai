@@ -11,7 +11,7 @@
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.49.0 — 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
+// EGO AI WORKER v14.50.0 — GUÍA DE ERRORES REALES, PLANTILLAS DE RESPALDO, 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1333,8 +1333,32 @@ const MC_JS_CONOCIDOS=new Set(("length push pop shift unshift slice splice conca
  "floor ceil round abs min max sqrt pow random sin cos tan atan atan2 hypot sign trunc log exp PI "+
  "assign freeze fromEntries getPrototypeOf hasOwnProperty isArray isInteger isFinite isNaN parseInt parseFloat stringify parse from of now call apply bind "+
  "toISOString getTime error warn log info constructor prototype name message stack").split(" "));
+// Declaraciones repetidas en el nivel superior de un módulo (p. ej. import { world } + const { world } = mc):
+// es un SyntaxError y Minecraft NO carga ningún script del add-on. (No usa eval: no está permitido en Workers.)
+function dupDeclTop(texto){
+  const src=String(texto).replace(/\/\*[\s\S]*?\*\//g,"").replace(/\/\/[^\n]*/g,"").replace(/`(?:\\.|[^`\\])*`/g,'""').replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g,'""');
+  let out="",d=0;
+  for(let i=0;i<src.length;i++){
+    const ch=src[i];
+    if(ch==="{"){
+      if(d===0&&/(?:import|const|let|var)\s*$/.test(out)){let k=0,j=i;for(;j<src.length;j++){if(src[j]==="{")k++;else if(src[j]==="}"){k--;if(k===0)break;}}out+=src.slice(i,j+1);i=j;continue;}
+      d++;continue;
+    }
+    if(ch==="}"){if(d>0)d--;continue;}
+    if(d===0)out+=ch;
+  }
+  const cuenta=new Map();const add=(n)=>{n=String(n||"").trim().split(/\s+as\s+/).pop().split(":").pop().split("=")[0].trim();if(/^[A-Za-z_$][\w$]*$/.test(n))cuenta.set(n,(cuenta.get(n)||0)+1);};
+  for(const m of out.matchAll(/import\s*\{([^}]*)\}\s*from/g))m[1].split(",").forEach(add);
+  for(const m of out.matchAll(/import\s*\*\s*as\s+([\w$]+)/g))add(m[1]);
+  for(const m of out.matchAll(/import\s+([\w$]+)\s*(?:,|from)/g))add(m[1]);
+  for(const m of out.matchAll(/\b(?:const|let)\s*\{([^}]*)\}\s*=/g))m[1].split(",").forEach(add);
+  for(const m of out.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)/g))add(m[1]);
+  for(const m of out.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)/g))add(m[1]);
+  return [...cuenta.entries()].filter(([,n])=>n>1).map(([k])=>k);
+}
 function lintScriptApi(texto, verSrv="2.10.0"){
   const prob=[];const api=MC_API.act;
+  for(const dd of dupDeclTop(texto))prob.push("declara «"+dd+"» más de una vez en el nivel superior (SyntaxError: no carga ningún script del add-on)");
   const es210=/^2\.10(?:\.|$)/.test(String(verSrv));
   const apiNo210=new Set(["spawnXp","fade","pause","resume","seek","setPitch","setVolume","lineGapHeight","getClock","worldClockOnPaused","worldClockOnResumed","worldClockOnTimeMarker","worldClockOnTimeModified","worldClockOnRestart","TimeMarker","TimeMarkerOptions","WorldClock","WorldClockAddTimeMarkerError","WorldClockEventOptions","WorldClockInvalidRegistryError","WorldClockInvalidTimeMarkerError","WorldClockNotFoundError","WorldClockOnPausedAfterEvent","WorldClockOnPausedAfterEventSignal","WorldClockOnRestartBeforeEvent","WorldClockOnRestartBeforeEventSignal","WorldClockOnResumedAfterEvent","WorldClockOnResumedAfterEventSignal","WorldClockOnTimeMarkerAfterEvent","WorldClockOnTimeMarkerAfterEventSignal","WorldClockOnTimeModifiedAfterEvent","WorldClockOnTimeModifiedAfterEventSignal","WorldClockRegistrationError","WorldClockRegistrationOptions","WorldClockRegistry","WorldClockReloadNewWorldClockError","WorldClockReloadTimeMarkerError","WorldClockRemoveMinecraftTimeMarkerError","WorldClockRewindError","WorldClockTimeMarkerEventOptions","WorldClockTimeMarkerNotFoundError","button1WithOptions","button2WithOptions"]);
   const sin=String(texto).replace(/\/\*[\s\S]*?\*\//g,"").replace(/\/\/[^\n]*/g,"").replace(/`(?:\\.|[^`\\])*`/g,'""').replace(/"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g,'""');
@@ -1463,7 +1487,19 @@ REGLAS GENERALES:
 - NO escribas manifest.json, pack_icon.png, imágenes PNG ni archivos binarios: el sistema los genera solo (manifests, texturas, íconos y archivos de idioma).
 - JSON estricto: sin comentarios, sin comas finales. Contenido completo, sin placeholders ni "...".
 - Haz EXACTAMENTE lo que pidió el usuario: no agregues objetos, armas, jefes ni funciones que no pidió (los ejemplos de estas guías son solo de formato, nunca los copies).
-- No inventes componentes ni APIs. Si no estás seguro de algo, usa la opción más simple y segura que sí exista.`;
+- No inventes componentes ni APIs. Si no estás seguro de algo, usa la opción más simple y segura que sí exista.
+ERRORES REALES QUE YA OCURRIERON (no los repitas; Minecraft los rechaza o rompen el juego):
+- Ítems: NO uses "minecraft:on_use", "minecraft:weapon", "minecraft:armor" ni "events". Armadura = "minecraft:wearable" con slot "slot.armor.head|chest|legs|feet". Un arma de fuego usa script (itemUse), no "minecraft:shooter".
+- Bloques: no pongas "category" ni "properties" en description (usa "states"); sin "minecraft:creative_category".
+- Entidades: health/movement/attack/scale son OBJETOS ({"value":..}, {"damage":..}), nunca números sueltos. Nada del Resource Pack en el BP (geometry, skin_id, animation_controller, sound_event, render_controller).
+- Script: el daño se lee en event.damageSource.damagingEntity (NO event.damagingEntity); entityDie usa event.deadEntity, entityHurt usa event.hurtEntity, itemUse usa event.source. NO existen runCommandAsync, world.events, world.say. Usa runCommand y world.sendMessage.
+- Armadura puesta: player.getComponent("minecraft:equippable").getEquipment("Head"|"Chest"|"Legs"|"Feet")?.typeId. NUNCA recorras el inventario para saber qué lleva puesto.
+- Filtros de entidades: getEntities({location,maxDistance,families:["monster"],excludeTypes:["minecraft:player"]}). "minecraft:mob" NO es un tipo válido.
+- No declares dos veces world/system/ItemStack (import { world } y const { world } = mc rompe TODOS los scripts). Un solo import al inicio.
+- No inventes un sistema de vida propio con dynamic properties que mate al jugador; usa la vida real (minecraft:health, setCurrentValue / currentValue).
+- No des premios en cada golpe (entityHurt): el botín va en loot_tables; en el script solo premia al morir (entityDie).
+- No uses sonidos propios (ns:sonido) ni partículas inventadas: usa sonidos y partículas vanilla ("random.explode", "minecraft:totem_particle").
+- Si el pedido no se puede hacer en Bedrock, dilo con "IMPOSIBLE:" y haz la alternativa real más cercana; no simules.`;
 const MC_GUIAS={
  items:`ÍTEMS (BP/items/<nombre>.json): {"format_version":"1.21.0","minecraft:item":{"description":{"identifier":"ns:nombre","menu_category":{"category":"equipment|items|nature|construction","group":"itemGroup.name.sword (opcional)"}},"components":{...}}}.
 Componentes válidos: "minecraft:icon":{"textures":{"default":"nombre_corto"}}, "minecraft:max_stack_size":N, "minecraft:hand_equipped":true, "minecraft:damage":N, "minecraft:durability":{"max_durability":N}, "minecraft:enchantable":{"slot":"sword|axe|pickaxe|shovel|hoe|bow|armor_head|armor_torso|armor_legs|armor_feet","value":10}, "minecraft:food":{"nutrition":4,"saturation_modifier":0.6,"can_always_eat":false}, "minecraft:use_modifiers":{"use_duration":1.6,"movement_modifier":0.35}, "minecraft:wearable":{"slot":"slot.armor.chest","protection":6}, "minecraft:fuel":{"duration":20}, "minecraft:glint":true, "minecraft:can_destroy_in_creative":false.
@@ -1482,6 +1518,48 @@ Reglas: no uses await en el nivel superior, ni setTimeout/Date.now (usa system.r
  spawn:`REGLAS DE APARICIÓN (BP/spawn_rules/<nombre>.json): {"format_version":"1.8.0","minecraft:spawn_rules":{"description":{"identifier":"ns:nombre","population_control":"monster|animal|ambient"},"conditions":[{"minecraft:spawns_on_surface":{},"minecraft:brightness_filter":{"min":0,"max":7,"adjust_for_weather":false},"minecraft:weight":{"default":80},"minecraft:herd":{"min_size":1,"max_size":3},"minecraft:biome_filter":{"test":"has_biome_tag","operator":"==","value":"overworld"}}]}}.`
 };
 MC_GUIAS.misc=[MC_GUIAS.items,MC_GUIAS.blocks,MC_GUIAS.entities,MC_GUIAS.script,MC_GUIAS.recipes,MC_GUIAS.loot,MC_GUIAS.spawn].join("\n\n");
+
+// v14.49.2: si una parte falló y un objeto del plan no quedó escrito, se genera con una plantilla válida
+// (así el add-on nunca pierde en silencio un ítem/bloque/criatura que el usuario pidió).
+function plantillaObjetoMc(o){
+  const id=String(o.id), corto=id.split(":")[1]||id, n=normMc(corto+" "+(o.nombre||""));
+  const tipo=String(o.tipo||"item").toLowerCase();
+  if(/block|bloque/.test(tipo)){
+    return {path:"BP/blocks/"+corto+".json",obj:{format_version:"1.21.0","minecraft:block":{description:{identifier:id,menu_category:{category:"construction"}},components:{"minecraft:material_instances":{"*":{texture:corto,render_method:"opaque"}},"minecraft:destructible_by_mining":{seconds_to_destroy:3},"minecraft:destructible_by_explosion":{explosion_resistance:6},"minecraft:friction":0.4,"minecraft:map_color":"#808080"}}}};
+  }
+  if(/entit|criatura|mob/.test(tipo)){
+    const hostil=/zombi|zombie|monstruo|esqueleto|jefe|boss|demonio|araña|bestia|mutante|infectado|lobo_|vampiro|fantasma/.test(n);
+    const c={"minecraft:type_family":{family:[corto,hostil?"monster":"mob"]},"minecraft:health":{value:hostil?30:12,max:hostil?30:12},"minecraft:collision_box":{width:0.6,height:1.9},"minecraft:movement":{value:0.25},"minecraft:movement.basic":{},"minecraft:navigation.walk":{can_path_over_water:false,avoid_water:true,can_break_doors:false},"minecraft:jump.static":{},"minecraft:physics":{},"minecraft:pushable":{is_pushable:true,is_pushable_by_piston:true},"minecraft:behavior.float":{priority:0},"minecraft:behavior.random_stroll":{priority:6,speed_multiplier:1},"minecraft:behavior.look_at_player":{priority:7,look_distance:8},"minecraft:behavior.random_look_around":{priority:9}};
+    if(hostil){c["minecraft:attack"]={damage:4};c["minecraft:behavior.melee_attack"]={priority:3,speed_multiplier:1,track_target:true};c["minecraft:behavior.hurt_by_target"]={priority:1};c["minecraft:behavior.nearest_attackable_target"]={priority:2,must_see:true,reselect_targets:true,entity_types:[{filters:{test:"is_family",subject:"other",value:"player"},max_dist:24}]};c["minecraft:experience_reward"]={on_death:"5"};}
+    return {path:"BP/entities/"+corto+".json",obj:{format_version:"1.21.0","minecraft:entity":{description:{identifier:id,is_spawnable:true,is_summonable:true,is_experimental:false},components:c}}};
+  }
+  const c={"minecraft:max_stack_size":64};
+  let cat="items";
+  if(/casco|helm|capucha|peto|pechera|chaleco|pantal|legging|greva|bota|boot/.test(n)){
+    const slot=/casco|helm|capucha/.test(n)?"head":/pantal|legging|greva/.test(n)?"legs":/bota|boot/.test(n)?"feet":"chest";
+    c["minecraft:max_stack_size"]=1;c["minecraft:durability"]={max_durability:300};c["minecraft:enchantable"]={slot:"armor_"+(slot==="chest"?"torso":slot),value:12};c["minecraft:wearable"]={slot:"slot.armor."+slot,protection:slot==="chest"?6:slot==="legs"?5:3};cat="equipment";
+  }else if(/espada|hacha|pico|pala|azada|sword|axe|pickaxe|shovel|daga|lanza|martillo|arma|pistola|rifle|escopeta/.test(n)){
+    c["minecraft:max_stack_size"]=1;c["minecraft:hand_equipped"]=true;c["minecraft:damage"]=6;c["minecraft:durability"]={max_durability:250};cat="equipment";
+  }else if(/comida|manzana|pan|carne|sopa|galleta|fruta|pastel|botiquin_comida|enlatada/.test(n)){
+    c["minecraft:food"]={nutrition:4,saturation_modifier:0.6,can_always_eat:false};c["minecraft:use_modifiers"]={use_duration:1.6,movement_modifier:0.35};
+  }
+  return {path:"BP/items/"+corto+".json",obj:{format_version:"1.21.0","minecraft:item":{description:{identifier:id,menu_category:{category:cat}},components:c}}};
+}
+function completarObjetosFaltantes(entrada,plan){
+  const existentes=new Set();
+  for(const f of entrada){
+    if(!/^BP\/(items|blocks|entities)\/.+\.json$/.test(f.path))continue;
+    try{const j=JSON.parse(f.content);const r=j["minecraft:item"]||j["minecraft:block"]||j["minecraft:entity"];const id=r&&r.description&&r.description.identifier;if(id)existentes.add(id);}catch(_){}
+  }
+  const hechos=[];
+  for(const o of (Array.isArray(plan.objetos)?plan.objetos:[])){
+    if(!o||typeof o.id!=="string"||!/^[a-z][a-z0-9_]*:[a-z0-9_]+$/.test(o.id)||existentes.has(o.id))continue;
+    const t=plantillaObjetoMc(o);
+    if(entrada.some(f=>f.path===t.path))continue;
+    entrada.push({path:t.path,content:JSON.stringify(t.obj,null,2)+"\n"});hechos.push(o.id);
+  }
+  return hechos;
+}
 
 function mcNs(v){const s=String(v||"").toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,12);return /^[a-z][a-z0-9_]{1,11}$/.test(s)?s:"ego";}
 function mcId(ns,v){const x=String(v||"").toLowerCase().replace(/^[^:]*:/,"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,40);return x?ns+":"+x:"";}
@@ -3055,6 +3133,8 @@ function endurecerAddonBedrock(files, plan){
     const m=f.content.match(/import\s*\{([^}]*)\}\s*from\s*["']@minecraft\/server["'];?/);
     const ya=new Set(m?m[1].split(",").map(s=>s.trim().split(/\s+as\s+/).pop()).filter(Boolean):[]);
     const locales=new Set();for(const x of sin.matchAll(/(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/g))locales.add(x[1]);
+    // nombres declarados por desestructuración: const { world, system } = mc;  (evita declararlos dos veces)
+    for(const x of sin.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g))for(const n of x[1].split(","))locales.add(n.trim().split(/\s*:\s*/).pop().split("=")[0].trim());
     for(const x of f.content.matchAll(/import\s*\{([^}]*)\}\s*from\s*["'][^"']+["']/g))for(const n of x[1].split(","))ya.add(n.trim().split(/\s+as\s+/).pop());
     const faltan=SRV.filter(n=>!ya.has(n)&&!locales.has(n)&&new RegExp("(^|[^\\w$.])"+n+"\\b").test(sin));
     if(!faltan.length)continue;
@@ -3643,6 +3723,35 @@ function pulidoFinalAddon(files, plan, prompt){
     if(av.length&&!balanceJs(c)){f.content=c;for(const a of av)nota(f.path,"API corregida: "+a);}
   }
 
+  // 6f) v14.49.1: declaraciones duplicadas (rompen TODO el módulo) y detección de armadura puesta
+  const pfFinLlave=(src,ini)=>{let d=0,q=null;for(let i=ini;i<src.length;i++){const ch=src[i];if(q){if(ch==="\\"){i++;continue;}if(ch===q)q=null;continue;}if(ch==='"'||ch==="'"||ch==="`"){q=ch;continue;}if(ch==="/"&&src[i+1]==="/"){const n=src.indexOf("\n",i);if(n<0)return -1;i=n;continue;}if(ch==="{")d++;else if(ch==="}"){d--;if(d===0)return i;}}return -1;};
+  for(const f of scripts()){
+    let c=f.content; const av=[];
+    // a) import { world } + const { world } = mc  → "Identifier 'world' has already been declared"
+    const imp=new Set(); for(const m of c.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']@minecraft\/server["']/g))for(const n of m[1].split(","))imp.add(n.trim().split(/\s+as\s+/).pop());
+    if(imp.size){
+      c=c.replace(/^[ \t]*const\s*\{([^}]*)\}\s*=\s*\w+\s*;?[ \t]*$/gm,(line,lista)=>{
+        const nombres=lista.split(",").map(s=>s.trim()).filter(Boolean);
+        const quedan=nombres.filter(n=>!imp.has(n.split(":").pop().trim()));
+        if(quedan.length===nombres.length)return line;
+        av.push("declaración duplicada de "+nombres.filter(n=>!quedan.includes(n)).join(", ")+" (rompía todo el módulo)");
+        return quedan.length?line.replace(lista,quedan.join(", ")):"";
+      });
+    }
+    // b) "armadura completa" que mira el inventario en vez de las ranuras de equipo
+    for(let g=0;g<5;g++){
+      const mm=/function\s+(\w*(?:[Ff]ull|[Ss]et|[Cc]omplet|[Ww]earing|[Ee]quipped)\w*)\s*\(\s*(\w+)\s*\)\s*\{/.exec(c); if(!mm)break;
+      const ini=mm.index+mm[0].length-1, fin=pfFinLlave(c,ini); if(fin<0)break;
+      const cuerpo=c.slice(ini,fin+1); const arr=/(\w+)\.every\s*\(/.exec(cuerpo);
+      if(!arr||!/inventory/.test(cuerpo)||/equippable/.test(cuerpo))break;
+      const nuevo="function "+mm[1]+"("+mm[2]+") {\n  try {\n    const eq = "+mm[2]+".getComponent(\"minecraft:equippable\");\n    if (!eq) return false;\n    const puestas = [\"Head\", \"Chest\", \"Legs\", \"Feet\"].map((s) => eq.getEquipment(s)?.typeId);\n    return "+arr[1]+".every((p) => puestas.includes(p));\n  } catch (e) { return false; }\n}";
+      c=c.slice(0,mm.index)+nuevo+c.slice(fin+1); av.push("la armadura se buscaba en el inventario; ahora se lee lo que el jugador lleva PUESTO"); break;
+    }
+    // c) filtro de entidades inexistente "minecraft:mob" (+ no dañar jugadores/objetos)
+    if(/type\s*:\s*["']minecraft:mob["']/.test(c)){c=c.replace(/type\s*:\s*["']minecraft:mob["']/g,'families: ["monster"], excludeTypes: ["minecraft:player", "minecraft:item", "minecraft:xp_orb"]');av.push("type 'minecraft:mob' no existe; se usa la familia monster y se excluye a los jugadores");}
+    if(av.length&&!balanceJs(c)){f.content=c;for(const a of av)nota(f.path,a);}
+  }
+
   // 7) sonidos mal ubicados / nombres no ASCII
   for(const f of [...files]){
     if(/^RP\/sounds\/[^/]+\.json$/.test(f.path)&&!/^RP\/sounds\/sound_definitions\.json$/.test(f.path)){quitarF(f.path);nota(f.path,"archivo de sonido en lugar equivocado y sin audio real; se quitó (Minecraft lee RP/sounds/sound_definitions.json)");}
@@ -3885,7 +3994,9 @@ async function mcBuild(body,env,request){
     plan._prompt=prompt;
     plan._modelos3d=(Array.isArray(body.modelos3d)?body.modelos3d:[]).slice(0,4).map(q=>({entidad:String(q&&q.entidad||""),partes:limpiarModelo3d(q&&q.partes)})).filter(q=>q.entidad&&q.partes.length>=3);
     const vz=await generarVocesAddon(plan,env);plan._voces=vz.out;
+    const rellenados=completarObjetosFaltantes(entrada,plan);
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
+    if(rellenados.length)r.notas.push("Se completaron con una plantilla válida (la IA no los escribió): "+rellenados.join(", ")+". Son básicos: revísalos o pide mejorarlos.");
     try{const hd=endurecerAddonBedrock(r.files,plan);for(const g of hd.generado)r.notas.push("Módulo añadido: "+g);for(const x of hd.cambios.slice(0,30))r.notas.push("Corregido: "+x.path+" — "+x.motivo);r.conteo.scripts=r.files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)).length;}catch(e){r.notas.push("El endurecimiento automático falló y se omitió: "+String(e&&e.message||e).slice(0,100));}
     const npcAI=integrarArquitecturaNPC(r.files,plan,prompt,env.MC_SERVER_VERSION);
     for(const x of npcAI.avisos)r.notas.push(x);
@@ -5737,7 +5848,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.49.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.50.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
