@@ -1131,9 +1131,12 @@ function egoExternalProviders(env, task="chat") {
     { id:"sambanova", key:env.SAMBANOVA_API_KEY, model:env.EGO_SAMBANOVA_MODEL||"Meta-Llama-3.3-70B-Instruct", url:"https://api.sambanova.ai/v1/chat/completions", kind:"openai" },
     { id:"nvidia", key:env.NVIDIA_NIM_API_KEY||env.NVIDIA_API_KEY, model:env.EGO_NVIDIA_MODEL, url:"https://integrate.api.nvidia.com/v1/chat/completions", kind:"openai" },
     { id:"cohere", key:env.COHERE_API_KEY, model:env.EGO_COHERE_MODEL||"command-a-03-2025", url:"https://api.cohere.com/v2/chat", kind:"cohere" },
-    { id:"mistral", key:env.MISTRAL_API_KEY, model:env.EGO_MISTRAL_MODEL||"mistral-small-latest", url:"https://api.mistral.ai/v1/chat/completions", kind:"openai" }
+    { id:"mistral", key:env.MISTRAL_API_KEY, model:env.EGO_MISTRAL_MODEL||"mistral-small-latest", url:"https://api.mistral.ai/v1/chat/completions", kind:"openai" },
+    // v14.47: más proveedores gratuitos (solo se usan si existe su clave como secreto en Cloudflare)
+    { id:"cerebras", key:env.CEREBRAS_API_KEY, model:env.EGO_CEREBRAS_MODEL||"gpt-oss-120b", url:"https://api.cerebras.ai/v1/chat/completions", kind:"openai" },
+    { id:"codestral", key:env.CODESTRAL_API_KEY, model:env.EGO_CODESTRAL_MODEL||"codestral-latest", url:"https://codestral.mistral.ai/v1/chat/completions", kind:"openai" }
   ];
-  const orden=String(env.EGO_PROVIDER_ORDER||"gemini,cohere,sambanova,groq,nvidia,mistral").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
+  const orden=String(env.EGO_PROVIDER_ORDER||"gemini,cerebras,codestral,groq,cohere,sambanova,nvidia,mistral").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
   const rank=new Map(orden.map((x,i)=>[x,i]));
   return defs.filter(x=>String(x.key||"").trim() && String(x.model||"").trim())
     .sort((a,b)=>(rank.get(a.id)??99)-(rank.get(b.id)??99));
@@ -1172,13 +1175,41 @@ async function egoExternalChat(provider,messages,env,maxTokens=3000,timeoutMs=18
 // un fallback explícito. Los fallbacks no sustituyen al modelo principal si este responde.
 const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning" };
 function externosParaModulo(env) { return Math.max(1, egoExternalProviders(env, "code").length); }
+// v14.47: modelos :free de OpenRouter descubiertos en vivo (el catálogo gratuito rota seguido).
+// Consulta pública (sin clave), se guarda 1 hora; si falla, se usan solo los IDs fijos.
+async function orModelosGratis(task){
+  try{
+    const g=globalThis.__egoOrFreeCache;
+    if(!g||Date.now()-g.t>3600000){
+      const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),3500);
+      let lista=[];
+      try{
+        const r=await fetch("https://openrouter.ai/api/v1/models",{signal:ctl.signal});
+        const d=await r.json();
+        lista=(d.data||[]).filter(m=>m&&typeof m.id==="string"&&/:free$/.test(m.id)&&Number(m.context_length||0)>=32000&&String((m.architecture&&m.architecture.modality)||"text->text").endsWith("->text")&&!/vl|vision|image|audio|embed|guard|safeguard/i.test(m.id)).map(m=>m.id);
+      } finally {clearTimeout(tm);}
+      globalThis.__egoOrFreeCache={t:Date.now(),lista};
+    }
+    const lista=globalThis.__egoOrFreeCache.lista||[];
+    const pref=task==="code"
+      ?[/coder|code|flint|devstral/i,/qwen/i,/kimi|glm|deepseek|minimax/i,/gpt-oss|nemotron|llama|mistral/i]
+      :[/deepseek|kimi|glm|qwen|gpt-oss|nemotron/i,/./];
+    const punt=(id)=>{const i=pref.findIndex(rx=>rx.test(id));return i<0?99:i;};
+    return [...lista].sort((a,b)=>punt(a)-punt(b)).slice(0,4);
+  }catch(_){ return []; }
+}
 async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) {
   if (!routerApiKey(env) && !egoExternalProviders(env, EGO_ROLE_TASK[role]||"chat").length && !env.AI) throw new Error("No hay proveedores configurados: agrega claves API de Gemini, Groq, SambaNova, NVIDIA NIM, Cohere o Mistral, o conserva OpenRouter/Workers AI.");
   const task = EGO_ROLE_TASK[role] || "chat";
   const envName = `EGO_${String(role).toUpperCase()}_MODEL`;
   const primary = String(env[envName] || EGO_TEAM_MODELS[role] || "").trim();
   const fallbacks = task === "code" ? [OR_FREE.code, OR_FREE.fallback] : [OR_FREE.reasoning, OR_FREE.fallback];
-  const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
+  const sinCred = !!(globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
+  const esGratis = (m) => /:free$|^openrouter\/free$/.test(String(m));
+  const dinamicos = routerApiKey(env) ? await orModelosGratis(task) : [];
+  let models = [...new Set([primary, fallbacks[0], ...dinamicos, fallbacks[1]].filter(Boolean))];
+  // Sin crédito en OpenRouter: los modelos de pago darían 402; se prueban solo los gratuitos.
+  if (sinCred) models = models.filter(esGratis);
   const failures = [];
   // Un HTTP 200 con texto no equivale a una respuesta utilizable. Las tareas
   // estructuradas pueden aportar validateContent para que el failover continúe
@@ -1192,8 +1223,8 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const bounded = Number.isFinite(Number(options.maxTotalMs));
   const deadline = bounded ? Date.now() + Math.max(5000, Number(options.maxTotalMs)) : Infinity;
   const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
-  const orBloqueado = !routerApiKey(env) || (globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
-  if (orBloqueado && routerApiKey(env)) failures.push("OpenRouter sin crédito (402), se omite");
+  const orBloqueado = !routerApiKey(env) || !models.length;
+  if (sinCred && routerApiKey(env)) failures.push("OpenRouter sin crédito (402): se omiten los modelos de pago y se usan solo los :free");
   // Proveedores externos independientes: una clave/cuota agotada no bloquea las demás.
   // En tareas con presupuesto limitado se reparten los intentos para conservar tiempo para CF.
   const externos=egoExternalProviders(env,task);
@@ -1235,7 +1266,8 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
     } catch (e) {
       const em = String(e?.message || e);
       failures.push(`${models[i]}: ${em.slice(0, 120)}`);
-      if (/HTTP 402/.test(em)) { globalThis.__egoOrSinCredito = Date.now(); break; }
+      // 402 en un modelo de pago: se marca la falta de crédito y se sigue con los gratuitos (antes se abandonaba OpenRouter entero).
+      if (/HTTP 402/.test(em)) { if (!esGratis(models[i])) { globalThis.__egoOrSinCredito = Date.now(); for (let j = models.length - 1; j > i; j--) if (!esGratis(models[j])) models.splice(j, 1); } else break; }
     }
   }
   if (env.AI && Date.now() < deadline && options.cfModels !== 0) {
@@ -1872,10 +1904,10 @@ async function mcPart(body,env){
           {role:"user",content:userIntento+(errores.length?"\n\nERRORES A CORREGIR:\n- "+errores.slice(0,8).join("\n- "):"")}
         ],env,maxTokensParte,{
           maxTotalMs:presupuesto,
-          maxModels:2,
+          maxModels:4,
           perModelMs:Math.min(Math.floor(presupuesto*0.6),Math.floor(25000+maxTokensParte*8)),
           providerOffset:intento,
-          providerModels:Math.min(2,egoExternalProviders(env,"code").length),
+          providerModels:Math.min(3,egoExternalProviders(env,"code").length),
           validateContent:(content)=>{const parsed=leerProyectoModelo(content);return !!(parsed&&parsed.files&&parsed.files.length);},
           providerTimeoutMs:timeoutProveedor,
           cfModels:1,
@@ -2883,6 +2915,8 @@ function endurecerAddonBedrock(files, plan){
     if(/superviviente|survivor|aldeano|npc/i.test(n))superv={id,f,o,e,c,n};
     if(ch){guardar(f,o);nota(f.path,"grupos de componentes mal formados eliminados");}
   }
+  // un "superviviente" que ataca jugadores es un enemigo, no un NPC amistoso: sin diálogo ni misión de protegerlo
+  if(superv&&/"player"/.test(JSON.stringify(superv.c["minecraft:behavior.nearest_attackable_target"]||{})))superv=null;
   // zombis idénticos → estadísticas por arquetipo
   const firma=(z)=>[z.c["minecraft:health"]?.value,z.c["minecraft:attack"]?.damage,z.c["minecraft:movement"]?.value].join("/");
   const conteoFirma=new Map();for(const z of zombis)conteoFirma.set(firma(z),(conteoFirma.get(firma(z))||0)+1);
@@ -3307,6 +3341,202 @@ function endurecerAddonBedrock(files, plan){
   return {cambios,generado,modulos,ns};
 }
 
+// ===== v14.47: pulido final del add-on (reglas deterministas, idempotentes) =====
+// Corrige errores que los modelos cometen una y otra vez y que Minecraft rechaza o que rompen la jugabilidad.
+function pfFinBloque(src, ini){
+  let d=0,q=null;
+  for(let i=ini;i<src.length;i++){
+    const ch=src[i];
+    if(q){ if(ch==="\\"){i++;continue;} if(ch===q)q=null; continue; }
+    if(ch==='"'||ch==="'"||ch==="`"){q=ch;continue;}
+    if(ch==="/"&&src[i+1]==="/"){const n=src.indexOf("\n",i);if(n<0)return -1;i=n;continue;}
+    if(ch==="/"&&src[i+1]==="*"){const n=src.indexOf("*/",i+2);if(n<0)return -1;i=n+1;continue;}
+    if(ch==="(")d++; else if(ch===")"){d--; if(d===0)return i;}
+  }
+  return -1;
+}
+function pfQuitarSubs(content, rxHead, cond){
+  let out=content,n=0,pos=0;
+  for(let guard=0;guard<20;guard++){
+    rxHead.lastIndex=pos; const m=rxHead.exec(out); if(!m)break;
+    const ini=m.index+m[0].length-1, fin=pfFinBloque(out,ini);
+    if(fin<0)break;
+    let fin2=fin+1; if(out[fin2]===";")fin2++;
+    const bloque=out.slice(m.index,fin2);
+    if(cond(bloque)){ out=out.slice(0,m.index)+"// (EGO) bloque duplicado eliminado: otro módulo ya lo maneja"+out.slice(fin2); n++; pos=m.index+10; }
+    else pos=fin2;
+  }
+  return {content:out,n};
+}
+function pulidoFinalAddon(files, plan, prompt){
+  const cambios=[];
+  const nota=(p,m)=>{ if(!cambios.some(c=>c.path===p&&c.motivo===m))cambios.push({path:p,motivo:m}); };
+  const get=(p)=>files.find(f=>f.path===p);
+  const quitarF=(p)=>{const i=files.findIndex(x=>x.path===p); if(i>=0)files.splice(i,1);};
+  const guardar=(f,o)=>{f.content=JSON.stringify(o,null,2)+"\n";};
+  const scripts=()=>files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)&&typeof f.content==="string");
+
+  // inventario
+  const ents=new Map(), items=new Map();
+  for(const f of files){
+    const o=hdJson(f); if(!o)continue;
+    if(/^BP\/entities\/[^/]+\.json$/.test(f.path)&&o["minecraft:entity"]){const id=o["minecraft:entity"].description?.identifier; if(id)ents.set(id,f);}
+    if(/^BP\/items\/[^/]+\.json$/.test(f.path)&&o["minecraft:item"]){const id=o["minecraft:item"].description?.identifier; if(id)items.set(id,f);}
+  }
+  const nsCnt=new Map();for(const id of [...ents.keys(),...items.keys()]){const n=id.split(":")[0];nsCnt.set(n,(nsCnt.get(n)||0)+1);}
+  const ns=[...nsCnt.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||String(plan&&plan.ns||"ego");
+  const armasJs=get("BP/scripts/ego_armas.js");
+  const idsArmas=armasJs?[...armasJs.content.matchAll(/"([\w]+:[\w]+)"\s*:\s*\{\s*"nombre"/g)].map(m=>m[1]):[];
+  const idsCuras=armasJs?[...armasJs.content.matchAll(/"([\w]+:[\w]+)"\s*:\s*\{\s*"vida"/g)].map(m=>m[1]):[];
+
+  // 1) componentes de Resource Pack metidos en la entidad del BP (Minecraft los rechaza)
+  const SOLO_RP=["minecraft:geometry","minecraft:skin_id","minecraft:animation_controller","minecraft:animations","minecraft:render_controller","minecraft:material","minecraft:sound_event","minecraft:variant_texture"];
+  for(const [id,f] of ents){
+    const o=hdJson(f); if(!o)continue; const e=o["minecraft:entity"]; let ch=false;
+    const limpia=(c)=>{ if(!c||typeof c!=="object")return; for(const k of SOLO_RP) if(k in c){delete c[k];ch=true;} for(const k of Object.keys(c)){ if(/\s/.test(k)){const k2=k.replace(/\s+/g,""); if(!(k2 in c))c[k2]=c[k]; delete c[k]; ch=true;} } };
+    limpia(e.components); for(const g of Object.values(e.component_groups||{}))limpia(g);
+    if(ch){guardar(f,o);nota(f.path,"se quitaron componentes que solo existen en el Resource Pack (geometría, skin, animaciones, sonidos); Minecraft los rechazaba en el BP");}
+  }
+
+  // 2) ítems: campos viejos/inválidos, comida duplicada con script, arma con shooter + script
+  const huevos=[];
+  for(const [id,f] of items){
+    const o=hdJson(f); if(!o)continue; const it=o["minecraft:item"]; const c=it.components||(it.components={}); let ch=false;
+    const esHuevo=!!c["minecraft:spawn_egg"]||/spawn_egg/i.test(id)||/spawn_egg/i.test(f.path);
+    if(esHuevo){ huevos.push({id,f,def:c["minecraft:spawn_egg"]||{}}); continue; }
+    if(it.description&&"category" in it.description){delete it.description.category;ch=true;}
+    for(const k of ["minecraft:creative_category","minecraft:stacked_by_data"]) if(k in c){delete c[k];ch=true;}
+    if("events" in it){delete it.events;ch=true;}
+    const fd=c["minecraft:food"];
+    if(fd&&typeof fd==="object"){
+      for(const k of Object.keys(fd)){ if(/\s/.test(k)){const k2=k.replace(/\s+/g,""); if(!(k2 in fd))fd[k2]=fd[k]; delete fd[k]; ch=true;} }
+      if("on_consume" in fd){delete fd.on_consume;ch=true;}
+      if(fd.using_converts_to==="minecraft:air"){delete fd.using_converts_to;ch=true;}
+    }
+    if(idsCuras.includes(id)&&(c["minecraft:food"]||c["minecraft:use_duration"])){delete c["minecraft:food"];delete c["minecraft:use_duration"];ch=true;nota(f.path,"la cura la gestiona el script (clic derecho); se quitó minecraft:food para que no se consuma dos veces");}
+    if(idsArmas.includes(id)&&c["minecraft:shooter"]){delete c["minecraft:shooter"];ch=true;nota(f.path,"el disparo lo hace el script; se quitó minecraft:shooter que chocaba con él");}
+    if(ch){guardar(f,o);nota(f.path,"campos inválidos o viejos del ítem corregidos");}
+  }
+  // huevos de aparición: Minecraft ya crea <ns>:<entidad>_spawn_egg desde el RP; el ítem manual es inválido
+  const renombrados=[];
+  for(const h of huevos){
+    const objetivo=(h.def&&h.def.entity)||[...ents.keys()].find(e=>h.id.includes(e.split(":")[1]));
+    quitarF(h.f.path);
+    const ni=objetivo?objetivo+"_spawn_egg":null;
+    if(ni)renombrados.push({viejo:h.id,nuevo:ni});
+    const it=get("RP/textures/item_texture.json");
+    if(it){const o=hdJson(it); if(o&&o.texture_data){const k=hdSnake(h.id); if(o.texture_data[k]){delete o.texture_data[k];guardar(it,o);}}}
+    nota(h.f.path,"se quitó el ítem de huevo manual (inválido); el juego crea el huevo automático "+(ni||"")+" con los colores de la entidad");
+    if(objetivo){
+      const rf=files.find(x=>/^RP\/entity\/.+\.json$/.test(x.path)&&x.content.includes('"'+objetivo+'"'));
+      if(rf){const ro=hdJson(rf); const d=ro&&ro["minecraft:client_entity"]&&ro["minecraft:client_entity"].description; if(d&&!d.spawn_egg){d.spawn_egg={base_color:h.def.base_color||"#4b4b4b",overlay_color:h.def.overlay_color||"#964b00"};guardar(rf,ro);}}
+    }
+  }
+  for(const f of files){
+    if(/^RP\/texts\/.+\.lang$/.test(f.path)&&typeof f.content==="string"&&huevos.length){
+      f.content=f.content.split("\n").filter(l=>!huevos.some(h=>l.startsWith("item."+h.id+"=")||l.startsWith("item."+h.id+".name="))).join("\n");
+    }
+  }
+
+  // 3) recetas: "count" dentro de ingredientes no existe
+  for(const f of files){
+    if(!/^BP\/recipes\/.+\.json$/.test(f.path))continue;
+    const o=hdJson(f); if(!o)continue; let ch=false;
+    const sl=o["minecraft:recipe_shapeless"],sh=o["minecraft:recipe_shaped"];
+    if(sl&&Array.isArray(sl.ingredients)){
+      const nuevo=[]; for(const ing of sl.ingredients){ const n=ing&&typeof ing==="object"&&Number(ing.count)>1?Math.min(9,Math.floor(ing.count)):1; if(ing&&"count" in ing){delete ing.count;ch=true;} for(let k=0;k<n;k++)nuevo.push({...ing}); }
+      if(nuevo.length>9)nuevo.length=9; sl.ingredients=nuevo;
+    }
+    if(sh&&sh.key)for(const v of Object.values(sh.key))if(v&&typeof v==="object"&&"count" in v){delete v.count;ch=true;}
+    if(ch){guardar(f,o);nota(f.path,"receta: los ingredientes no admiten 'count'; se repiten los ingredientes");}
+  }
+
+  // 4) munición única: si existe un ítem de munición propio, el arma, las misiones y el botín lo usan
+  const ammo=[...items.keys()].find(i=>/muni|ammo|bala|bullet|cartucho/i.test(hdSnake(i)));
+  if(ammo&&armasJs){
+    let cambio=false;
+    for(const f of scripts()){
+      let c=f.content;
+      if(/^BP\/scripts\/ego_(nucleo|armas|misiones)\.js$/.test(f.path)){
+        c=c.replace(/"minecraft:iron_nugget"/g,JSON.stringify(ammo));
+        c=c.replace(/\(pepitas de hierro\)/g,"("+hdSnake(ammo).replace(/_/g," ")+")").replace(/pepitas de hierro/g,hdSnake(ammo).replace(/_/g," "));
+      }
+      if(c!==f.content){f.content=c;cambio=true;nota(f.path,"la munición del arma ahora es "+ammo+" (antes pepitas de hierro, que no coincidía con el ítem y la receta)");}
+    }
+    for(const f of files){
+      if(!/^BP\/loot_tables\/entities\/.+\.json$/.test(f.path))continue;
+      const o=hdJson(f); if(!o||!Array.isArray(o.pools)||JSON.stringify(o).includes('"'+ammo+'"'))continue;
+      o.pools.push({rolls:1,conditions:[{condition:"random_chance",chance:0.55}],entries:[{type:"item",name:ammo,weight:1,functions:[{function:"set_count",count:{min:1,max:3}}]}]});
+      guardar(f,o);nota(f.path,"los zombis ahora sueltan la munición del arma");
+    }
+  }
+
+  // 5) bloques de código duplicados entre módulos (curación doble, muerte duplicada)
+  for(const f of scripts()){
+    if(/^BP\/scripts\/ego_/.test(f.path))continue;
+    let c=f.content, tot=0;
+    if(idsCuras.length){const r=pfQuitarSubs(c,/world\.afterEvents\.itemUse\.subscribe\s*\(/g,(b)=>idsCuras.some(id=>b.includes(id)));c=r.content;tot+=r.n;}
+    {const r=pfQuitarSubs(c,/world\.afterEvents\.entityHurt\.subscribe\s*\(/g,(b)=>/currentValue\s*<=\s*0/.test(b)&&/spawnItem/.test(b)&&/\.remove\(\)/.test(b));c=r.content;tot+=r.n;}
+    if(tot&&!balanceJs(c)){f.content=c;nota(f.path,"se quitaron "+tot+" bloque(s) que repetían lo que ya hace otro módulo (curación doble / muerte duplicada)");}
+  }
+
+  // 6) límite de apariciones por script (evita acumular cientos de entidades)
+  const idsProp=[...ents.keys()];
+  let usoSpawn=false;
+  for(const f of scripts()){
+    if(/^BP\/scripts\/ego_/.test(f.path))continue;
+    let c=f.content, n=0;
+    c=c.replace(/(\b[A-Za-z_$][\w$.]*)\.spawnEntity\(\s*(["'])([\w]+:[\w]+)\2\s*,/g,(m,d,q,id)=>{ if(!idsProp.includes(id))return m; n++; return "egoSpawnSeguro("+d+", "+q+id+q+","; });
+    if(n){ c='import { egoSpawnSeguro } from "./ego_nucleo.js";\n'+c; if(!balanceJs(c)){f.content=c;usoSpawn=true;nota(f.path,"las apariciones automáticas ahora tienen límite (máx. 6 cerca); antes se acumulaban sin fin");} }
+  }
+  if(usoSpawn||files.some(f=>/egoSpawnSeguro/.test(f.content||""))){
+    const fn='\nexport function egoSpawnSeguro(dim, id, loc, max = 6) {\n  try { if (dim.getEntities({ type: id, location: loc, maxDistance: 64 }).length >= max) return undefined; } catch (e) {}\n  return dim.spawnEntity(id, loc);\n}\n';
+    let nu=get("BP/scripts/ego_nucleo.js");
+    if(!nu){files.push({path:"BP/scripts/ego_nucleo.js",content:"// Núcleo compartido (EGO AI)."+fn});nota("BP/scripts/ego_nucleo.js","se creó el núcleo con egoSpawnSeguro");}
+    else if(!/egoSpawnSeguro/.test(nu.content)){nu.content+=fn;}
+  }
+
+  // 7) sonidos mal ubicados / nombres no ASCII
+  for(const f of [...files]){
+    if(/^RP\/sounds\/[^/]+\.json$/.test(f.path)&&!/^RP\/sounds\/sound_definitions\.json$/.test(f.path)){quitarF(f.path);nota(f.path,"archivo de sonido en lugar equivocado y sin audio real; se quitó (Minecraft lee RP/sounds/sound_definitions.json)");}
+    else if(/[^\x00-\x7F]/.test(f.path)&&/\.(json|png|ogg|js)$/.test(f.path)){quitarF(f.path);nota(f.path,"nombre de archivo con caracteres no ASCII (ñ, acentos); se quitó");}
+  }
+
+  // 8) manifests con nombre genérico
+  const nom=String((plan&&plan.nombre)||"").trim().slice(0,40);
+  if(nom){
+    for(const [p,suf] of [["BP/manifest.json","BP"],["RP/manifest.json","RP"]]){
+      const f=get(p); const o=f&&hdJson(f); if(o&&o.header&&/^Add-on EGO (BP|RP)$/.test(String(o.header.name))){o.header.name=nom+" "+suf;o.header.description=(suf==="BP"?"Behavior pack: ":"Resource pack: ")+nom;guardar(f,o);nota(p,"nombre del pack con el título del add-on");}
+    }
+  }
+
+  // 9) README honesto y sin el pedido pegado
+  const rd=get("BP/README.md");
+  if(rd&&typeof rd.content==="string"){
+    let t=rd.content;
+    if(/Actúa como|Tu misión es|PROYECTO MINECRAFT|PRUEBA TÉCNICA|IMPORTANTE:/i.test(t.split("## Instalar")[0])){
+      const i=t.indexOf("## Instalar");
+      t="# "+(nom||"Add-on EGO")+"\n\nAdd-on para Minecraft Bedrock creado por EGO AI.\n\n"+(plan&&plan.resumen?String(plan.resumen).slice(0,500)+"\n\n":"")+(i>=0?t.slice(i):"");
+      nota(rd.path,"el README traía pegado el texto completo del pedido; se reemplazó por un resumen");
+    }
+    for(const r of renombrados){ t=t.split(r.viejo).join(r.nuevo); }
+    const ids=new Set(files.map(f=>f.path));
+    const desc={"ego_armas.js":"armas con clic derecho (gastan munición del inventario) y curas","ego_misiones.js":"misiones con progreso guardado (/scriptevent ego:misiones)","ego_infeccion.js":"infección por golpe en 3 etapas, se cura con botiquín","ego_zombis.js":"habilidades especiales de zombis","ego_estructuras.js":"ruinas con cofres de botín","ego_supervivientes.js":"diálogo al interactuar con el superviviente","ego_nucleo.js":"utilidades compartidas","ego_npc_brain.js":"compañero: sigue al jugador y se teletransporta si se aleja (no combate por script)"};
+    const lineas=scripts().map(f=>f.path.split("/").pop()).map(n=>"- "+n+(desc[n]?": "+desc[n]:""));
+    const lootZ=files.some(f=>/^BP\/loot_tables\/entities\//.test(f.path)&&ammo&&f.content.includes('"'+ammo+'"'));
+    const sec="## Qué hace realmente este add-on (verificado por EGO AI)\n"+(lineas.length?lineas.join("\n"):"- Contenido por datos (entidades, ítems, recetas).")+
+      (ammo?"\n- Munición de las armas: `"+ammo+"`"+(lootZ?"; los zombis pueden soltarla":"")+".":"")+
+      (ids.has("BP/scripts/ego_armas.js")?"\n- Las armas se usan con clic derecho (no hay modo automático al mantener).":"")+
+      (ids.has("BP/scripts/ego_misiones.js")?"\n- El progreso de misiones se guarda en el jugador.":"")+
+      "\n\n### Limitaciones conocidas\n- Revisión estática y pruebas con un simulador; no se probó dentro de Minecraft.\n"+
+      (ids.has("BP/scripts/ego_estructuras.js")?"- Las ruinas aparecen cerca del jugador y al colocar el bloque; no son estructuras nativas ni hay biomas nuevos.\n":"- No se generan estructuras automáticamente"+(ids.has("BP/functions/ego_ruina.mcfunction")?": usa `/function ego_ruina` para construir el refugio de ejemplo.":".")+"\n");
+    const rx=/## Qué hace realmente este add-on[\s\S]*?(?=\n## (?!Qué hace)|$)/;
+    t=rx.test(t)?t.replace(rx,()=>sec):t.replace(/\s*$/,"")+"\n\n"+sec;
+    if(t!==rd.content){rd.content=t;}
+  }
+  return {cambios};
+}
+
 // Arquitectura EGO de compañeros NPC: complemento determinista y original para entidades
 // explícitamente incluidas en el proyecto. No copia código ni recursos de terceros.
 function integrarArquitecturaNPC(files, plan, prompt, serverVersion){
@@ -3322,6 +3552,8 @@ function integrarArquitecturaNPC(files, plan, prompt, serverVersion){
       const id=e?.description?.identifier;
       if(!id || !id.includes(':')) continue;
       const c=e.components=e.components||{};
+      // Un zombi/monstruo que ataca jugadores NO es un compañero: no se convierte en aliado.
+      if(/"player"/.test(JSON.stringify(c['minecraft:behavior.nearest_attackable_target']||{}))) continue;
       c['minecraft:type_family']=c['minecraft:type_family']||{family:['mob','ego_ally']};
       const fam=c['minecraft:type_family'].family;
       if(Array.isArray(fam)&&!fam.includes('ego_ally'))fam.push('ego_ally');
@@ -3534,6 +3766,7 @@ async function mcBuild(body,env,request){
     for(const x of ciclo.informe.avisosFinales)r.notas.push("Auto-reparación: "+x);
     for(const x of validacion.errores)r.notas.push("Validación pendiente: "+x);
     for(const x of validacion.avisos)r.notas.push("Revisión: "+x);
+    try{const pf=pulidoFinalAddon(r.files,plan,prompt);for(const x of pf.cambios.slice(0,30))r.notas.push("Corregido: "+x.path+" — "+x.motivo);r.conteo.scripts=r.files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)).length;}catch(e){r.notas.push("El pulido final falló y se omitió: "+String(e&&e.message||e).slice(0,100));}
     const readme=r.files.find(f=>/^BP\/README\.md$/i.test(f.path));
     if(readme)readme.content+="\n\n## Validación estructural de EGO AI\n- Resultado: "+(validacion.ok?"sin errores estructurales detectados":"se detectaron problemas que debes revisar")+"\n- Archivos revisados: "+validacion.archivos+"\n"+[...validacion.errores,...validacion.avisos].map(x=>"- "+x).join("\n")+"\n- Esta revisión estática no sustituye la importación y prueba dentro de Minecraft.\n\n## Cobertura de requisitos solicitados\n- Resultado: "+auditoriaRequisitos.passed+"/"+auditoriaRequisitos.total+" verificaciones de características detectables.\n"+auditoriaRequisitos.findings.map(x=>"- ["+(x.ok?"VERIFICADO":"NO VERIFICADO")+"] "+x.label+": "+x.evidence).join("\n")+"\n- Un requisito no verificado no debe anunciarse como implementado.\n";
     const au=await auditarAddon(plan,r.files,r.conteo.habilidades,env);
@@ -4289,7 +4522,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
       const planGen=planDesdeArchivosMinecraft(files,name,prompt);
       const procesado=postprocesarAddon(files,planGen,env.MC_SERVER_VERSION);
       files.splice(0,files.length,...procesado.files);
-      try{endurecerAddonBedrock(files,planGen);}catch(e){console.warn('endurecer',String(e&&e.message||e).slice(0,100));}
+      try{endurecerAddonBedrock(files,planGen);pulidoFinalAddon(files,planGen,prompt);}catch(e){console.warn('endurecer',String(e&&e.message||e).slice(0,100));}
     }
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
     if (minecraft && mcKind === "addon") avisos.push(...auditarArquitecturaIAAddon(files, prompt).warnings);
