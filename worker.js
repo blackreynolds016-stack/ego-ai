@@ -11,7 +11,7 @@
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.48.0 — EQUIPO DE 7 AGENTES, MODELOS EN VIVO, MÁS TIEMPO
+// EGO AI WORKER v14.49.0 — 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -25,7 +25,7 @@ const EGO_TEAM_MODELS = {
   auditor: "qwen/qwen3.8-27b",
   // v14.47.2: equipo ampliado a 7 agentes (cada uno con su especialidad)
   datos: "moonshotai/kimi-k3",          // escribe JSON de ítems/entidades/bloques/recetas
-  api: "deepseek/deepseek-v4.1-flash",  // revisor de compatibilidad con la API/versión
+  api: "z-ai/glm-5.3-flash",  // revisor de compatibilidad con la API/versión
   reparador: "z-ai/glm-5.3"             // corrige los defectos que encuentran los revisores
 };
 // Preferencias por rol: el worker consulta el catálogo vivo de OpenRouter y elige el mejor modelo DISPONIBLE
@@ -61,7 +61,7 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, X-Usuario-Correo, Authorization",
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas, X-EGO-Validacion, X-EGO-Reparacion, X-EGO-Cobertura"
+  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas, X-EGO-Validacion, X-EGO-Reparacion, X-EGO-Cobertura, X-EGO-Parcial"
 };
 
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
@@ -3580,6 +3580,69 @@ function pulidoFinalAddon(files, plan, prompt){
     }
   }
 
+  // 6e) v14.49: esquemas que los modelos escriben con formato viejo o inventado (bloques, armaduras, armas, mobs, comida)
+  for(const f of files){
+    if(/^BP\/blocks\/[^/]+\.json$/.test(f.path)){
+      const o=hdJson(f); const b=o&&o["minecraft:block"]; if(!b)continue; let ch=false; const m=[];
+      const d=b.description||(b.description={}); const c=b.components||(b.components={});
+      if("category" in d){delete d.category;ch=true;m.push("description.category");}
+      if(d.properties&&!d.states){d.states=d.properties;delete d.properties;ch=true;m.push("properties→states");}
+      for(const k of ["minecraft:creative_category"]) if(k in c){delete c[k];ch=true;m.push(k);}
+      if("events" in b){delete b.events;ch=true;m.push("events");}
+      for(const k of Object.keys(c)) if(/^minecraft:(on_interact|on_step_on|on_step_off|on_fall_on|on_player_placing|on_player_destroyed|on_placed|queued_ticking|random_ticking)$/.test(k)){delete c[k];ch=true;m.push(k);}
+      if(typeof c["minecraft:block_light_emission"]==="number"&&c["minecraft:block_light_emission"]>1){c["minecraft:block_light_emission"]=Math.round(Math.min(15,c["minecraft:block_light_emission"])/15*100)/100;ch=true;m.push("block_light_emission (0–1)");}
+      if(typeof c["minecraft:friction"]==="number"&&(c["minecraft:friction"]>0.9||c["minecraft:friction"]<0)){c["minecraft:friction"]=Math.max(0,Math.min(0.9,c["minecraft:friction"]/ (c["minecraft:friction"]>1?10:1)));ch=true;m.push("friction (0–0.9)");}
+      if(ch){guardar(f,o);nota(f.path,"bloque con formato viejo/inventado corregido: "+m.join(", "));}
+    }
+    if(/^BP\/items\/[^/]+\.json$/.test(f.path)){
+      const o=hdJson(f); const it=o&&o["minecraft:item"]; if(!it)continue; const c=it.components||(it.components={}); let ch=false; const m=[];
+      const idI=String(it.description&&it.description.identifier||"");
+      if(c["minecraft:armor"]&&!c["minecraft:wearable"]){
+        const n=hdSnake(idI);
+        const slot=/casco|helm|capucha|gorro|sombrero|corona/.test(n)?"slot.armor.head":/pantal|legging|greva|falda/.test(n)?"slot.armor.legs":/bota|boot|zapato/.test(n)?"slot.armor.feet":"slot.armor.chest";
+        const prot=Number(c["minecraft:armor"].protection)||Number(c["minecraft:armor"])||3;
+        c["minecraft:wearable"]={slot,protection:Math.max(0,Math.min(20,Math.round(prot)))}; delete c["minecraft:armor"];
+        if(!c["minecraft:max_stack_size"])c["minecraft:max_stack_size"]=1;
+        ch=true;m.push("minecraft:armor→minecraft:wearable ("+slot+"); ojo: sin 'attachable' la pieza se equipa y protege pero no se ve puesta en el cuerpo");
+      }
+      if("minecraft:weapon" in c){delete c["minecraft:weapon"];ch=true;m.push("minecraft:weapon");}
+      const fd=c["minecraft:food"];
+      if(fd&&typeof fd.saturation_modifier==="string"){const mp={poor:0.1,low:0.3,normal:0.6,good:0.8,max:1,high:1,supernatural:1.2};fd.saturation_modifier=mp[fd.saturation_modifier.toLowerCase()]??0.6;ch=true;m.push("saturation_modifier numérico");}
+      if(ch){guardar(f,o);nota(f.path,"ítem con formato viejo/inventado corregido: "+m.join(", "));}
+    }
+    if(/^BP\/entities\/[^/]+\.json$/.test(f.path)){
+      const o=hdJson(f); const e=o&&o["minecraft:entity"]; if(!e)continue; let ch=false; const m=[];
+      const grupos=[e.components,...Object.values(e.component_groups||{})].filter(x=>x&&typeof x==="object");
+      for(const c of grupos){
+        for(const [k,wrap] of [["minecraft:health",(n)=>({value:n,max:n})],["minecraft:movement",(n)=>({value:n})],["minecraft:attack",(n)=>({damage:n})],["minecraft:scale",(n)=>({value:n})],["minecraft:knockback_resistance",(n)=>({value:n})],["minecraft:follow_range",(n)=>({value:n,max:n})]])
+          if(typeof c[k]==="number"){c[k]=wrap(c[k]);ch=true;m.push(k+" como objeto");}
+      }
+      const cc=e.components||{};
+      if(cc["minecraft:behavior.ranged_attack"]&&!cc["minecraft:shooter"]){cc["minecraft:shooter"]={def:"minecraft:arrow"};ch=true;m.push("shooter (el ataque a distancia no tenía proyectil)");}
+      if(ch){guardar(f,o);nota(f.path,"entidad con formato viejo corregida: "+m.join(", "));}
+    }
+  }
+  // scripts: nombres de API viejos o inexistentes con reemplazo directo
+  for(const f of scripts()){
+    if(/^BP\/scripts\/ego_/.test(f.path))continue;
+    let c=f.content; const av=[];
+    const sw=(rx,rep,txt)=>{const n=c.replace(rx,rep);if(n!==c){c=n;av.push(txt);}};
+    sw(/\.runCommandAsync\(/g,".runCommand(","runCommandAsync→runCommand");
+    sw(/\bworld\.events\./g,"world.afterEvents.","world.events→world.afterEvents");
+    sw(/\bworld\.say\(/g,"world.sendMessage(","world.say→world.sendMessage");
+    sw(/\.setCurrent\(/g,".setCurrentValue(","setCurrent→setCurrentValue");
+    sw(/(getComponent\(\s*["'](?:minecraft:)?health["']\s*\)\s*\??)\.current\b(?!Value)/g,"$1.currentValue","health.current→currentValue");
+    // propiedades del evento que no existen según el tipo de evento
+    for(const [head,from,to] of [[/world\.afterEvents\.entityDie\.subscribe\s*\(/g,"entity","deadEntity"],[/world\.afterEvents\.entityHurt\.subscribe\s*\(/g,"entity","hurtEntity"],[/world\.afterEvents\.itemUse\.subscribe\s*\(/g,"(?:player|entity)","source"]]){
+      let pos=0;
+      for(let g=0;g<20;g++){head.lastIndex=pos;const mm=head.exec(c);if(!mm)break;const ini=mm.index+mm[0].length-1,fin=pfFinBloque(c,ini);if(fin<0)break;
+        const bl=c.slice(mm.index,fin+1);
+        const nb2=bl.replace(new RegExp("\\b(event|ev|e|evt)\\.(?:"+from.replace(/^\(\?:|\)$/g,"")+")\\b","g"),"$1."+to);
+        if(nb2!==bl){c=c.slice(0,mm.index)+nb2+c.slice(fin+1);av.push(to+" en lugar de "+from.replace(/[()?:]/g,""));pos=mm.index+nb2.length;}else pos=fin+1;}
+    }
+    if(av.length&&!balanceJs(c)){f.content=c;for(const a of av)nota(f.path,"API corregida: "+a);}
+  }
+
   // 7) sonidos mal ubicados / nombres no ASCII
   for(const f of [...files]){
     if(/^RP\/sounds\/[^/]+\.json$/.test(f.path)&&!/^RP\/sounds\/sound_definitions\.json$/.test(f.path)){quitarF(f.path);nota(f.path,"archivo de sonido en lugar equivocado y sin audio real; se quitó (Minecraft lee RP/sounds/sound_definitions.json)");}
@@ -3840,9 +3903,12 @@ async function mcBuild(body,env,request){
     if (!validacion.ok || validacion.errores.length) {
       return respuestaValidacionFallida(validacion, ciclo);
     }
-    if (!auditoriaRequisitos.ok) {
+    // v14.48.1: ya no se tira todo el trabajo cuando faltan requisitos. Se entrega el add-on como PARCIAL,
+    // con la lista honesta de lo que no se pudo verificar (solo MC_ESTRICTO=1 vuelve a bloquear).
+    if (!auditoriaRequisitos.ok && env.MC_ESTRICTO === "1") {
       return json({error:"El add-on no se empaquetó como completo porque siguen faltando requisitos funcionales.",codigo:"cobertura_funcional_incompleta",cobertura:auditoriaRequisitos,recuperacion:{rondas:reparacionCobertura.rounds,modelos:reparacionCobertura.models}},422);
     }
+    const esParcial = !auditoriaRequisitos.ok;
     for (const faltante of auditoriaRequisitos.missing) r.notas.unshift("REQUISITO NO VERIFICADO: " + faltante);
     if (!auditoriaRequisitos.ok) r.notas.unshift(`Cobertura real: ${auditoriaRequisitos.passed}/${auditoriaRequisitos.total} verificaciones; el add-on NO debe considerarse completo.`);
     if(reparacionCobertura.rounds)r.notas.push(`Reparación de cobertura: ${reparacionCobertura.rounds} intento(s); proveedores: ${reparacionCobertura.models.join(", ")}`);
@@ -3856,10 +3922,10 @@ async function mcBuild(body,env,request){
     const au=await auditarAddon(plan,r.files,r.conteo.habilidades,env);
     if(au&&au.faltan.length)r.notas.unshift("Revisión final: no pude confirmar "+au.faltan.length+" de "+au.total+" cosas que pediste → "+au.faltan.slice(0,3).join(" · "));
     const zip=await createZip(r.files);
-    const nombre="ego-"+slugAscii(plan.nombre);
+    const nombre="ego-"+slugAscii(plan.nombre)+(esParcial?"-parcial":"");
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Parcial":esParcial?"1":"0","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
@@ -4591,7 +4657,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     const name=String(parsed.name|| (minecraft?"ego-bedrock-addon":"ego-project")).replace(/[^\w.-]/g,"-").slice(0,60)||"ego-project";
     const readmeExists=files.some(f=>/^README\.md$/i.test(f.path));
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
-    if (minecraft && mcKind === "addon" && coberturaAddon && !coberturaAddon.ok) {
+    if (minecraft && mcKind === "addon" && coberturaAddon && !coberturaAddon.ok && env.MC_ESTRICTO === "1") {
       return json({error:"El add-on no se empaquetó porque la cobertura solicitada sigue incompleta.",codigo:"cobertura_funcional_incompleta",cobertura:coberturaAddon,intentos},422);
     }
     if(minecraft && mcKind !== "addon") {
@@ -5671,7 +5737,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.48.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.49.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
