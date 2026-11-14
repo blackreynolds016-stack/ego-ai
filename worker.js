@@ -7,9 +7,22 @@
  *    creación de archivos faltantes permitidos, rechazo de parches destructivos, reversión si no hay progreso, historial y modelos usados.
  *  - Respuesta 422 con criticos[] {archivo, problema, causa, solucion}, advertencias[] y reparacion{}; cabeceras compactas (JSON válido).
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
+ *
+ * v14.45.0 — CORRECCIÓN DE REGRESIÓN:
+ *  - OR_FREE restaurado a los IDs originales (nemotron-3.5-lightning:free, nemotron-3-ultra-550b-a55b:free,
+ *    nemotron-3.5-super-vl:free): los sustitutos de la v14.44 probablemente no existían (404).
+ *  - egoRoleChat: cuando el llamador no pasa opciones se conservan los presupuestos generosos
+ *    originales (todos los modelos OR, 3 modelos CF, 70 s por modelo CF, fórmula 25 s + tokens×8
+ *    para OR), solo que con tope de 95 s para no reventar el edge proxy.
+ *  - mcPart: primer intento con 52 s de presupuesto (44 s para el modelo OR primario, que escribe
+ *    ~7600 tokens en 40-50 s); intentos compactos de 28 s; timeoutParte 90 s.
+ *  - mcPlan: planner con 55 s para CF llama (el plan de 6000 tokens tarda 45-60 s); revisiones
+ *    omitidas si el planner consumió el presupuesto.
+ *  - Se conserva de la v14.44: devolver 200 con archivos parciales en mcPart, reserva de hueco
+ *    para modelos 3D en dividirTrabajoGrande, timeout de cfChat y catch con diagnóstico de mcBuild.
  */
 // ============================================================
-// EGO AI WORKER v14.44.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
+// EGO AI WORKER v14.45.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -890,14 +903,15 @@ function salida(r) {
 
 const usaCompletion = id => /kimi|deepseek-v4|qwen3\.8/.test(id);
 
-// Modelos gratuitos de OpenRouter (IDs verificados que existen en openrouter.ai/models).
-// Si OpenRouter retira alguno, el failover pasa al siguiente y finalmente a Workers AI.
+// Modelos gratuitos de OpenRouter: se restauran los IDs originales del sistema, que sí
+// existen (Nemotron 3.5 Lightning / 3 Ultra / 3.5 Super VL en la colección free de OpenRouter).
+// Los que reemplacé antes (deepseek-r1:free, meta-llama:free) probablemente ya no existen → 404 → caídas.
 const OR_FREE = {
-  chat: "meta-llama/llama-3.3-70b-instruct:free",
-  code: "qwen/qwen-2.5-coder-32b-instruct:free",
-  reasoning: "deepseek/deepseek-r1:free",
-  vision: "meta-llama/llama-3.2-90b-vision-instruct:free",
-  fallback: "meta-llama/llama-3.3-70b-instruct:free"
+  chat: "nvidia/nemotron-3.5-lightning:free",
+  code: "cohere/north-mini-code:free",
+  reasoning: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  vision: "nvidia/nemotron-3.5-super-vl:free",
+  fallback: "openrouter/free"
 };
 function openRouterCandidates(env, task) {
   const configured = task === "code"
@@ -1184,11 +1198,14 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const fallbacks = task === "code" ? [OR_FREE.code, OR_FREE.fallback] : [OR_FREE.reasoning, OR_FREE.fallback];
   const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
   const failures = [];
-  // Siempre hay un deadline: si el llamador no pasa maxTotalMs, se impone 90 s por defecto
-  // para que un proveedor que se cuelga no bloquee el Worker entero (causa nº1 de 502).
+  // Siempre hay un deadline (95 s máx., por debajo del corte del edge proxy de Cloudflare)
+  // PERO cuando el llamador no pasa opciones se conservan los presupuestos GENEROSOS
+  // originales: todos los modelos OR, 3 modelos CF, 70 s para CF y la fórmula antigua
+  // para OpenRouter. La versión anterior recortaba esto a 42 s / 1 modelo CF / 30 s
+  // y rompía las rutas que sí funcionaban (planner vía CF, equipo EGO, etc.).
   const bounded = true;
-  const deadline = Date.now() + Math.max(8000, Math.min(120000, Number(options.maxTotalMs) || 90000));
-  const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
+  const deadline = Date.now() + Math.max(8000, Math.min(95000, Number(options.maxTotalMs) || 95000));
+  const maxModels = Math.max(1, Math.min(models.length, options.maxModels !== undefined ? (Number(options.maxModels) || 1) : models.length));
   const orBloqueado = !routerApiKey(env) || (globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
   if (orBloqueado && routerApiKey(env)) failures.push("OpenRouter sin crédito (402), se omite");
   // Proveedores externos independientes: una clave/cuota agotada no bloquea las demás.
@@ -1201,11 +1218,9 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const providerOffset=nExternos?((Math.floor(Number(options.providerOffset)||0)%nExternos)+nExternos)%nExternos:0;
   const externosOrdenados=nExternos?externos.map((_,i)=>externos[(providerOffset+i)%nExternos]):[];
   const requestedExternalCount = options.providerModels === undefined || options.providerModels === null
-    ? externosOrdenados.length
+    ? Math.min(3, externosOrdenados.length)
     : Math.max(0, Math.floor(Number(options.providerModels) || 0));
-  const maxExternos=bounded
-    ? Math.max(0,Math.min(externosOrdenados.length,requestedExternalCount))
-    : Math.min(externosOrdenados.length,3);
+  const maxExternos = Math.max(0, Math.min(externosOrdenados.length, requestedExternalCount));
   for(let i=0;i<maxExternos && Date.now()<deadline;i++){
     const provider=externosOrdenados[i];
     const remaining=deadline-Date.now(); if(remaining<3500) break;
@@ -1225,7 +1240,7 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
     try {
       const remaining = deadline - Date.now();
       const defaultTimeout = Math.min(100000, 25000 + Number(maxTokens || 3000) * 8);
-      const timeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.perModelMs) || 42000)) : (i === 0 ? defaultTimeout : Math.round(defaultTimeout * 0.6));
+      const timeout = Math.max(5000, Math.min(remaining, Number(options.perModelMs) || (i === 0 ? defaultTimeout : Math.round(defaultTimeout * 0.6))));
       const r = await openRouterChat(messages, env, maxTokens, models[i], timeout);
       if (r.content) return { ...r, role, fallos: failures };
       failures.push(`${models[i]}: respuesta vacía`);
@@ -1237,11 +1252,11 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   }
   if (env.AI && Date.now() < deadline && options.cfModels !== 0) {
     const cadenaBase = task === "code" ? CF_MODELS.codigo : CF_MODELS.razonar;
-    const cantidad = bounded ? Math.max(1, Math.min(cadenaBase.length, Number(options.cfModels) || 1)) : 3;
+    const cantidad = Math.max(1, Math.min(cadenaBase.length, options.cfModels !== undefined ? (Number(options.cfModels) || 1) : 3));
     for (const id of cadenaBase.slice(0, cantidad)) {
       const remaining = deadline - Date.now();
       if (remaining < 5000) break;
-      const cfTimeout = bounded ? Math.max(5000, Math.min(remaining, Number(options.cfTimeoutMs) || 30000)) : 70000;
+      const cfTimeout = Math.max(5000, Math.min(remaining, Number(options.cfTimeoutMs) || 70000));
       try {
         const r = await Promise.race([cfChat(id, messages, env, Math.min(Number(maxTokens || 3000), 8000)), tmoMc(cfTimeout)]);
         if (r && r.content) return { ...r, model: `cf:${id}`, role, fallos: failures };
@@ -1564,6 +1579,7 @@ function dividirTrabajoGrande(base,prompt){
 async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
+  const t0=Date.now();
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
 {"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","icono":"arma_fuego|pistola|rifle|escopeta|francotirador|botiquin|municion|armadura|escudo|espada|hacha|pico|vara|reloj|libro|corona|botella|anillo|lingote|orbe|gema: cómo se ve el ítem","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"poderes_jugador":[],"modelos3d":[],"sonidos":[],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
 ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enumera en "requisitos" TODO lo que pidió (nada más, nada menos). Cada objeto, habilidad y parte del plan debe servir a un requisito. No interpretes a tu gusto: si el usuario no lo dijo, no lo agregues.
@@ -1575,18 +1591,23 @@ Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (í
     const mensajesPlan=[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}];
     // Planner diseña; reasoner y auditor revisan en paralelo. Sus observaciones
     // quedan adjuntas al plan para que el generador las respete en cada módulo.
-    // Añadidas options con maxTotalMs a las 3 llamadas: antes no tenían timeout
-    // y si el planner se colgaba, mcPlan se colgaba → 502 por límite del Worker.
-    const r=await egoRoleChat("planner",mensajesPlan,env,6000,{maxTotalMs:60000,maxModels:2,perModelMs:35000,cfModels:2,cfTimeoutMs:40000});
+    // Planner: el plan (6000 tokens) lo escribe sobre todo CF llama-3.3-70b, que necesita
+    // 45-60 s. Se le dan 55 s de cfTimeoutMs (mi versión anterior le daba 40 s y el plan
+    // caía siempre al respaldo). Los OR primarios (nemotron) fallan rápido (404/vacío)
+    // y no consumen el presupuesto.
+    const r=await egoRoleChat("planner",mensajesPlan,env,6000,{maxTotalMs:75000,maxModels:2,perModelMs:16000,cfModels:2,cfTimeoutMs:55000});
     const plan=limpiarPlan(extractJson(r.content),prompt);
+    const tPlanner=Date.now()-t0;
     const revisionMsgs=[
       {role:"system",content:"Eres el revisor técnico de un plan Minecraft Bedrock. Detecta requisitos omitidos, incompatibilidades y dependencias. Devuelve observaciones concretas y breves; no reescribas el plan."},
       {role:"user",content:"SOLICITUD:\n"+prompt+"\nPLAN:\n"+JSON.stringify(plan).slice(0,14000)}
     ];
-    const [revTecnica,revAuditoria]=await Promise.all([
-      egoRoleChat("reasoner",revisionMsgs,env,1600,{maxTotalMs:20000,maxModels:1,perModelMs:16000,cfModels:1,cfTimeoutMs:18000}).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
-      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600,{maxTotalMs:20000,maxModels:1,perModelMs:16000,cfModels:1,cfTimeoutMs:18000}).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
-    ]);
+    // Si el planner consumió casi todo el presupuesto, se saltan las revisiones para que
+    // mcPlan no supere los 100 s del edge proxy de Cloudflare (524).
+    const [revTecnica,revAuditoria]=tPlanner<45000?await Promise.all([
+      egoRoleChat("reasoner",revisionMsgs,env,1600,{maxTotalMs:18000,maxModels:1,perModelMs:15000,cfModels:1,cfTimeoutMs:16000}).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
+      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600,{maxTotalMs:18000,maxModels:1,perModelMs:15000,cfModels:1,cfTimeoutMs:16000}).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
+    ]):[{content:"omitida por presupuesto de tiempo",fallos:[]},{content:"omitida por presupuesto de tiempo",fallos:[]}];
     plan.revisionEquipo={planner:r.model,reasoner:revTecnica.content,auditor:revAuditoria.content};
     const inferred=crearPartesRespaldoMinecraft(prompt);
     const tipos=new Set(plan.partes.filter(x=>x.tipo!=="misc").map(x=>x.tipo));
@@ -1812,7 +1833,7 @@ async function mcModelo3d(parte,plan,prompt,env){
     try{
       // El modelador 3D usa la misma ruta acotada del equipo EGO: dos intentos breves,
       // sin recorrer la cadena larga de candidatos de llamarCodigo (causa del timeout de criaturas).
-      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:50000,maxModels:2,perModelMs:22000,providerModels:t>0?0:Math.min(2,egoExternalProviders(env,"code").length),providerTimeoutMs:12000,cfModels:2,cfTimeoutMs:20000,providerOffset:t*2});
+      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:t===0?50000:40000,maxModels:2,perModelMs:t===0?32000:26000,providerModels:t>0?0:Math.min(1,egoExternalProviders(env,"code").length),providerTimeoutMs:10000,cfModels:2,cfTimeoutMs:t===0?26000:22000,providerOffset:t*2});
       const j=extractJson(r.content);let ps=null;
       if(j){const ar=String(j.arquetipo||"").toLowerCase();let base=[];
         if(/human|person|caball|bipedo/.test(ar))base=modeloHumanoide(j);else if(/best|cuadr|animal|lobo|dragon/.test(ar))base=modeloBestia(j);
@@ -1845,9 +1866,9 @@ async function mcPart(body,env){
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
   const maxTokensParte=ligero?4200:(esEntidades?5200:7600);
-  // timeoutParte reducido a 85 s: 3 rondas de ~28 s caben dentro del límite del Worker.
-  // Antes era 150000 ms y el edge proxy de Cloudflare cortaba a los 100 s → 502.
-  const timeoutParte=85000;
+  // timeoutParte = 90 s: por debajo del corte del edge proxy de Cloudflare (~100 s → 524).
+  // El frontal de la app espera ~2 min por parte, así que 90 s + reintento del frontal cabe.
+  const timeoutParte=90000;
   const restante=(tope)=>Math.max(0,tope-(Date.now()-t0));
   // Hasta tres rondas: normal, compacta y compacta de rescate.
   // Cada ronda rota el punto de inicio de proveedores y conserva el mejor
@@ -1863,9 +1884,13 @@ async function mcPart(body,env){
          "No repitas archivos de otras partes, no añadas explicaciones ni comentarios. " +
          "Devuelve cada archivo completo con el formato exacto. Si no cabe todo, prioriza archivos funcionales y dependencias obligatorias.")
       : user;
-    // presupuesto por intento reducido a 26 s para que 3 intentos quepan en 85 s.
-    const presupuesto=Math.min(26000,quedan-3000);
-    const timeoutProveedor=Math.max(8000,Math.min(12000,Math.floor(presupuesto/2.5)));
+    // Estructura de presupuesto: intento 0 = 52 s (una oportunidad REAL de 44 s para el
+    // modelo OR primario tipo GLM-5.3-flash, que escribe ~7600 tokens en 40-50 s),
+    // intentos 1+ = 28 s (compacto, ~4200 tokens en ~25 s).
+    // La versión intermedia daba 26 s al primer intento: el OR primario no terminaba
+    // y ya no quedaba tiempo para CF → todo fallaba.
+    const presupuesto=Math.min(intento===0?52000:28000,quedan-3000);
+    const timeoutProveedor=Math.max(6000,Math.min(8000,Math.floor(presupuesto/6.5)));
     try{
       const resultado=await Promise.race([
         egoRoleChat("coder",[
@@ -1876,22 +1901,22 @@ async function mcPart(body,env){
         ],env,maxTokensParte,{
           maxTotalMs:presupuesto,
           maxModels:2,
-          perModelMs:Math.min(22000,presupuesto),
+          perModelMs:intento===0?Math.min(44000,presupuesto):Math.min(26000,presupuesto),
           providerOffset:intento*2,
-          providerModels:(errores.length&&egoExternalProviders(env,"code").length<=2)?0:Math.min(2,externosParaModulo(env)),
+          providerModels:(errores.length&&egoExternalProviders(env,"code").length<=2)?0:Math.min(intento===0?1:2,externosParaModulo(env)),
           providerTimeoutMs:timeoutProveedor,
-          // cfTimeoutMs subido de 5000 a 22000: llama-3.3-70b necesita 10-20 s para generar
-          // 7600 tokens. Con 5 s siempre moría por timeout → 502 constante.
+          // CF de respaldo: si el OR primario falla rápido (404/vacío), CF llama-3.3-70b
+          // aprovecha el tiempo restante del presupuesto.
           cfModels:2,
-          cfTimeoutMs:Math.min(22000,timeoutProveedor)
+          cfTimeoutMs:Math.min(intento===0?34000:22000,presupuesto)
         }),
-        tmoMc(Math.max(7000,presupuesto+1500))
+        tmoMc(Math.max(7000,presupuesto+2000))
       ]);
       r={raw:resultado.content,model:resultado.model,idx:0,fallos:resultado.fallos||[]};
     }catch(e){
       const tm=String(e&&e.message||e);
       errores.push("Intento "+(intento+1)+": "+tm.slice(0,180));
-      if(restante(timeoutParte)>30000)continue;
+      if(restante(timeoutParte)>24000)continue;
       break;
     }
     modelo=r.model||modelo;
@@ -1949,9 +1974,11 @@ async function mcPart(body,env){
         }
       }
       const probs=problemas.slice(0,8);
-      if(probs.length&&Date.now()-t0>130000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
-      else if(probs.length&&Date.now()-t0<76000){
-        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:30000,maxModels:1,perModelMs:26000,cfModels:0}),tmoMc(32000)]);
+      // Puertas de tiempo ajustadas a timeoutParte=90 s: la revisión solo corre si llegó
+      // antes de 58 s y la reparación solo si hay margen (total < 88 s, bajo el corte de 100 s).
+      if(probs.length&&Date.now()-t0>88000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
+      else if(probs.length&&Date.now()-t0<66000){
+        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:22000,maxModels:1,perModelMs:20000,cfModels:0}),tmoMc(24000)]);
         const np=parsearSalidaMc(rr.content, env.MC_SERVER_VERSION||"2.10.0");
         if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="auditor y reasoner detectaron "+probs.length+" problema(s); coder aplicó una corrección que pasó la validación básica";}
         else revisado="auditoría detectó "+probs.length+" problema(s), pero la reparación no pasó; se conserva la versión anterior y se informa la limitación";
@@ -4799,9 +4826,10 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     return { validacion, informe };
   };
   if (!informe.habilitado) { if (validacion.errores.length || validacion.avisos.length) informe.avisosFinales.push("Reparación con IA desactivada: no hay proveedor de chat disponible o EGO_AUTO_REPAIR=0; solo se aplicaron reparaciones deterministas."); return cerrar(); }
-  // maxRondas reducido a 2 (era 3): cada ronda tarda hasta 28 s, y mcBuild ya llama a
-  // varias funciones IA; 3 rondas × 28 s = 84 s, sumado al resto excede el límite del Worker.
-  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 2), 2));
+  // Rondas de reparación: por defecto 1 para que mcBuild (postproceso + reparación +
+  // auditoría + ZIP) quepan en los ~100 s del edge proxy. Se puede subir a 2 con la
+  // variable EGO_AUTO_REPAIR_ROUNDS=2 si tu plan de Cloudflare lo tolera.
+  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 1), 2));
   const modelosReparador = [...new Set([EGO_TEAM_MODELS.coder, EGO_TEAM_MODELS.reasoner, EGO_TEAM_MODELS.planner].filter(Boolean))];
   const rutaCreable = p => /^(?:BP|RP)\/(?:entities|entity|items|blocks|recipes|loot_tables|spawn_rules|animations|animation_controllers|render_controllers|models\/entity|texts|sounds|scripts|functions|trading)\/.+\.(?:json|js|lang|mcfunction)$/i.test(p) && !/manifest\.json$/i.test(p);
   for (let ronda = 1; ronda <= maxRondas; ronda++) {
