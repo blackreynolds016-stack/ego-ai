@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.43.0 — AUDITORÍA DE COBERTURA Y CONTROL DE CALIDAD
+// EGO AI WORKER v14.44.0 — FAILOVER EQUILIBRADO Y REPARACIÓN API BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -890,13 +890,14 @@ function salida(r) {
 
 const usaCompletion = id => /kimi|deepseek-v4|qwen3\.8/.test(id);
 
-// Modelos gratuitos de OpenRouter; el router dinámico permite fallback cuando cambian los endpoints.
+// Modelos gratuitos de OpenRouter (IDs verificados que existen en openrouter.ai/models).
+// Si OpenRouter retira alguno, el failover pasa al siguiente y finalmente a Workers AI.
 const OR_FREE = {
-  chat: "nvidia/nemotron-3.5-lightning:free",
-  code: "cohere/north-mini-code:free",
-  reasoning: "nvidia/nemotron-3-ultra-550b-a55b:free",
-  vision: "nvidia/nemotron-3.5-super-vl:free",
-  fallback: "openrouter/free"
+  chat: "meta-llama/llama-3.3-70b-instruct:free",
+  code: "qwen/qwen-2.5-coder-32b-instruct:free",
+  reasoning: "deepseek/deepseek-r1:free",
+  vision: "meta-llama/llama-3.2-90b-vision-instruct:free",
+  fallback: "meta-llama/llama-3.3-70b-instruct:free"
 };
 function openRouterCandidates(env, task) {
   const configured = task === "code"
@@ -911,11 +912,16 @@ function openRouterCandidates(env, task) {
 }
 
 
-async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}) {
+// cfChat ahora tiene un timeout por defecto de 45 s para que un modelo que se cuelga
+// no bloquee todo el Worker (causa nº1 de los HTTP 502 por límite de wall-clock).
+async function cfChat(modelId, messages, env, maxTokens = 4000, extra = {}, timeoutMs = 45000) {
   if (!env.AI) throw new Error("AI no disponible");
   const limite = usaCompletion(modelId) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens };
   const p = { messages, ...extra, ...limite };
-  const result = await env.AI.run(modelId, p);
+  const result = await Promise.race([
+    env.AI.run(modelId, p),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("cfChat timeout " + modelId + " (>" + timeoutMs + "ms)")), timeoutMs))
+  ]);
   return { content: salida(result), model: modelId };
 }
 
@@ -1178,8 +1184,10 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const fallbacks = task === "code" ? [OR_FREE.code, OR_FREE.fallback] : [OR_FREE.reasoning, OR_FREE.fallback];
   const models = [...new Set([primary, ...fallbacks].filter(Boolean))];
   const failures = [];
-  const bounded = Number.isFinite(Number(options.maxTotalMs));
-  const deadline = bounded ? Date.now() + Math.max(5000, Number(options.maxTotalMs)) : Infinity;
+  // Siempre hay un deadline: si el llamador no pasa maxTotalMs, se impone 90 s por defecto
+  // para que un proveedor que se cuelga no bloquee el Worker entero (causa nº1 de 502).
+  const bounded = true;
+  const deadline = Date.now() + Math.max(8000, Math.min(120000, Number(options.maxTotalMs) || 90000));
   const maxModels = bounded ? Math.max(1, Math.min(models.length, Number(options.maxModels) || 2)) : models.length;
   const orBloqueado = !routerApiKey(env) || (globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
   if (orBloqueado && routerApiKey(env)) failures.push("OpenRouter sin crédito (402), se omite");
@@ -1192,8 +1200,11 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const nExternos=externos.length;
   const providerOffset=nExternos?((Math.floor(Number(options.providerOffset)||0)%nExternos)+nExternos)%nExternos:0;
   const externosOrdenados=nExternos?externos.map((_,i)=>externos[(providerOffset+i)%nExternos]):[];
+  const requestedExternalCount = options.providerModels === undefined || options.providerModels === null
+    ? externosOrdenados.length
+    : Math.max(0, Math.floor(Number(options.providerModels) || 0));
   const maxExternos=bounded
-    ? Math.max(0,Math.min(externosOrdenados.length,Number(options.providerModels)||externosOrdenados.length))
+    ? Math.max(0,Math.min(externosOrdenados.length,requestedExternalCount))
     : Math.min(externosOrdenados.length,3);
   for(let i=0;i<maxExternos && Date.now()<deadline;i++){
     const provider=externosOrdenados[i];
@@ -1543,7 +1554,11 @@ function dividirTrabajoGrande(base,prompt){
       {titulo:"Núcleo: main.js y eventos base",tipo:"script",detalle:String(orig.detalle||"").slice(0,900)+"\n\n"+contrato+"\nEsta parte escribe BP/scripts/main.js y BP/scripts/eventos.js (eventos de jugador/entidad, daño y muerte).",archivos:["BP/scripts/main.js","BP/scripts/eventos.js"]},
       {titulo:"Sistemas de juego (módulo)",tipo:"script",detalle:String(orig.detalle||"").slice(0,900)+"\n\n"+contrato+"\nEsta parte escribe SOLO BP/scripts/sistemas.js (supervivencia, progresión, misiones y estados). NO escribas main.js.",archivos:["BP/scripts/sistemas.js"]});
   }
-  base.partes=[...base.partes,...antes3d].slice(0,14);
+  // Reservar espacio para las partes 3D ANTES del slice para que no se corten.
+  // Antes: si base.partes llegaba a 14, los modelos 3D se perdían → add-on sin modelo 3D.
+  const cupo3d = antes3d.length;
+  const limite = Math.max(1, 14 - cupo3d);
+  base.partes = [...base.partes.slice(0, limite), ...antes3d];
   return base;
 }
 async function mcPlan(body,env){
@@ -1560,15 +1575,17 @@ Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (í
     const mensajesPlan=[{role:"system",content:sys},{role:"user",content:"Pedido del usuario:\n"+prompt}];
     // Planner diseña; reasoner y auditor revisan en paralelo. Sus observaciones
     // quedan adjuntas al plan para que el generador las respete en cada módulo.
-    const r=await egoRoleChat("planner",mensajesPlan,env,6000);
+    // Añadidas options con maxTotalMs a las 3 llamadas: antes no tenían timeout
+    // y si el planner se colgaba, mcPlan se colgaba → 502 por límite del Worker.
+    const r=await egoRoleChat("planner",mensajesPlan,env,6000,{maxTotalMs:60000,maxModels:2,perModelMs:35000,cfModels:2,cfTimeoutMs:40000});
     const plan=limpiarPlan(extractJson(r.content),prompt);
     const revisionMsgs=[
       {role:"system",content:"Eres el revisor técnico de un plan Minecraft Bedrock. Detecta requisitos omitidos, incompatibilidades y dependencias. Devuelve observaciones concretas y breves; no reescribas el plan."},
       {role:"user",content:"SOLICITUD:\n"+prompt+"\nPLAN:\n"+JSON.stringify(plan).slice(0,14000)}
     ];
     const [revTecnica,revAuditoria]=await Promise.all([
-      egoRoleChat("reasoner",revisionMsgs,env,1600).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
-      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
+      egoRoleChat("reasoner",revisionMsgs,env,1600,{maxTotalMs:20000,maxModels:1,perModelMs:16000,cfModels:1,cfTimeoutMs:18000}).catch(e=>({content:"Revisión técnica no disponible: "+String(e.message||e).slice(0,120),fallos:[]})),
+      egoRoleChat("auditor",[{role:"system",content:"Audita cobertura y coherencia del plan Minecraft Bedrock. Señala requisitos faltantes, partes mal separadas y dependencias. No inventes. Responde en puntos breves."},...revisionMsgs.slice(1)],env,1600,{maxTotalMs:20000,maxModels:1,perModelMs:16000,cfModels:1,cfTimeoutMs:18000}).catch(e=>({content:"Auditoría no disponible: "+String(e.message||e).slice(0,120),fallos:[]}))
     ]);
     plan.revisionEquipo={planner:r.model,reasoner:revTecnica.content,auditor:revAuditoria.content};
     const inferred=crearPartesRespaldoMinecraft(prompt);
@@ -1602,7 +1619,7 @@ const MC_CRITICO_SYS=`Eres un REVISOR TÉCNICO estricto de add-ons de Minecraft 
 No inventes problemas ni pidas mejoras de estilo. Si todo está bien responde {"problemas":[]}.
 Responde SOLO JSON: {"problemas":[{"archivo":"ruta","problema":"qué está mal, concreto","arreglo":"cómo corregirlo"}]} con máximo 6.`;
 const tmoMc=(ms)=>new Promise((_,rej)=>setTimeout(()=>rej(new Error("tiempo")),ms));
-function parsearSalidaMc(raw){
+function parsearSalidaMc(raw, verSrv="2.10.0"){
   const p=leerProyectoModelo(raw);const files=[],errores=[];const vistos=new Set();
   if(!p||!p.files.length)return {files,errores:["formato"]};
   for(const f of p.files){
@@ -1610,7 +1627,7 @@ function parsearSalidaMc(raw){
     if(!path||!/^(BP|RP)\//.test(path)||/manifest\.json$|\.(png|jpg|ogg|zip|mcaddon)$/i.test(path)||vistos.has(path)||typeof f.content!=="string")continue;
     vistos.add(path);
     if(/\.json$/i.test(path)){const t=jsonTolerante(f.content);if(!t.ok){errores.push(path);continue;}files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});}
-    else if(/\.js$/i.test(path)){if(balanceJs(f.content)||lintScriptApi(f.content, "2.10.0").length){errores.push(path);continue;}files.push({path,content:f.content});}
+    else if(/\.js$/i.test(path)){if(balanceJs(f.content)||lintScriptApi(f.content, verSrv).length){errores.push(path);continue;}files.push({path,content:f.content});}
     else if (f.content.length > 300000) errores.push(path + ": archivo supera 300000 caracteres; se rechaza completo para evitar truncamiento silencioso.");
     else files.push({path,content:f.content});
   }
@@ -1795,7 +1812,7 @@ async function mcModelo3d(parte,plan,prompt,env){
     try{
       // El modelador 3D usa la misma ruta acotada del equipo EGO: dos intentos breves,
       // sin recorrer la cadena larga de candidatos de llamarCodigo (causa del timeout de criaturas).
-      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:45000,maxModels:2,perModelMs:7000,providerModels:Math.max(1,egoExternalProviders(env,"code").length),providerTimeoutMs:12000,cfModels:1,cfTimeoutMs:5000});
+      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:50000,maxModels:2,perModelMs:22000,providerModels:t>0?0:Math.min(2,egoExternalProviders(env,"code").length),providerTimeoutMs:12000,cfModels:2,cfTimeoutMs:20000,providerOffset:t*2});
       const j=extractJson(r.content);let ps=null;
       if(j){const ar=String(j.arquetipo||"").toLowerCase();let base=[];
         if(/human|person|caball|bipedo/.test(ar))base=modeloHumanoide(j);else if(/best|cuadr|animal|lobo|dragon/.test(ar))base=modeloBestia(j);
@@ -1828,14 +1845,16 @@ async function mcPart(body,env){
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
   const maxTokensParte=ligero?4200:(esEntidades?5200:7600);
-  const timeoutParte=150000;
+  // timeoutParte reducido a 85 s: 3 rondas de ~28 s caben dentro del límite del Worker.
+  // Antes era 150000 ms y el edge proxy de Cloudflare cortaba a los 100 s → 502.
+  const timeoutParte=85000;
   const restante=(tope)=>Math.max(0,tope-(Date.now()-t0));
   // Hasta tres rondas: normal, compacta y compacta de rescate.
   // Cada ronda rota el punto de inicio de proveedores y conserva el mejor
   // resultado parcial validado para no perder archivos útiles.
   for(let intento=0;intento<3;intento++){
     const quedan=restante(timeoutParte);
-    if(quedan<9000)break;
+    if(quedan<12000)break;
     let r;
     const compacto=intento>0||ligero;
     const userIntento=compacto
@@ -1844,8 +1863,9 @@ async function mcPart(body,env){
          "No repitas archivos de otras partes, no añadas explicaciones ni comentarios. " +
          "Devuelve cada archivo completo con el formato exacto. Si no cabe todo, prioriza archivos funcionales y dependencias obligatorias.")
       : user;
-    const presupuesto=Math.min(46000,quedan-3500);
-    const timeoutProveedor=Math.max(8000,Math.min(13000,Math.floor(presupuesto/3.5)));
+    // presupuesto por intento reducido a 26 s para que 3 intentos quepan en 85 s.
+    const presupuesto=Math.min(26000,quedan-3000);
+    const timeoutProveedor=Math.max(8000,Math.min(12000,Math.floor(presupuesto/2.5)));
     try{
       const resultado=await Promise.race([
         egoRoleChat("coder",[
@@ -1856,12 +1876,14 @@ async function mcPart(body,env){
         ],env,maxTokensParte,{
           maxTotalMs:presupuesto,
           maxModels:2,
-          perModelMs:Math.min(7000,presupuesto),
-          providerOffset:intento,
-          providerModels:externosParaModulo(env),
+          perModelMs:Math.min(22000,presupuesto),
+          providerOffset:intento*2,
+          providerModels:(errores.length&&egoExternalProviders(env,"code").length<=2)?0:Math.min(2,externosParaModulo(env)),
           providerTimeoutMs:timeoutProveedor,
-          cfModels:1,
-          cfTimeoutMs:Math.min(5000,timeoutProveedor)
+          // cfTimeoutMs subido de 5000 a 22000: llama-3.3-70b necesita 10-20 s para generar
+          // 7600 tokens. Con 5 s siempre moría por timeout → 502 constante.
+          cfModels:2,
+          cfTimeoutMs:Math.min(22000,timeoutProveedor)
         }),
         tmoMc(Math.max(7000,presupuesto+1500))
       ]);
@@ -1869,7 +1891,7 @@ async function mcPart(body,env){
     }catch(e){
       const tm=String(e&&e.message||e);
       errores.push("Intento "+(intento+1)+": "+tm.slice(0,180));
-      if(restante(timeoutParte)>9000)continue;
+      if(restante(timeoutParte)>30000)continue;
       break;
     }
     modelo=r.model||modelo;
@@ -1891,8 +1913,10 @@ async function mcPart(body,env){
           files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});
         }else if(/\.js$/i.test(path)){
           const bal=balanceJs(f.content);
-          if(bal)nuevosErrores.push(path+": "+bal);
-          for(const pr of lintScriptApi(f.content,"2.10.0"))nuevosErrores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server.");
+          const apiVersion=String(env.MC_SERVER_VERSION||"2.10.0");
+          const apiIssues=lintScriptApi(f.content,apiVersion);
+          if(bal){nuevosErrores.push(path+": "+bal);continue;}
+          if(apiIssues.length){for(const pr of apiIssues)nuevosErrores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server "+apiVersion+".");continue;}
           files.push({path,content:f.content});
         }else if(f.content.length>300000)nuevosErrores.push(path+": archivo supera 300000 caracteres; no se truncó.");
         else files.push({path,content:f.content});
@@ -1912,8 +1936,8 @@ async function mcPart(body,env){
       const texto=mejor.files.filter(f=>/\.(js|json)$/.test(f.path)).map(f=>"=== ARCHIVO: "+f.path+" ===\n"+f.content).join("\n").slice(0,16000);
       const reviewUser="REQUISITOS:\n"+((plan.requisitos||[]).map((x,k)=>(k+1)+". "+x).join("\n")||prompt.slice(0,1500))+"\n\nPLAN:\n"+JSON.stringify({objetos:plan.objetos,poderes_jugador:plan.poderesJugador,revisionEquipo:plan.revisionEquipo||null})+"\n\nARCHIVOS DE LA PARTE «"+parte.titulo+"»:\n"+texto;
       const [crit,razon]=await Promise.all([
-        Promise.race([egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
-        Promise.race([egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
+        Promise.race([egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS.replace("Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable)", "Minecraft Bedrock compatible con @minecraft/server "+String(env.MC_SERVER_VERSION||"2.10.0"))},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
+        Promise.race([egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS.replace("Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable)", "Minecraft Bedrock compatible con @minecraft/server "+String(env.MC_SERVER_VERSION||"2.10.0"))},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
       ]);
       modelosRevision={auditor:crit.model||"no disponible",reasoner:razon.model||"no disponible"};
       const problemas=[];
@@ -1928,20 +1952,27 @@ async function mcPart(body,env){
       if(probs.length&&Date.now()-t0>130000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
       else if(probs.length&&Date.now()-t0<76000){
         const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:30000,maxModels:1,perModelMs:26000,cfModels:0}),tmoMc(32000)]);
-        const np=parsearSalidaMc(rr.content);
+        const np=parsearSalidaMc(rr.content, env.MC_SERVER_VERSION||"2.10.0");
         if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="auditor y reasoner detectaron "+probs.length+" problema(s); coder aplicó una corrección que pasó la validación básica";}
         else revisado="auditoría detectó "+probs.length+" problema(s), pero la reparación no pasó; se conserva la versión anterior y se informa la limitación";
       }else revisado="revisado por auditor + reasoner";
     }catch(e){revisado="revisión colaborativa incompleta: "+String(e&&e.message||e).slice(0,120);}
   }
+  // ANTES: si cualquier archivo tenía error, se devolvía 502 y se perdían TODOS los
+  // archivos válidos → add-ons incompletos. AHORA: si hay al menos 1 archivo válido
+  // se devuelve 200 con los archivos buenos y los errores como avisos. Solo se devuelve
+  // 502 si no se obtuvo NINGÚN archivo válido.
   if(!mejor||!mejor.files.length) return json({
     error:"La parte «"+parte.titulo+"» no produjo archivos válidos después de los reintentos automáticos.",
     codigo:"proveedores_agotados_o_salida_invalida",
-    detalle:[...errores,...fallosM].slice(0,8),
+    detalle:[...((mejor&&mejor.errores)||errores),...fallosM].slice(0,10),
+    archivosValidosConservados:0,
     parte:parte.tipo,
     reintentos:3
   },502);
-  return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:mejor.errores.slice(0,6),parte:i,titulo:parte.titulo});
+  // Hay archivos válidos: devolver 200 aunque algunos archivos tuvieran errores.
+  // Los errores se informan como avisos para que el ciclo de reparación final los corrija.
+  return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:mejor.errores.slice(0,8),parte:i,titulo:parte.titulo,erroresParciales:mejor.errores.length});
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
 function balanceJs(src){
@@ -2535,8 +2566,13 @@ function postprocesarAddon(entrada,plan,verSrv){
   for(const e of entidades){const n=nombreDeId(e.id,plan);poner("entity."+e.id+".name",n);poner("item.spawn_egg.entity."+e.id+".name","Huevo de "+n);}
   const aTxt=(m)=>[...m.entries()].map(([k,v])=>k+"="+v).join("\n")+"\n";
   mapa.set("RP/texts/en_US.lang",aTxt(en));mapa.set("RP/texts/es_ES.lang",aTxt(es));mapa.set("RP/texts/languages.json",'["en_US","es_ES"]\n');
-  // --- scripts: se descartan los que usan APIs que no existen; las habilidades las programa el código
-  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){const tx=String(mapa.get(k));const mal=lintScript(tx);const prs=lintScriptApi(tx, verSrv||"2.10.0");if(mal||prs.length){const respaldo="EGO_QUARANTINE/"+k.replace(/^BP\//,"");mapa.set(respaldo,tx);mapa.delete(k);notas.push(k.replace("BP/","")+" se aisló para evitar que un script posiblemente inválido rompa el add-on. Se conservó una copia íntegra en "+respaldo+". Motivo: "+(mal||prs.slice(0,3).join("; "))+". Requiere corrección y nueva validación antes de activarlo.");}}
+  // --- scripts: conservar los archivos con defectos detectables para que el ciclo
+  // de reparación automática pueda corregirlos. No moverlos a cuarentena antes
+  // de validar: eso ocultaba el error y eliminaba la funcionalidad del paquete.
+  for(const k of [...mapa.keys()].filter(k=>/^BP\/scripts\/.+\.js$/.test(k))){
+    const tx=String(mapa.get(k));const mal=lintScript(tx);const prs=lintScriptApi(tx, verSrv||"2.10.0");
+    if(mal||prs.length)notas.push(k.replace("BP/","")+" necesita reparación antes de activarse: "+(mal||prs.slice(0,3).join("; "))+". Se conserva en BP/scripts para que el validador y reparador puedan corregirlo.");
+  }
   const habilidades=[...(plan._hab3d||[])];
   for(const id of items){
     const o=(plan.objetos||[]).find(x=>x.id===id)||{id,nombre:nombreDeId(id,plan),descripcion:""};
@@ -3432,7 +3468,8 @@ async function mcBuild(body,env,request){
     return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
-    return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
+    // Diagnóstico mejorado: antes el error se truncaba a 160 chars y el usuario no sabía dónde falló.
+    return json({error:"No se pudo armar el add-on.",etapa:String(e&&e.message||e).slice(0,300),archivos_procesados:entrada.length,pista:"Revisa los logs del Worker en Cloudflare para más detalle. Si el error persiste, prueba a generar el add-on en pasos separados (mc_plan → mc_part por cada parte → mc_build)."},500);
   }
 }
 
@@ -3871,7 +3908,7 @@ async function crearMcpack(files, tipo, nombre, descripcion, verSrv, rpUuid) {
   return { bytes: await createZip(arr), manifest, files: arr };
 }
 
-function validarProyectoMinecraftGeneral(files, mcKind) {
+function validarProyectoMinecraftGeneral(files, mcKind, verSrv="2.10.0") {
   const errores = [], avisos = [];
   const rutas = new Set();
   for (const f of files || []) {
@@ -3882,7 +3919,7 @@ function validarProyectoMinecraftGeneral(files, mcKind) {
     if (/\.png$/i.test(f.path) && !pngDesdeTexto(f.content)) errores.push(f.path + ": el contenido no es un PNG binario/base64 válido; no se puede importar como textura.");
     if (/\.js$/i.test(f.path)) {
       const bal = balanceJs(f.content); if (bal) errores.push(f.path + ": " + bal);
-      for (const e of lintScriptApi(f.content, "2.10.0")) errores.push(f.path + ": " + e);
+      for (const e of lintScriptApi(f.content, verSrv)) errores.push(f.path + ": " + e);
     }
     if (/\b(?:TODO|PLACEHOLDER|IMPLEMENTAR AQUI|YOUR_CODE_HERE)\b/i.test(f.content)) avisos.push(f.path + ": contiene un marcador que debe completarse.");
   }
@@ -4158,7 +4195,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     if(!readmeExists) files.push({path:"README.md",content:`# ${name}\n\n${String(parsed.description||prompt)}\n\nGenerado por EGO AI. Revisa y prueba el proyecto antes de publicarlo.\n`});
     if(minecraft && mcKind !== "addon") {
       const cicloGeneral = await cicloReparacionAutomatica(files, env, { minecraft: false });
-      const revisionGeneral = validarProyectoMinecraftGeneral(files, mcKind);
+      const revisionGeneral = validarProyectoMinecraftGeneral(files, mcKind, env.MC_SERVER_VERSION || "2.10.0");
       if (!revisionGeneral.ok) return json({ error: "El proyecto Minecraft no superó la revisión; no se empaquetó como terminado.", artifact: mcKind, validacion: revisionGeneral, reparacion: cicloGeneral.informe }, 422);
       return await generarPaqueteMinecraftEspecial(files, mcKind, name, prompt, env, request);
     }
@@ -4746,7 +4783,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
   const informe = { habilitado: hayProveedorReparacion && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], historial: [], modelos: [], erroresFinales: [], avisosFinales: [], noCorregidos: [], estado: "omitido" };
   if (!Array.isArray(files)) return { validacion: null, informe };
   const vacia = () => ({ ok: true, errores: [], avisos: [], criticos: [], advertencias: [], informativos: [], detalle: [], archivos: files.length });
-  const validar = () => mc ? validarAddonEstructural(files) : vacia();
+  const validar = () => mc ? validarAddonEstructural(files, env.MC_SERVER_VERSION || "2.10.0") : vacia();
   // 0) Reparación determinista (sin IA): cambios seguros y demostrables.
   if (mc) {
     try { for (const c of repararDeterministico(files)) { informe.cambios.push({ path: c.path, ronda: 0, motivo: c.motivo, tipo: "determinista" }); informe.historial.push({ ronda: 0, tipo: "determinista", path: c.path, motivo: c.motivo }); } }
@@ -4762,7 +4799,9 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     return { validacion, informe };
   };
   if (!informe.habilitado) { if (validacion.errores.length || validacion.avisos.length) informe.avisosFinales.push("Reparación con IA desactivada: no hay proveedor de chat disponible o EGO_AUTO_REPAIR=0; solo se aplicaron reparaciones deterministas."); return cerrar(); }
-  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 3), 3));
+  // maxRondas reducido a 2 (era 3): cada ronda tarda hasta 28 s, y mcBuild ya llama a
+  // varias funciones IA; 3 rondas × 28 s = 84 s, sumado al resto excede el límite del Worker.
+  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 2), 2));
   const modelosReparador = [...new Set([EGO_TEAM_MODELS.coder, EGO_TEAM_MODELS.reasoner, EGO_TEAM_MODELS.planner].filter(Boolean))];
   const rutaCreable = p => /^(?:BP|RP)\/(?:entities|entity|items|blocks|recipes|loot_tables|spawn_rules|animations|animation_controllers|render_controllers|models\/entity|texts|sounds|scripts|functions|trading)\/.+\.(?:json|js|lang|mcfunction)$/i.test(p) && !/manifest\.json$/i.test(p);
   for (let ronda = 1; ronda <= maxRondas; ronda++) {
@@ -4791,15 +4830,25 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     // directamente a OpenRouter, así que quedaba desactivada en la práctica
     // cuando OpenRouter no tenía crédito aunque Gemini/Cohere/SambaNova sí.
     try {
-      const respuesta = await egoRoleChat("coder", messages, env, 6500, {
-        maxTotalMs: 28000, maxModels: 2, perModelMs: 6500,
-        providerModels: Math.max(1, egoExternalProviders(env, "code").length),
-        providerTimeoutMs: 8500, cfModels: 1, cfTimeoutMs: 5000,
-        providerOffset: ronda - 1
+      let respuesta = await egoRoleChat("coder", messages, env, 6500, {
+        maxTotalMs: 24000, maxModels: 2, perModelMs: 18000,
+        providerModels: Math.min(2, egoExternalProviders(env, "code").length),
+        providerTimeoutMs: 12000, cfModels: 2, cfTimeoutMs: 18000,
+        providerOffset: (ronda - 1) * 2
       });
-      const p = extractJson(respuesta.content);
+      let p = extractJson(respuesta.content);
+      // HTTP 200 con texto que no respeta el protocolo también es fallo:
+      // no debe bloquear el rescate por OpenRouter/Workers AI.
+      if (!p || !Array.isArray(p.patches)) {
+        informe.avisosFinales.push(`Ronda ${ronda}: la primera respuesta no respetó el JSON de reparación; se intenta otro proveedor.`);
+        respuesta = await egoRoleChat("coder", messages, env, 1800, {
+          maxTotalMs: 16000, maxModels: 2, perModelMs: 12000,
+          providerModels: 0, cfModels: 2, cfTimeoutMs: 14000
+        });
+        p = extractJson(respuesta.content);
+      }
       if (p && Array.isArray(p.patches)) { parsed = p; usado = respuesta.model || "proveedor-failover"; }
-      else informe.avisosFinales.push(`Ronda ${ronda}: el proveedor respondió, pero no devolvió el formato JSON de reparación.`);
+      else informe.avisosFinales.push(`Ronda ${ronda}: el proveedor de rescate tampoco devolvió el formato JSON de reparación.`);
     } catch (e) {
       informe.avisosFinales.push(`Ronda ${ronda}: ningún proveedor pudo reparar: ${String(e?.message || e).slice(0, 150)}`);
     }
@@ -4844,7 +4893,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
 
 // Valida y repara el add-on: JSON de manifest, UUID v4 únicos y dependencias coherentes.
 // Validación estructural local: no sustituye la prueba dentro de Minecraft.
-function validarAddonEstructural(files) {
+function validarAddonEstructural(files, verSrv="2.10.0") {
   const errores = [], avisos = [];
   const porRuta = new Map();
   for (const f of Array.isArray(files) ? files : []) {
@@ -5014,7 +5063,7 @@ function validarAddonEstructural(files) {
     try { const id = JSON.parse(f.content)["minecraft:spawn_rules"]?.description?.identifier; if (id && !entityIds.has(id) && !/^minecraft:/.test(id)) errores.push(`${path}: spawn_rule ${id} no tiene definición correspondiente en BP/entities.`); } catch {}
   }
   // Scripts: errores sintácticos detectables y patrones API incompatibles no deben pasar como éxito.
-  for(const [path,f] of porRuta){if(!/^BP\/scripts\/.+\.js$/i.test(path)||typeof f.content!=="string")continue;const bal=balanceJs(f.content);if(bal)errores.push(`${path}: posible error de sintaxis (${bal}).`);const lint=lintScriptApi(f.content,"2.10.0");for(const msg of lint.slice(0,4))errores.push(`${path}: ${msg}.`);}
+  for(const [path,f] of porRuta){if(!/^BP\/scripts\/.+\.js$/i.test(path)||typeof f.content!=="string")continue;const bal=balanceJs(f.content);if(bal)errores.push(`${path}: posible error de sintaxis (${bal}).`);const lint=lintScriptApi(f.content,verSrv);for(const msg of lint.slice(0,4))errores.push(`${path}: API incompatible (${msg}).`);}
   if (!manifests.length) errores.push("No se encontró ningún manifest.json.");
   // Imports locales de scripts: un módulo faltante rompe todo el entrypoint aunque cada archivo sea sintácticamente válido.
   for (const [path, f] of porRuta) {
