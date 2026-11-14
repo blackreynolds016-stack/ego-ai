@@ -1104,7 +1104,7 @@ function guardarArchivo(id,name,blob){try{if(blob.size>300000)return;const fr=ne
 function cargarArchivo(id,name){if(FILES.has(id))return true;try{const o=JSON.parse(localStorage.getItem("ego_f_"+id)||"null");if(!o||!o.b)return false;const bin=atob(o.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);FILES.set(id,{name:o.n||name,blob:new Blob([u],{type:"application/octet-stream"}),mime:/\.zip$/i.test(o.n||name)?"application/zip":"application/octet-stream"});return true}catch(e){return false}}
 /* ===== Generación modular de add-ons (coordinada con el Worker: ~112 s por módulo, 2 trabajos a la vez) ===== */
 const ADDON_JOBS=new Map();let ADDON_SEQ=0;
-const T_PLAN=165000,T_PART=140000,T_BUILD=170000;
+const T_PLAN=200000,T_PART=260000,T_BUILD=260000;
 async function leerErrorHttp(rr){let msg="";try{const t=await rr.text();try{const j=JSON.parse(t);msg=String(j.error||j.message||"").trim();if(j.codigo)msg+=" ["+j.codigo+"]";var dt=[].concat(Array.isArray(j.detalle)?j.detalle:[],j.diagnostico&&Array.isArray(j.diagnostico.erroresProveedores)?j.diagnostico.erroresProveedores:[]);var vistosD={};dt=dt.filter(function(x){x=String(x);if(vistosD[x])return false;vistosD[x]=1;return true}).slice(0,6);if(dt.length)msg+=" — Motivos: "+dt.map(function(x){return String(x).slice(0,150)}).join(" | ")}catch(e){msg=t.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().slice(0,200)}}catch(e){}
 const st=rr.status,ex=(st===524||st===522||st===504)?" — el servidor cortó la conexión por tiempo":st===429?" — límite de uso del proveedor":"";
 return "HTTP "+st+(msg?": "+msg.slice(0,300):"")+ex}
