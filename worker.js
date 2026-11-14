@@ -9,7 +9,7 @@
  *  - Proveedor retirado: sin referencias residuales. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.42.0 — AUDITORÍA DE COBERTURA Y CONTROL DE CALIDAD
+// EGO AI WORKER v14.43.0 — AUDITORÍA DE COBERTURA Y CONTROL DE CALIDAD
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1169,6 +1169,7 @@ async function egoExternalChat(provider,messages,env,maxTokens=3000,timeoutMs=18
 // Orquestación real del equipo EGO: cada rol usa su modelo asignado y tiene
 // un fallback explícito. Los fallbacks no sustituyen al modelo principal si este responde.
 const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning" };
+function externosParaModulo(env) { return Math.max(1, egoExternalProviders(env, "code").length); }
 async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) {
   if (!routerApiKey(env) && !egoExternalProviders(env, EGO_ROLE_TASK[role]||"chat").length && !env.AI) throw new Error("No hay proveedores configurados: agrega claves API de Gemini, Groq, SambaNova, NVIDIA NIM, Cohere o Mistral, o conserva OpenRouter/Workers AI.");
   const task = EGO_ROLE_TASK[role] || "chat";
@@ -1185,23 +1186,27 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   // Proveedores externos independientes: una clave/cuota agotada no bloquea las demás.
   // En tareas con presupuesto limitado se reparten los intentos para conservar tiempo para CF.
   const externos=egoExternalProviders(env,task);
-  // providerOffset permite que un reintento de módulo empiece por el proveedor
-  // siguiente, en vez de atascarse repitiendo el que acaba de fallar.
-  const providerOffset=Math.max(0,Math.min(externos.length,Number(options.providerOffset)||0));
-  const externosDisponibles=externos.slice(providerOffset);
-  const maxExternos=bounded?Math.max(0,Math.min(externosDisponibles.length,Number(options.providerModels)||4)):Math.min(externosDisponibles.length,3);
+  // Rotación circular: el offset cambia el PRIMER proveedor, pero nunca elimina
+  // los proveedores posteriores. El código anterior usaba slice(offset), por lo
+  // que cada reintento podía saltarse proveedores que aún no se habían probado.
+  const nExternos=externos.length;
+  const providerOffset=nExternos?((Math.floor(Number(options.providerOffset)||0)%nExternos)+nExternos)%nExternos:0;
+  const externosOrdenados=nExternos?externos.map((_,i)=>externos[(providerOffset+i)%nExternos]):[];
+  const maxExternos=bounded
+    ? Math.max(0,Math.min(externosOrdenados.length,Number(options.providerModels)||externosOrdenados.length))
+    : Math.min(externosOrdenados.length,3);
   for(let i=0;i<maxExternos && Date.now()<deadline;i++){
-    const provider=externosDisponibles[i];
-    const remaining=deadline-Date.now(); if(remaining<4500) break;
-    const timeout=bounded?Math.max(4000,Math.min(remaining,Number(options.providerTimeoutMs)||15000)):18000;
+    const provider=externosOrdenados[i];
+    const remaining=deadline-Date.now(); if(remaining<3500) break;
+    const configuredTimeout=Number(options.providerTimeoutMs)||13000;
+    const timeout=bounded?Math.max(4000,Math.min(remaining-2500,configuredTimeout)):18000;
     try{
       const r=await egoExternalChat(provider,messages,env,maxTokens,timeout);
       if(r.content) return {...r,role,fallos:failures};
       failures.push(`${provider.id}: respuesta vacía`);
     }catch(e){
       const em=String(e?.message||e); failures.push(`${provider.id}: ${em.slice(0,145)}`);
-      // Una cuota agotada, modelo inexistente o clave inválida se salta inmediatamente.
-      // Los fallos temporales también pasan al siguiente proveedor para evitar bloquear el módulo.
+      // Los errores de un proveedor quedan aislados: se continúa con el siguiente.
     }
   }
   // Para tareas grandes se usa un presupuesto total: OpenRouter, proveedores externos y Workers AI.
@@ -1790,7 +1795,7 @@ async function mcModelo3d(parte,plan,prompt,env){
     try{
       // El modelador 3D usa la misma ruta acotada del equipo EGO: dos intentos breves,
       // sin recorrer la cadena larga de candidatos de llamarCodigo (causa del timeout de criaturas).
-      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:45000,maxModels:1,perModelMs:29000,cfModels:3,cfTimeoutMs:14000});
+      const r=await egoRoleChat("coder",[{role:"system",content:MC_MODELADOR_SYS},{role:"user",content:user+(ult?"\n\nTu intento anterior falló: "+ult+". Devuelve el JSON completo otra vez, compacto y válido.":"")}],env,6500,{maxTotalMs:45000,maxModels:2,perModelMs:7000,providerModels:Math.max(1,egoExternalProviders(env,"code").length),providerTimeoutMs:12000,cfModels:1,cfTimeoutMs:5000});
       const j=extractJson(r.content);let ps=null;
       if(j){const ar=String(j.arquetipo||"").toLowerCase();let base=[];
         if(/human|person|caball|bipedo/.test(ar))base=modeloHumanoide(j);else if(/best|cuadr|animal|lobo|dragon/.test(ar))base=modeloBestia(j);
@@ -1823,7 +1828,7 @@ async function mcPart(body,env){
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
   const maxTokensParte=ligero?4200:(esEntidades?5200:7600);
-  const timeoutParte=112000;
+  const timeoutParte=150000;
   const restante=(tope)=>Math.max(0,tope-(Date.now()-t0));
   // Hasta tres rondas: normal, compacta y compacta de rescate.
   // Cada ronda rota el punto de inicio de proveedores y conserva el mejor
@@ -1839,8 +1844,8 @@ async function mcPart(body,env){
          "No repitas archivos de otras partes, no añadas explicaciones ni comentarios. " +
          "Devuelve cada archivo completo con el formato exacto. Si no cabe todo, prioriza archivos funcionales y dependencias obligatorias.")
       : user;
-    const presupuesto=Math.min(intento===0?54000:Math.max(10000,quedan-5000),quedan-3000);
-    const timeoutProveedor=Math.max(7000,Math.min(16000,Math.floor(presupuesto/3)));
+    const presupuesto=Math.min(46000,quedan-3500);
+    const timeoutProveedor=Math.max(8000,Math.min(13000,Math.floor(presupuesto/3.5)));
     try{
       const resultado=await Promise.race([
         egoRoleChat("coder",[
@@ -1850,13 +1855,13 @@ async function mcPart(body,env){
           {role:"user",content:userIntento+(errores.length?"\n\nERRORES A CORREGIR:\n- "+errores.slice(0,8).join("\n- "):"")}
         ],env,maxTokensParte,{
           maxTotalMs:presupuesto,
-          maxModels:1,
-          perModelMs:Math.min(18000,presupuesto),
+          maxModels:2,
+          perModelMs:Math.min(7000,presupuesto),
           providerOffset:intento,
-          providerModels:3,
+          providerModels:externosParaModulo(env),
           providerTimeoutMs:timeoutProveedor,
-          cfModels:2,
-          cfTimeoutMs:Math.min(9000,timeoutProveedor)
+          cfModels:1,
+          cfTimeoutMs:Math.min(5000,timeoutProveedor)
         }),
         tmoMc(Math.max(7000,presupuesto+1500))
       ]);
@@ -3320,11 +3325,11 @@ function integrarArquitecturaNPC(files, plan, prompt, serverVersion){
 }
 
 // Auditoría avanzada de requisitos explícitos: no confunde archivos decorativos con sistemas funcionales.
-function auditarRequisitosAddonAvanzado(files, prompt) {
+function auditarRequisitosAddonAvanzado(files, prompt, qualityEvidence = {}) {
   const list = Array.isArray(files) ? files : [];
   const paths = list.map(f => String(f.path || '').replace(/\\/g,'/').toLowerCase());
   const byPath = new Map(list.map(f => [String(f.path || '').toLowerCase(), String(f.content || '')]));
-  const all = list.filter(f => /\.(?:js|json|mcfunction|md)$/i.test(String(f.path||''))).map(f => String(f.content||'')).join('\n').toLowerCase();
+  const all = list.filter(f => /\.(?:js|json|mcfunction)$/i.test(String(f.path||''))).map(f => String(f.content||'')).join('\n').toLowerCase();
   const hasPath = rx => paths.some(x => rx.test(x));
   const hasCode = rx => rx.test(all);
   const findings = [];
@@ -3365,9 +3370,13 @@ function auditarRequisitosAddonAvanzado(files, prompt) {
     add('architecture','Arquitectura modular y Script API declarada', scripts>=2 && imports && api, `${scripts} scripts; imports=${imports}; dependencia/API=${api}`);
   }
   if (/(control de calidad|validaci[oó]n|reparaci[oó]n|auditor[ií]a)/i.test(requested)) {
-    // El control de calidad es responsabilidad del Worker; se verifica que haya quedado documentado en el README.
-    // Esta auditoría se ejecuta después de validar y reparar estructuralmente el paquete.
-    add('quality','Control de calidad ejecutado por el Worker', true, 'Se ejecutó el validador estructural y el ciclo de reparación antes del empaquetado. La prueba in-game sigue pendiente.');
+    // No se aprueba por defecto: debe existir resultado real del validador.
+    const v=qualityEvidence.validacion;
+    const executed=!!v && Array.isArray(v.errores) && typeof v.ok === "boolean";
+    const passed=executed && v.ok && v.errores.length===0;
+    const repairState=String(qualityEvidence.repairState||"no disponible");
+    add('quality','Control de calidad ejecutado y superado', passed,
+      executed ? `validador_ejecutado=true; errores=${v.errores.length}; estado_reparación=${repairState}; prueba dentro de Minecraft pendiente` : 'No existe evidencia verificable de ejecución del validador.', 'no_verificado');
   }
   const missing = findings.filter(x => !x.ok);
   return { ok: missing.length===0, total: findings.length, passed: findings.length-missing.length, findings, missing: missing.map(x=>`${x.label}: ${x.evidence}`) };
@@ -3399,7 +3408,10 @@ async function mcBuild(body,env,request){
     const validacion=ciclo.validacion||validarAddonEstructural(r.files);
     const auditoriaIA = auditarArquitecturaIAAddon(r.files, prompt);
     for (const aviso of auditoriaIA.warnings) r.notas.push(aviso);
-    const auditoriaRequisitos = auditarRequisitosAddonAvanzado(r.files, prompt);
+    const auditoriaRequisitos = auditarRequisitosAddonAvanzado(r.files, prompt, {
+      validacion,
+      repairState: ciclo && ciclo.informe ? ciclo.informe.estado : "no disponible"
+    });
     for (const faltante of auditoriaRequisitos.missing) r.notas.unshift("REQUISITO NO VERIFICADO: " + faltante);
     if (!auditoriaRequisitos.ok) r.notas.unshift(`Cobertura real: ${auditoriaRequisitos.passed}/${auditoriaRequisitos.total} verificaciones; el add-on NO debe considerarse completo.`);
     if (!validacion.ok || validacion.errores.length) {
@@ -4730,7 +4742,8 @@ function repararDeterministico(files) {
 
 async function cicloReparacionAutomatica(files, env, opciones = {}) {
   const mc = !!opciones.minecraft;
-  const informe = { habilitado: !!routerApiKey(env) && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], historial: [], modelos: [], erroresFinales: [], avisosFinales: [], noCorregidos: [], estado: "omitido" };
+  const hayProveedorReparacion = !!routerApiKey(env) || egoExternalProviders(env, "code").length > 0 || !!env.AI;
+  const informe = { habilitado: hayProveedorReparacion && env.EGO_AUTO_REPAIR !== "0", rondas: 0, cambios: [], historial: [], modelos: [], erroresFinales: [], avisosFinales: [], noCorregidos: [], estado: "omitido" };
   if (!Array.isArray(files)) return { validacion: null, informe };
   const vacia = () => ({ ok: true, errores: [], avisos: [], criticos: [], advertencias: [], informativos: [], detalle: [], archivos: files.length });
   const validar = () => mc ? validarAddonEstructural(files) : vacia();
@@ -4748,7 +4761,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     informe.estado = informe.erroresFinales.length ? (informe.cambios.length ? "reparado_parcial" : "pendiente") : (informe.cambios.length ? "reparado_y_validado" : "sin_cambios_necesarios");
     return { validacion, informe };
   };
-  if (!informe.habilitado) { if (validacion.errores.length || validacion.avisos.length) informe.avisosFinales.push("Reparación con IA desactivada (falta ROUTER_API_KEY/OPENROUTER_API_KEY o EGO_AUTO_REPAIR=0): solo se aplicaron reparaciones deterministas."); return cerrar(); }
+  if (!informe.habilitado) { if (validacion.errores.length || validacion.avisos.length) informe.avisosFinales.push("Reparación con IA desactivada: no hay proveedor de chat disponible o EGO_AUTO_REPAIR=0; solo se aplicaron reparaciones deterministas."); return cerrar(); }
   const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 3), 3));
   const modelosReparador = [...new Set([EGO_TEAM_MODELS.coder, EGO_TEAM_MODELS.reasoner, EGO_TEAM_MODELS.planner].filter(Boolean))];
   const rutaCreable = p => /^(?:BP|RP)\/(?:entities|entity|items|blocks|recipes|loot_tables|spawn_rules|animations|animation_controllers|render_controllers|models\/entity|texts|sounds|scripts|functions|trading)\/.+\.(?:json|js|lang|mcfunction)$/i.test(p) && !/manifest\.json$/i.test(p);
@@ -4774,15 +4787,21 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     ];
     informe.rondas = ronda;
     let parsed = null, usado = "";
-    for (const modelo of modelosReparador) {
-      try {
-        const respuesta = await openRouterChat(messages, env, 7000, modelo, ronda === 1 ? 90000 : 70000);
-        const p = extractJson(respuesta.content);
-        if (p && Array.isArray(p.patches)) { parsed = p; usado = respuesta.model; break; }
-        informe.avisosFinales.push(`Reparador ${modelo}: respuesta sin formato válido; se probó otro modelo.`);
-      } catch (e) {
-        informe.avisosFinales.push(`Reparador ${modelo} no disponible: ${String(e?.message || e).slice(0, 110)}`);
-      }
+    // La reparación también usa el failover multiproveedor. Antes llamaba
+    // directamente a OpenRouter, así que quedaba desactivada en la práctica
+    // cuando OpenRouter no tenía crédito aunque Gemini/Cohere/SambaNova sí.
+    try {
+      const respuesta = await egoRoleChat("coder", messages, env, 6500, {
+        maxTotalMs: 28000, maxModels: 2, perModelMs: 6500,
+        providerModels: Math.max(1, egoExternalProviders(env, "code").length),
+        providerTimeoutMs: 8500, cfModels: 1, cfTimeoutMs: 5000,
+        providerOffset: ronda - 1
+      });
+      const p = extractJson(respuesta.content);
+      if (p && Array.isArray(p.patches)) { parsed = p; usado = respuesta.model || "proveedor-failover"; }
+      else informe.avisosFinales.push(`Ronda ${ronda}: el proveedor respondió, pero no devolvió el formato JSON de reparación.`);
+    } catch (e) {
+      informe.avisosFinales.push(`Ronda ${ronda}: ningún proveedor pudo reparar: ${String(e?.message || e).slice(0, 150)}`);
     }
     if (!parsed) { informe.estado = "fallo_reparador"; break; }
     if (usado && !informe.modelos.includes(usado)) informe.modelos.push(usado);
