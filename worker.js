@@ -11,7 +11,7 @@
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.46.0 — DIAGNÓSTICO DE FALLOS POR MÓDULO
+// EGO AI WORKER v14.47.0 — PRESUPUESTOS DE TIEMPO CORREGIDOS (mc_part)
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1859,8 +1859,10 @@ async function mcPart(body,env){
          "No repitas archivos de otras partes, no añadas explicaciones ni comentarios. " +
          "Devuelve cada archivo completo con el formato exacto. Si no cabe todo, prioriza archivos funcionales y dependencias obligatorias.")
       : user;
-    const presupuesto=Math.min(46000,quedan-3500);
-    const timeoutProveedor=Math.max(6500,Math.min(8500,Math.floor(presupuesto/5.2)));
+    // v14.47: presupuestos coherentes con la salida pedida (antes 6.5–8.5 s por proveedor: imposible generar miles de tokens)
+    const topeIntento=intento===0?80000:(intento===1?50000:60000);
+    const presupuesto=Math.max(8000,Math.min(topeIntento,quedan-3500));
+    const timeoutProveedor=Math.max(12000,Math.min(Math.floor(presupuesto*0.42),Math.floor(20000+maxTokensParte*6)));
     try{
       const resultado=await Promise.race([
         egoRoleChat("coder",[
@@ -1871,15 +1873,15 @@ async function mcPart(body,env){
         ],env,maxTokensParte,{
           maxTotalMs:presupuesto,
           maxModels:2,
-          perModelMs:Math.min(8500,presupuesto),
+          perModelMs:Math.min(Math.floor(presupuesto*0.6),Math.floor(25000+maxTokensParte*8)),
           providerOffset:intento,
           providerModels:Math.min(2,egoExternalProviders(env,"code").length),
           validateContent:(content)=>{const parsed=leerProyectoModelo(content);return !!(parsed&&parsed.files&&parsed.files.length);},
           providerTimeoutMs:timeoutProveedor,
           cfModels:1,
-          cfTimeoutMs:Math.min(5000,timeoutProveedor)
+          cfTimeoutMs:Math.min(40000,timeoutProveedor)
         }),
-        tmoMc(Math.max(7000,presupuesto+1500))
+        tmoMc(Math.max(9000,presupuesto+1500))
       ]);
       r={raw:resultado.content,model:resultado.model,idx:0,fallos:resultado.fallos||[]};
     }catch(e){
