@@ -11,7 +11,7 @@
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.47.0 — PRESUPUESTOS DE TIEMPO CORREGIDOS (mc_part)
+// EGO AI WORKER v14.48.0 — EQUIPO DE 7 AGENTES, MODELOS EN VIVO, MÁS TIEMPO
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -22,7 +22,22 @@ const EGO_TEAM_MODELS = {
   planner: "nvidia/nemotron-3-ultra-550b-a55b",
   reasoner: "deepseek/deepseek-v4.1-flash-1017",
   coder: "z-ai/glm-5.3-flash",
-  auditor: "qwen/qwen3.8-27b"
+  auditor: "qwen/qwen3.8-27b",
+  // v14.47.2: equipo ampliado a 7 agentes (cada uno con su especialidad)
+  datos: "moonshotai/kimi-k3",          // escribe JSON de ítems/entidades/bloques/recetas
+  api: "deepseek/deepseek-v4.1-flash",  // revisor de compatibilidad con la API/versión
+  reparador: "z-ai/glm-5.3"             // corrige los defectos que encuentran los revisores
+};
+// Preferencias por rol: el worker consulta el catálogo vivo de OpenRouter y elige el mejor modelo DISPONIBLE
+// que coincida (según rankings de código de noviembre 2026: Kimi K3, GLM-5.3, DeepSeek V4.1 Flash, Qwen3.8).
+const EGO_ROLE_PREF = {
+  planner:   [/kimi-k3/, /glm-5\.3(?!-flash)/, /nemotron-3-ultra/, /deepseek-v4-pro/],
+  coder:     [/glm-5\.3-flash/, /kimi-k3/, /deepseek-v4\.1-flash/, /qwen3\.8/],
+  datos:     [/kimi-k3/, /deepseek-v4\.1-flash/, /glm-5\.3(?!-flash)/],
+  reasoner:  [/deepseek-v4\.1-flash/, /deepseek-v4-pro/, /kimi-k3/],
+  auditor:   [/qwen3\.8-27b/, /glm-5\.3-flash/, /deepseek-v4\.1-flash/],
+  api:       [/glm-5\.3-flash/, /deepseek-v4\.1-flash/, /qwen3\.8/],
+  reparador: [/glm-5\.3(?!-flash)/, /kimi-k3/, /deepseek-v4-pro/, /deepseek-v4\.1-flash/]
 };
 const CF_MODELS = {
   chat: MODELO_RAPIDO,   // resúmenes y tareas rápidas
@@ -1173,7 +1188,7 @@ async function egoExternalChat(provider,messages,env,maxTokens=3000,timeoutMs=18
 
 // Orquestación real del equipo EGO: cada rol usa su modelo asignado y tiene
 // un fallback explícito. Los fallbacks no sustituyen al modelo principal si este responde.
-const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning" };
+const EGO_ROLE_TASK = { planner: "reasoning", reasoner: "reasoning", coder: "code", auditor: "reasoning", datos: "code", api: "reasoning", reparador: "code" };
 function externosParaModulo(env) { return Math.max(1, egoExternalProviders(env, "code").length); }
 // v14.47: modelos :free de OpenRouter descubiertos en vivo (el catálogo gratuito rota seguido).
 // Consulta pública (sin clave), se guarda 1 hora; si falla, se usan solo los IDs fijos.
@@ -1182,13 +1197,14 @@ async function orModelosGratis(task){
     const g=globalThis.__egoOrFreeCache;
     if(!g||Date.now()-g.t>3600000){
       const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),3500);
-      let lista=[];
+      let lista=[],todos=[];
       try{
         const r=await fetch("https://openrouter.ai/api/v1/models",{signal:ctl.signal});
         const d=await r.json();
-        lista=(d.data||[]).filter(m=>m&&typeof m.id==="string"&&/:free$/.test(m.id)&&Number(m.context_length||0)>=32000&&String((m.architecture&&m.architecture.modality)||"text->text").endsWith("->text")&&!/vl|vision|image|audio|embed|guard|safeguard/i.test(m.id)).map(m=>m.id);
+        const texto=(d.data||[]).filter(m=>m&&typeof m.id==="string"&&Number(m.context_length||0)>=32000&&String((m.architecture&&m.architecture.modality)||"text->text").endsWith("->text")&&!/vl|vision|image|audio|embed|guard|safeguard/i.test(m.id));
+        todos=texto.map(m=>m.id); lista=texto.filter(m=>/:free$/.test(m.id)).map(m=>m.id);
       } finally {clearTimeout(tm);}
-      globalThis.__egoOrFreeCache={t:Date.now(),lista};
+      globalThis.__egoOrFreeCache={t:Date.now(),lista,todos};
     }
     const lista=globalThis.__egoOrFreeCache.lista||[];
     const pref=task==="code"
@@ -1207,7 +1223,16 @@ async function egoRoleChat(role, messages, env, maxTokens = 3000, options = {}) 
   const sinCred = !!(globalThis.__egoOrSinCredito && Date.now() - globalThis.__egoOrSinCredito < 120000);
   const esGratis = (m) => /:free$|^openrouter\/free$/.test(String(m));
   const dinamicos = routerApiKey(env) ? await orModelosGratis(task) : [];
-  let models = [...new Set([primary, fallbacks[0], ...dinamicos, fallbacks[1]].filter(Boolean))];
+  // Catálogo vivo: el modelo fijo solo se usa si existe; además se eligen los mejores disponibles para este rol.
+  const todosOr = (globalThis.__egoOrFreeCache && globalThis.__egoOrFreeCache.todos) || [];
+  const existe = (id) => !todosOr.length || todosOr.includes(id);
+  const elegidos = [];
+  if (todosOr.length) for (const rx of (EGO_ROLE_PREF[role] || [])) {
+    const hallados = todosOr.filter(id => rx.test(id)).sort((a, b) => Number(esGratis(a)) - Number(esGratis(b)));
+    for (const id of hallados) if (!elegidos.includes(id)) elegidos.push(id);
+  }
+  const forzado = String(env[envName] || "").trim();
+  let models = [...new Set([forzado || (existe(primary) ? primary : ""), ...elegidos.slice(0, 3), fallbacks[0], ...dinamicos, fallbacks[1]].filter(m => m && (m === forzado || m === OR_FREE.fallback || existe(m))))];
   // Sin crédito en OpenRouter: los modelos de pago darían 402; se prueban solo los gratuitos.
   if (sinCred) models = models.filter(esGratis);
   const failures = [];
@@ -1634,6 +1659,9 @@ Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (í
       }
     }
     dividirTrabajoGrande(plan,prompt);
+    // Los manifests/imágenes los genera el código; y las instrucciones sobre cómo trabaja EGO no son requisitos del add-on.
+    plan.partes=plan.partes.filter(p=>!(/^\s*manifests?\b/i.test(p.titulo)||(p.archivos&&p.archivos.length&&p.archivos.every(a=>/manifest\.json$|\.(png|jpg|ogg)$/i.test(a)))));
+    if(Array.isArray(plan.requisitos))plan.requisitos=plan.requisitos.filter(x=>!/(recuperaci[oó]n de m[oó]dulos|proveedores? (disponibles|de ia)|cambia de proveedor|reintenta solamente|no reinicies|informe (final|detallado)|entrega en (un )?(único )?archivo|archivo \.?mcaddon|no simules|distingue entre c[oó]digo generado)/i.test(String(x)));
     return json({ok:true,plan,model:r.model,fallosModelos:r.fallos||[]});
   }catch(e){
     const plan=limpiarPlan(null,prompt);
@@ -1880,7 +1908,13 @@ async function mcPart(body,env){
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
   const maxTokensParte=ligero?4200:(esEntidades?5200:7600);
-  const timeoutParte=150000;
+  const timeoutParte=210000; // v14.47.2: más tiempo por parte (el frontend espera hasta 260 s)
+  // Roles: JSON de datos → agente "datos"; scripts → agente "coder"
+  const rolGen=parte.tipo==="script"?"coder":"datos";
+  // Las partes de manifest/imágenes las genera el código: no hay nada que pedir a un modelo.
+  if(/^\s*manifests?\b/i.test(parte.titulo)||(parte.archivos.length&&parte.archivos.every(a=>/manifest\.json$|\.(png|jpg|ogg)$/i.test(a)))){
+    return json({ok:true,files:[],model:"generado-por-codigo",equipo:{},revisado:"los manifests, íconos y texturas los genera el código",fallosModelos:[],avisos:[],parte:i,titulo:parte.titulo});
+  }
   const restante=(tope)=>Math.max(0,tope-(Date.now()-t0));
   // Hasta tres rondas: normal, compacta y compacta de rescate.
   // Cada ronda rota el punto de inicio de proveedores y conserva el mejor
@@ -1897,12 +1931,12 @@ async function mcPart(body,env){
          "Devuelve cada archivo completo con el formato exacto. Si no cabe todo, prioriza archivos funcionales y dependencias obligatorias.")
       : user;
     // v14.47: presupuestos coherentes con la salida pedida (antes 6.5–8.5 s por proveedor: imposible generar miles de tokens)
-    const topeIntento=intento===0?80000:(intento===1?50000:60000);
+    const topeIntento=intento===0?110000:(intento===1?60000:40000);
     const presupuesto=Math.max(8000,Math.min(topeIntento,quedan-3500));
     const timeoutProveedor=Math.max(12000,Math.min(Math.floor(presupuesto*0.42),Math.floor(20000+maxTokensParte*6)));
     try{
       const resultado=await Promise.race([
-        egoRoleChat("coder",[
+        egoRoleChat(intento===0?rolGen:(intento===1?"coder":"reparador"),[
           {role:"system",content:sys+
             (compacto?"\n\nMODO COMPACTO DE RECUPERACIÓN: prioriza archivos esenciales completos, respuestas breves y dependencias correctas; no sacrifiques sintaxis ni referencias.":"")+
             (esEntidades?"\n\nMODO ENTIDADES ROBUSTO: cada entidad debe tener definición BP y sus referencias RP coherentes. No inventes recursos binarios.":"")},
@@ -1964,17 +1998,19 @@ async function mcPart(body,env){
   }
   // ---- Reasoner + auditor independientes en paralelo; coder repara si hay defectos ----
   let revisado="", modelosRevision={};
-  if(mejor&&mejor.files.length&&!ligero&&Date.now()-t0<62000&&["script","entities","items","blocks","recipes","loot","spawn","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
+  if(mejor&&mejor.files.length&&!ligero&&Date.now()-t0<120000&&["script","entities","items","blocks","recipes","loot","spawn","misc"].includes(parte.tipo)&&env.MC_CRITICO!=="0"){
     try{
       const texto=mejor.files.filter(f=>/\.(js|json)$/.test(f.path)).map(f=>"=== ARCHIVO: "+f.path+" ===\n"+f.content).join("\n").slice(0,16000);
       const reviewUser="REQUISITOS:\n"+((plan.requisitos||[]).map((x,k)=>(k+1)+". "+x).join("\n")||prompt.slice(0,1500))+"\n\nPLAN:\n"+JSON.stringify({objetos:plan.objetos,poderes_jugador:plan.poderesJugador,revisionEquipo:plan.revisionEquipo||null})+"\n\nARCHIVOS DE LA PARTE «"+parte.titulo+"»:\n"+texto;
-      const [crit,razon]=await Promise.all([
-        Promise.race([egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS.replace("Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable)", "Minecraft Bedrock compatible con @minecraft/server "+String(env.MC_SERVER_VERSION||"2.10.0"))},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
-        Promise.race([egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS.replace("Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable)", "Minecraft Bedrock compatible con @minecraft/server "+String(env.MC_SERVER_VERSION||"2.10.0"))},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:12000,maxModels:1,perModelMs:10000,cfModels:0}),tmoMc(12500)]).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]}))
+      const [crit,razon,apir]=await Promise.all([
+        Promise.race([egoRoleChat("auditor",[{role:"system",content:MC_CRITICO_SYS.replace("Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable)", "Minecraft Bedrock compatible con @minecraft/server "+String(env.MC_SERVER_VERSION||"2.10.0"))},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:20000,maxModels:2,perModelMs:16000,cfModels:0}),tmoMc(20500)]).catch(e=>({content:"",model:"auditor-no-disponible",fallos:[String(e.message||e)]})),
+        Promise.race([egoRoleChat("reasoner",[{role:"system",content:MC_CRITICO_SYS.replace("Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable)", "Minecraft Bedrock compatible con @minecraft/server "+String(env.MC_SERVER_VERSION||"2.10.0"))},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:20000,maxModels:2,perModelMs:16000,cfModels:0}),tmoMc(20500)]).catch(e=>({content:"",model:"reasoner-no-disponible",fallos:[String(e.message||e)]})),
+        // 3.er revisor, especializado en compatibilidad con la API y los formatos de Bedrock
+        Promise.race([egoRoleChat("api",[{role:"system",content:MC_CRITICO_SYS.replace("Minecraft Bedrock 1.26.52.x (@minecraft/server 2.10.0 estable)", "Minecraft Bedrock compatible con @minecraft/server "+String(env.MC_SERVER_VERSION||"2.10.0"))+"\nTU ESPECIALIDAD: SOLO compatibilidad. Señala (a) propiedades/métodos de @minecraft/server que no existen o están en otro objeto (p. ej. damagingEntity va en damageSource, no en el evento), (b) componentes de JSON que no existen en BP o que pertenecen al RP, (c) campos viejos de ítems/entidades. Ignora estilo."},{role:"user",content:reviewUser}],env,1800,{maxTotalMs:20000,maxModels:2,perModelMs:16000,cfModels:0}),tmoMc(20500)]).catch(e=>({content:"",model:"api-no-disponible",fallos:[String(e.message||e)]}))
       ]);
-      modelosRevision={auditor:crit.model||"no disponible",reasoner:razon.model||"no disponible"};
+      modelosRevision={auditor:crit.model||"no disponible",reasoner:razon.model||"no disponible",api:apir.model||"no disponible"};
       const problemas=[];
-      for(const rr of [crit,razon]){
+      for(const rr of [crit,razon,apir]){
         const jc=extractJson(rr.content||"");
         if(jc&&Array.isArray(jc.problemas)) for(const x of jc.problemas){
           const item=String((x&&x.archivo?x.archivo+": ":"")+((x&&x.problema)||"")+(x&&x.arreglo?" → "+x.arreglo:"" )).slice(0,260);
@@ -1982,13 +2018,13 @@ async function mcPart(body,env){
         }
       }
       const probs=problemas.slice(0,8);
-      if(probs.length&&Date.now()-t0>130000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
-      else if(probs.length&&Date.now()-t0<76000){
-        const rr=await Promise.race([egoRoleChat("coder",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:30000,maxModels:1,perModelMs:26000,cfModels:0}),tmoMc(32000)]);
+      if(probs.length&&Date.now()-t0>175000){revisado="auditoría detectó "+probs.length+" problema(s); no hubo tiempo para repararlos en esta parte (la reparación final los reintenta)";}
+      else if(probs.length&&Date.now()-t0<150000){
+        const rr=await Promise.race([egoRoleChat("reparador",[{role:"system",content:sys},{role:"user",content:user+"\n\nTUS ARCHIVOS ACTUALES:\n"+texto+"\n\nEL EQUIPO DE AUDITORÍA ENCONTRÓ ESTOS PROBLEMAS CONCRETOS. Corrígelos y devuelve TODOS los archivos afectados completos:\n- "+probs.join("\n- ")}],env,6500,{maxTotalMs:45000,maxModels:2,perModelMs:30000,cfModels:0}),tmoMc(47000)]);
         const np=parsearSalidaMc(rr.content, env.MC_SERVER_VERSION||"2.10.0");
         if(np.files.length&&!np.errores.length){mejor={files:np.files,errores:[]};revisado="auditor y reasoner detectaron "+probs.length+" problema(s); coder aplicó una corrección que pasó la validación básica";}
         else revisado="auditoría detectó "+probs.length+" problema(s), pero la reparación no pasó; se conserva la versión anterior y se informa la limitación";
-      }else revisado="revisado por auditor + reasoner";
+      }else revisado="revisado por auditor + reasoner + revisor de API";
     }catch(e){revisado="revisión colaborativa incompleta: "+String(e&&e.message||e).slice(0,120);}
   }
   if(!mejor||!mejor.files.length||mejor.errores.length) {
@@ -2548,7 +2584,7 @@ function postprocesarAddon(entrada,plan,verSrv){
   if(iconos.length){
     const dat={};let primero=null;
     for(const ic of iconos){
-      const nom=nombreDeId(ic.id,plan),col=colorDeNombre(nom+" "+((plan.objetos||[]).find(x=>x.id===ic.id)||{}).descripcion),px=dibujarGenerico(tipoIconoDe(nom+" "+ic.corto+" "+(((plan.objetos||[]).find(x=>x.id===ic.id)||{}).icono||"")+((((plan.objetos||[]).find(x=>x.id===ic.id)||{}).habilidad&&!/(vara|baston|cetro|varita)/.test(normMc(nom)))?" espada":"")),col,mezcla(hexRgb(col),[255,255,255],.45).length?"#"+mezcla(hexRgb(col),[255,236,140],.6).map(v=>v.toString(16).padStart(2,"0")).join(""):"#ffffff");
+      const nom=nombreDeId(ic.id,plan),col=colorDeNombre(nom+" "+((plan.objetos||[]).find(x=>x.id===ic.id)||{}).descripcion),px=dibujarGenerico(tipoIconoDe(nom+" "+ic.corto+" "+(((plan.objetos||[]).find(x=>x.id===ic.id)||{}).icono||"")+((((plan.objetos||[]).find(x=>x.id===ic.id)||{}).habilidad&&!/^\s*(ninguna|ninguno|none|no|null|-)?\s*$/i.test(String(((plan.objetos||[]).find(x=>x.id===ic.id)||{}).habilidad))&&!/(vara|baston|cetro|varita)/.test(normMc(nom)))?" espada":"")),col,mezcla(hexRgb(col),[255,255,255],.45).length?"#"+mezcla(hexRgb(col),[255,236,140],.6).map(v=>v.toString(16).padStart(2,"0")).join(""):"#ffffff");
       dat[ic.corto]={textures:"textures/items/"+ic.corto};
       mapa.set("RP/textures/items/"+ic.corto+".png",pngBytes(16,16,px));
       if(!primero)primero={px,col};
@@ -3499,6 +3535,49 @@ function pulidoFinalAddon(files, plan, prompt){
     let nu=get("BP/scripts/ego_nucleo.js");
     if(!nu){files.push({path:"BP/scripts/ego_nucleo.js",content:"// Núcleo compartido (EGO AI)."+fn});nota("BP/scripts/ego_nucleo.js","se creó el núcleo con egoSpawnSeguro");}
     else if(!/egoSpawnSeguro/.test(nu.content)){nu.content+=fn;}
+  }
+
+  // 6b) errores de lógica frecuentes en scripts de modelos
+  const sdef=get("RP/sounds/sound_definitions.json"); const sdTxt=sdef&&typeof sdef.content==="string"?sdef.content:"";
+  for(const f of scripts()){
+    if(/^BP\/scripts\/ego_/.test(f.path))continue;
+    let c=f.content, avisos=[];
+    // a) damagingEntity no existe en el evento: está en damageSource
+    const c1=c.replace(/\b(event|ev|e)\.damagingEntity\b/g,"$1.damageSource?.damagingEntity");
+    if(c1!==c){c=c1;avisos.push("damagingEntity se leía del evento (no existe ahí); ahora de damageSource");}
+    // b) vida "propia" inventada (ego:health) que mataba al jugador sin relación con su vida real
+    {const r1=pfQuitarSubs(c,/world\.afterEvents\.entityHurt\.subscribe\s*\(/g,(b)=>/["']ego:health["']|getDynamicProperty\(["'][\w:]*health/i.test(b)&&/\.kill\(\)/.test(b));c=r1.content;
+     const r2=pfQuitarSubs(c,/world\.afterEvents\.playerSpawn\.subscribe\s*\(/g,(b)=>/setDynamicProperty\(\s*["'][\w:]*health["']/i.test(b)&&b.length<400);c=r2.content;
+     if(r1.n||r2.n)avisos.push("se quitó un sistema de vida inventado que mataba al jugador sin relación con su vida real");}
+    // c) premios en cada golpe (entityHurt) → explotable; el botín va en la tabla de loot
+    {const r=pfQuitarSubs(c,/world\.afterEvents\.entityHurt\.subscribe\s*\(/g,(b)=>/spawnItem|runCommand\(\s*["'`]give /.test(b));c=r.content;if(r.n)avisos.push("se quitó un premio que se daba en CADA golpe (explotable); el botín va en la tabla de loot");}
+    // d) sonidos propios que no existen
+    c=c.replace(/^[ \t]*[\w$.?]+\.playSound\(\s*["']([\w.]+:[\w.]+)["'][^;\n]*\);?[ \t]*$/gm,(m,id)=>{ if(id.startsWith("minecraft:")||sdTxt.includes('"'+id+'"'))return m; avisos.push("sonido inexistente "+id+" quitado"); return "// (EGO) sonido inexistente quitado: "+id; });
+    if(avisos.length&&!balanceJs(c)){f.content=c;for(const a of avisos)nota(f.path,a);}
+  }
+  // 6c) ítems/entidades/spawn: componentes que no existen
+  for(const f of files){
+    if(/^BP\/items\/[^/]+\.json$/.test(f.path)){
+      const o=hdJson(f); const it=o&&o["minecraft:item"]; if(it&&it.components&&"minecraft:on_use" in it.components){delete it.components["minecraft:on_use"];guardar(f,o);nota(f.path,"minecraft:on_use no existe (apuntaba a un evento inexistente); el uso lo gestiona el script");}
+    }
+    if(/^BP\/entities\/[^/]+\.json$/.test(f.path)){
+      const o=hdJson(f); const e=o&&o["minecraft:entity"]; if(e&&e.components&&"minecraft:attack_sound" in e.components){delete e.components["minecraft:attack_sound"];guardar(f,o);nota(f.path,"minecraft:attack_sound no existe en entidades de BP");}
+    }
+    if(/^BP\/spawn_rules\/[^/]+\.json$/.test(f.path)){
+      const o=hdJson(f); const conds=o&&o["minecraft:spawn_rules"]&&o["minecraft:spawn_rules"].conditions; let ch=false;
+      const OK=new Set(["minecraft:spawns_on_surface","minecraft:spawns_underground","minecraft:spawns_underwater","minecraft:spawns_lava","minecraft:spawns_on_block_filter","minecraft:spawns_on_block_prevented_filter","minecraft:brightness_filter","minecraft:density_limit","minecraft:difficulty_filter","minecraft:distance_filter","minecraft:height_filter","minecraft:herd","minecraft:mob_event_filter","minecraft:permute_type","minecraft:player_in_village_filter","minecraft:weight","minecraft:world_age_filter","minecraft:biome_filter","minecraft:delay_filter","minecraft:disallow_spawns_in_bubble","minecraft:is_persistent","minecraft:spawn_event"]);
+      if(Array.isArray(conds))for(const c of conds)for(const k of Object.keys(c))if(!OK.has(k)){delete c[k];ch=true;nota(f.path,"se quitó "+k+" (no existe en las reglas de aparición)");}
+      if(ch)guardar(f,o);
+    }
+  }
+  // 6d) animaciones huérfanas (huesos/ids que nadie usa)
+  {
+    const rpTxt=files.filter(f=>/^RP\/(entity|animation_controllers|render_controllers)\//.test(f.path)).map(f=>f.content||"").join("\n");
+    for(const f of [...files]){
+      if(!/^RP\/animations\/.+\.json$/.test(f.path))continue;
+      const o=hdJson(f); const ids=o&&o.animations?Object.keys(o.animations):[];
+      if(ids.length&&!ids.some(id=>rpTxt.includes(id))){quitarF(f.path);nota(f.path,"animación que ninguna entidad usa; se quitó");}
+    }
   }
 
   // 7) sonidos mal ubicados / nombres no ASCII
@@ -5592,7 +5671,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.47.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.48.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
