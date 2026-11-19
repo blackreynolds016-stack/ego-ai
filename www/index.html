@@ -1200,14 +1200,14 @@ const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp="mc"
 c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);botonReintento(d,job,fallidos.length)}
 catch(e){job.corriendo=false;ctrl=null;const reply="No pude crear el add-on.\n\nMotivo: "+String((e&&e.message)||e);c.msgs.push({role:"assistant",content:reply});saveChats();renderList();finish(d,reply,true)}
 busy=false;stop=false;send.textContent="➤";scroll()}
-/* v14.58: presupuesto de tamaño del proyecto (el servidor es la autoridad; la app solo lo muestra). Límite del proyecto: 500 MiB. */
-var TAM_MAX=26214400;/* 25 MiB: tamaño recomendado por Microsoft para add-ons; el servidor manda el límite real en X-EGO-Limit */
-function tamHdr(r){var b=Number(r.headers.get("X-EGO-Bytes"));if(!isFinite(b)||b<=0)return null;return{bytes:b,limite:Number(r.headers.get("X-EGO-Limit"))||TAM_MAX,seguro:Number(r.headers.get("X-EGO-Safe"))||0,estado:r.headers.get("X-EGO-Tam")||"ok",dup:Number(r.headers.get("X-EGO-Dup"))||0}}
+/* v14.59.0: perfiles EGO AI: pequeño 0.98–3 MiB, grande 24 MiB, experimental hasta 200 MiB. El Worker impone además su límite real de ensamblado seguro. */
+var TAM_MAX=25165824;/* 24 MiB por defecto; el servidor manda el límite real en X-EGO-Limit. */
+function tamHdr(r){var b=Number(r.headers.get("X-EGO-Bytes"));if(!isFinite(b)||b<=0)return null;return{bytes:b,limite:Number(r.headers.get("X-EGO-Limit"))||TAM_MAX,seguro:Number(r.headers.get("X-EGO-Safe"))||0,maxProyecto:Number(r.headers.get("X-EGO-MaxProject"))||209715200,tier:r.headers.get("X-EGO-Tier")||"",estado:r.headers.get("X-EGO-Tam")||"ok",dup:Number(r.headers.get("X-EGO-Dup"))||0}}
 function tamLinea(t){if(!t)return"";var p=t.bytes/t.limite,pc=Math.min(100,p*100),n=Math.round(Math.min(1,p)*20),bar=new Array(n+1).join("█")+new Array(21-n).join("░");
 function mb(x){return x<1048576?(x/1024).toFixed(1)+" KB":(x/1048576).toFixed(2)+" MB"}
 var est=p>=1?"⛔ Límite alcanzado: no se puede añadir nada más.":p>=0.95?"🔴 Crítico: casi sin espacio.":p>=0.8?"🟠 Aviso: te acercas al límite.":"🟢 Espacio suficiente.";
 var s="**Tamaño del proyecto:** `"+bar+"` "+mb(t.bytes)+" de "+mb(t.limite)+" ("+pc.toFixed(p<0.01?3:1)+" %) · quedan "+mb(Math.max(0,t.limite-t.bytes))+" · "+est;
-if(t.seguro&&t.bytes>=t.seguro*0.8)s+="\n\n⚠️ _Sin almacenamiento R2, el Worker solo puede empaquetar con seguridad hasta "+mb(t.seguro)+"._";
+if(t.seguro&&t.bytes>=t.seguro*0.8)s+="\n\n⚠️ _El empaquetador actual tiene un límite operativo de "+mb(t.seguro)+". Para superar ese tamaño se necesita ensamblado por fragmentos/streaming; EGO AI no forzará un ZIP que pueda fallar._";
 if(t.dup>0)s+="\n\n_Hay archivos idénticos repetidos ("+mb(t.dup)+") que podrían optimizarse._";return s}
 function tamBytes(files){var n=0;for(var i=0;i<files.length;i++){var c=files[i]&&files[i].content;if(typeof c==="string"){try{n+=new TextEncoder().encode(c).length}catch(e){n+=c.length}}}return n}
 function fichaMc(f,name,nfiles,fallos,extra){
