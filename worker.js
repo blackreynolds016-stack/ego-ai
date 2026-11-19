@@ -11,7 +11,7 @@
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.58.1 — BÚSQUEDA WEB REPARADA, MODELOS POR PROVEEDOR EN VIVO, ESQUEMA OFICIAL DE ENTIDADES, MEMORIA DEL CREADOR EN ADD-ONS, MEMORIA DE ERRORES, PARTÍCULAS OFICIALES (AURA VISIBLE), PODER REAL EN ARMADURAS, SIN COFRES NO PEDIDOS, BASE OFICIAL DE MOBS VANILLA, AUDITORÍA CON CÓDIGO REAL, REVISOR DE TIPOS CONTRA LA API OFICIAL DE MOJANG, REFERENCIA OFICIAL PARA LOS MODELOS, ESQUEMAS OFICIALES, ARREGLOS AUTOMÁTICOS DE EVENTOS, REPARADOR MÁS RÁPIDO, ARMADURA PUESTA, ÍCONOS POR PIEZA, SIN PODERES/KIT NO PEDIDOS, SIN ERRORES EN EL CHAT, GUÍA DE ERRORES REALES, PLANTILLAS DE RESPALDO, 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
+// EGO AI WORKER v14.59.0 — BÚSQUEDA WEB REPARADA, MODELOS POR PROVEEDOR EN VIVO, ESQUEMA OFICIAL DE ENTIDADES, MEMORIA DEL CREADOR EN ADD-ONS, MEMORIA DE ERRORES, PARTÍCULAS OFICIALES (AURA VISIBLE), PODER REAL EN ARMADURAS, SIN COFRES NO PEDIDOS, BASE OFICIAL DE MOBS VANILLA, AUDITORÍA CON CÓDIGO REAL, REVISOR DE TIPOS CONTRA LA API OFICIAL DE MOJANG, REFERENCIA OFICIAL PARA LOS MODELOS, ESQUEMAS OFICIALES, ARREGLOS AUTOMÁTICOS DE EVENTOS, REPARADOR MÁS RÁPIDO, ARMADURA PUESTA, ÍCONOS POR PIEZA, SIN PODERES/KIT NO PEDIDOS, SIN ERRORES EN EL CHAT, GUÍA DE ERRORES REALES, PLANTILLAS DE RESPALDO, 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -4813,7 +4813,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.58.1",
+    version: "14.59.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -6401,20 +6401,23 @@ function repararAddon(files,verSrv){
   return avisos;
 }
 
-// Presupuesto de proyectos EGO AI (v14.58).
-//  - LÍMITE DEL PROYECTO: 25 MiB (26.214.400 bytes) y 2.500 archivos. Es la recomendación oficial de Microsoft para add-ons
-//    (guía "Improving performance and resource usage"): por encima aumentan los fallos de memoria, de importación en móvil y de multijugador.
-//    Se puede subir con la variable EGO_MAX_PROJECT_MB (techo absoluto 500 MiB). Nada supera nunca los 500 MiB.
-//  - Además, sin R2 un Worker tiene ~128 MB de memoria: empaquetar en memoria solo es seguro hasta ~48 MiB (EGO_MAX_WORKER_MB).
-//  El servidor es la autoridad: mide los bytes reales (UTF-8 para texto) de TODOS los archivos antes de construir el ZIP.
-const EGO_ABS_MAX_BYTES = 500 * 1024 * 1024;
-const EGO_MAX_PROJECT_MB = 500;
-const EGO_LIMITE_MB_DEFECTO = 25;
+// Presupuesto de proyectos EGO AI (v14.59.0).
+// Perfiles de producto: pequeño (objetivo 0.98–3 MiB), grande (objetivo 24 MiB),
+// súper grande experimental (techo de proyecto 200 MiB). Son objetivos de diseño,
+// no una garantía universal de compatibilidad de Minecraft o de memoria del Worker.
+// Sin R2, el ensamblador ZIP actual reserva el paquete completo en memoria; por seguridad
+// conserva un límite operativo de 48 MiB (ajustable hacia abajo, nunca hacia arriba).
+// Para empaquetar 200 MiB de forma fiable hace falta ensamblado por streaming/fragmentos
+// o del lado del dispositivo; no se simula esa capacidad aumentando una constante.
+// El servidor mide bytes UTF-8/binarios reales de todos los archivos antes del ZIP.
+const EGO_ABS_MAX_BYTES = 200 * 1024 * 1024;
+const EGO_MAX_PROJECT_MB = 200;
+const EGO_LIMITE_MB_DEFECTO = 24;
 const EGO_MAX_ARCHIVOS = 2500;
 const EGO_SAFE_MB_DEFECTO = 48;
 function egoMb(v, def, tope){ const mb = Number(v); return (Number.isFinite(mb) && mb > 0 ? Math.min(mb, tope) : def); }
 function egoLimiteBytes(){ return Math.floor(Math.min(egoMb(globalThis.__egoMaxMb, EGO_LIMITE_MB_DEFECTO, EGO_MAX_PROJECT_MB), EGO_MAX_PROJECT_MB) * 1048576); }
-function egoSafeBytes(){ return Math.floor(egoMb(globalThis.__egoSafeMb, EGO_SAFE_MB_DEFECTO, EGO_MAX_PROJECT_MB) * 1048576); }
+function egoSafeBytes(){ return Math.floor(egoMb(globalThis.__egoSafeMb, EGO_SAFE_MB_DEFECTO, EGO_SAFE_MB_DEFECTO) * 1048576); }
 function utf8Len(s){ let n = 0; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c < 0x80) n += 1; else if (c < 0x800) n += 2; else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length && (s.charCodeAt(i + 1) & 0xFC00) === 0xDC00) { n += 4; i++; } else n += 3; } return n; }
 function medirProyectoBytes(files){
   let total = 0, n = 0;
@@ -6434,7 +6437,7 @@ function medirProyectoBytes(files){
       error.code = "EGO_PROJECT_TOO_LARGE"; error.projectBytes = total; error.projectLimitBytes = limite; throw error;
     }
     if (total > safe) {
-      const error = new Error(`El proyecto pesa al menos ${fmt(total)} y, sin almacenamiento R2, el Worker solo puede empaquetar con seguridad hasta ${fmt(safe)}. Divide el add-on en paquetes más pequeños o activa R2.`);
+      const error = new Error(`El proyecto pesa al menos ${fmt(total)}. El empaquetador actual sin R2 tiene un límite operativo de ${fmt(safe)} porque construye el ZIP en memoria. No se reducirá la calidad ni se forzará un paquete que pueda fallar; para superar ese tamaño se necesita ensamblado por fragmentos/streaming o empaquetado local.`);
       error.code = "EGO_WORKER_MEMORY_CAP"; error.projectBytes = total; error.projectLimitBytes = safe; throw error;
     }
   }
@@ -6443,7 +6446,9 @@ function medirProyectoBytes(files){
 function egoEstadoTam(bytes){ const p = bytes / egoLimiteBytes(); return p >= 1 ? "bloqueado" : p >= 0.95 ? "critico" : p >= 0.8 ? "aviso" : "ok"; }
 function egoTamHeaders(zip){
   const i = (zip && zip.egoInfo) || {}; const b = Number(i.bytes) || (zip && zip.length) || 0;
-  return { "X-EGO-Bytes": String(b), "X-EGO-Limit": String(egoLimiteBytes()), "X-EGO-MaxFiles": String(EGO_MAX_ARCHIVOS), "X-EGO-Safe": String(egoSafeBytes()), "X-EGO-Tam": egoEstadoTam(b), "X-EGO-Dup": String(i.bytesDuplicados || 0) };
+  const mib = b / 1048576;
+  const tier = mib <= 3 ? "small" : mib <= 24 ? "large" : "experimental";
+  return { "X-EGO-Bytes": String(b), "X-EGO-Limit": String(egoLimiteBytes()), "X-EGO-MaxProject": String(EGO_MAX_PROJECT_MB * 1048576), "X-EGO-MaxFiles": String(EGO_MAX_ARCHIVOS), "X-EGO-Safe": String(egoSafeBytes()), "X-EGO-Tier": tier, "X-EGO-Tam": egoEstadoTam(b), "X-EGO-Dup": String(i.bytesDuplicados || 0) };
 }
 
 // ZIP clásico sin compresión (STORE, sin ZIP64), compatible con navegadores y Minecraft.
@@ -6494,18 +6499,24 @@ async function createZip(files){
 
 export default {
   async fetch(request, env) {
+    const requestId = request.headers.get("CF-Ray") || (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : "ego-" + Date.now().toString(36));
     try {
       const r = await manejar(request, env);
+      const h = new Headers(r.headers);
+      h.set("X-EGO-Request-ID", requestId);
       const c = corsPara(request, env);
-      if (c !== CORS) {
-        const h = new Headers(r.headers);
-        for (const k in c) h.set(k, c[k]);
-        return new Response(r.body, { status: r.status, headers: h });
+      for (const k in c) h.set(k, c[k]);
+      if (String(c["Access-Control-Expose-Headers"] || "").indexOf("X-EGO-Request-ID") < 0) {
+        h.set("Access-Control-Expose-Headers", String(c["Access-Control-Expose-Headers"] || "") + ", X-EGO-Request-ID, X-EGO-Tier, X-EGO-MaxProject");
       }
-      return r;
+      return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
     } catch (e) {
-      console.error("worker_unhandled", String(e && e.message || e).slice(0, 300));
-      return json({ error: "Error interno del servidor. Revisa los logs del Worker." }, 500);
+      // Diagnóstico útil para el 500: nunca registrar cuerpo, tokens, correo ni secretos.
+      console.error("worker_unhandled", JSON.stringify({ requestId, method: request.method, path: new URL(request.url).pathname, name: String(e && e.name || "Error").slice(0, 80), message: String(e && e.message || e).slice(0, 300), stack: String(e && e.stack || "").slice(0, 1800) }));
+      const r = json({ error: "Error interno del servidor. Revisa los logs del Worker.", requestId }, 500);
+      const h = new Headers(r.headers); h.set("X-EGO-Request-ID", requestId);
+      const c = corsPara(request, env); for (const k in c) h.set(k, c[k]);
+      return new Response(r.body, { status: 500, headers: h });
     }
   }
 };
@@ -6561,7 +6572,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.58.1", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.59.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -6590,7 +6601,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.58.1 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.59.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
