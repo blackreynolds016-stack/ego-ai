@@ -2426,7 +2426,7 @@ async function mcModelo3d(parte,plan,prompt,env){
   }
   return json({error:"No se pudo crear el modelo 3D de «"+obj.nombre+"»: "+ult},502);
 }
-async function mcPart(body,env){
+async function mcPartImpl(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   const plan=limpiarPlan(body.plan,prompt);
   const i=Math.max(0,Math.min(plan.partes.length-1,Number(body.parte)||0));
@@ -2593,6 +2593,31 @@ async function mcPart(body,env){
   }
   return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:[],parte:i,titulo:parte.titulo});
 }
+// Envoltura diagnóstica de mc_part: captura excepciones que antes escapaban
+// antes del bloque try interno (memoria, bindings, normalización del plan, etc.).
+// Nunca devuelve ni registra tokens, prompts completos ni secretos.
+async function mcPart(body, env, request) {
+  try {
+    return await mcPartImpl(body, env);
+  } catch (e) {
+    const requestId = request && request.headers ? (request.headers.get("CF-Ray") || "sin-ray") : "sin-ray";
+    const diagnostic = {
+      requestId,
+      action: "mc_part",
+      name: String(e && e.name || "Error").slice(0, 80),
+      message: String(e && e.message || e).slice(0, 500),
+      stack: String(e && e.stack || "").slice(0, 1800)
+    };
+    console.error("EGO_MC_PART_UNHANDLED", JSON.stringify(diagnostic));
+    return json({
+      error: "Falló internamente la generación de esta parte del add-on.",
+      codigo: "mc_part_internal_error",
+      requestId,
+      detalle: [diagnostic.name + ": " + diagnostic.message]
+    }, 500);
+  }
+}
+
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
 function balanceJs(src){
   // Comprueba llaves, paréntesis, corchetes, comillas y plantillas. Entiende comentarios, regex literales y ${...} anidados.
@@ -6572,7 +6597,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.59.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.59.1", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -6601,7 +6626,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.59.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.59.1 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -6724,7 +6749,7 @@ async function manejar(request, env) {
   if (body.action === "tts" || body.action === "voice_generate" || body.action === "addon_voice") return await generarVoz(body, env, request);
   if (body.action === "web_search") { const q = String(body.query || "").slice(0, 300); if (!q) return json({ error: "Falta query" }, 400); const c = await contextoWeb(q, env, true); return json({ ok: true, fuentes: c.fuentes, usadas: c.usadas, contexto: c.texto }); }
   if (body.action === "mc_plan") return await mcPlan(body, env);
-  if (body.action === "mc_part") return await mcPart(body, env);
+  if (body.action === "mc_part") return await mcPart(body, env, request);
   if (body.action === "mc_build") return await mcBuild(body, env, request);
   if (body.action === "project_generate" || body.action === "minecraft_generate") {
     return await generarProyecto(body, env, body.action === "minecraft_generate", request);
