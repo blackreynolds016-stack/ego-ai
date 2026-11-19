@@ -1175,9 +1175,10 @@ const fallos=fallidos.map(function(i){return plan.partes[i].titulo+" ("+job.fall
 try{
 if(!files.length)throw new Error("ninguna parte se generó"+(fallos.length?": "+fallos[0]:""));
 prog("📦 Armando el paquete, texturas y manifests…");
+{var tb=tamBytes(files);if(tb>TAM_MAX){throw new Error("El proyecto pesa "+(tb/1048576).toFixed(1)+" MB y supera el límite de "+(TAM_MAX/1048576).toFixed(0)+" MB (el recomendado para add-ons). Reduce u optimiza los recursos antes de exportar.")}}
 let r=await pedirJob(job,{action:"mc_build",prompt:text,plan:plan,files:files,modelos3d:job.m3d.filter(Boolean)},T_BUILD);
 if(r.ok&&/zip|octet-stream/.test(r.headers.get("content-type")||"")){blob=await r.blob();nfiles=Number(r.headers.get("X-EGO-Files"))||0;
-try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}try{ficha=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Ficha")||"null"))}catch(e){ficha=null}
+try{resumen=decodeURIComponent(r.headers.get("X-EGO-Resumen")||"")}catch(e){}try{notas=decodeURIComponent(r.headers.get("X-EGO-Notas")||"")}catch(e){}try{ficha=JSON.parse(decodeURIComponent(r.headers.get("X-EGO-Ficha")||"null"))}catch(e){ficha=null}if(ficha){var th=tamHdr(r);if(th)ficha.tam=th}
 const m=(r.headers.get("content-disposition")||"").match(/filename="?([^";]+)"?/i);if(m)name=m[1]}
 else{const jb=await r.clone().json().catch(function(){return null});diag=jb&&(jb.criticos||jb.advertencias)?jb:null;throw new Error((jb&&jb.error)||await leerErrorHttp(r))}
 if(ficha&&ficha.revision&&ficha.revision.faltan&&ficha.revision.faltan.length&&!stop){
@@ -1187,7 +1188,7 @@ const rr=await pedirJob(job,{action:"mc_part",prompt:text,plan:plan,parte:0,prev
 const jj=rr.ok?await rr.json().catch(function(){return null}):null;
 if(jj&&jj.files&&jj.files.length){const nf=files.filter(function(f){return !jj.files.some(function(g){return g.path===f.path})}).concat(jj.files);
 const r2=await pedirJob(job,{action:"mc_build",prompt:text,plan:plan,files:nf,modelos3d:job.m3d.filter(Boolean)},T_BUILD);
-if(r2.ok&&/zip|octet-stream/.test(r2.headers.get("content-type")||"")){const b2=await r2.blob();let f2=null;try{f2=JSON.parse(decodeURIComponent(r2.headers.get("X-EGO-Ficha")||"null"))}catch(e){}
+if(r2.ok&&/zip|octet-stream/.test(r2.headers.get("content-type")||"")){const b2=await r2.blob();let f2=null;try{f2=JSON.parse(decodeURIComponent(r2.headers.get("X-EGO-Ficha")||"null"))}catch(e){}if(f2){var th2=tamHdr(r2);if(th2)f2.tam=th2}
 const antes=ficha.revision.faltan.length,desp=f2&&f2.revision?f2.revision.faltan.length:antes;
 if(f2&&desp<=antes){blob=b2;ficha=f2;nfiles=Number(r2.headers.get("X-EGO-Files"))||nfiles;if(jj.model)job.modelos.add(String(jj.model).split("/").pop())}}}}catch(e){}}
 }catch(e){why=e&&e.tiempo?"el armado del paquete no respondió en "+Math.round(T_BUILD/1000)+" s":String((e&&e.message)||"error")}
@@ -1199,8 +1200,19 @@ const am={role:"assistant",content:reply};if(id){am.fid=id;am.fn=name;am.kp="mc"
 c.msgs.push(am);saveChats();renderList();finish(d,reply,true);if(id)fileBtn(d,id);botonReintento(d,job,fallidos.length)}
 catch(e){job.corriendo=false;ctrl=null;const reply="No pude crear el add-on.\n\nMotivo: "+String((e&&e.message)||e);c.msgs.push({role:"assistant",content:reply});saveChats();renderList();finish(d,reply,true)}
 busy=false;stop=false;send.textContent="➤";scroll()}
+/* v14.58: presupuesto de tamaño del proyecto (el servidor es la autoridad; la app solo lo muestra). Límite del proyecto: 500 MiB. */
+var TAM_MAX=26214400;/* 25 MiB: tamaño recomendado por Microsoft para add-ons; el servidor manda el límite real en X-EGO-Limit */
+function tamHdr(r){var b=Number(r.headers.get("X-EGO-Bytes"));if(!isFinite(b)||b<=0)return null;return{bytes:b,limite:Number(r.headers.get("X-EGO-Limit"))||TAM_MAX,seguro:Number(r.headers.get("X-EGO-Safe"))||0,estado:r.headers.get("X-EGO-Tam")||"ok",dup:Number(r.headers.get("X-EGO-Dup"))||0}}
+function tamLinea(t){if(!t)return"";var p=t.bytes/t.limite,pc=Math.min(100,p*100),n=Math.round(Math.min(1,p)*20),bar=new Array(n+1).join("█")+new Array(21-n).join("░");
+function mb(x){return x<1048576?(x/1024).toFixed(1)+" KB":(x/1048576).toFixed(2)+" MB"}
+var est=p>=1?"⛔ Límite alcanzado: no se puede añadir nada más.":p>=0.95?"🔴 Crítico: casi sin espacio.":p>=0.8?"🟠 Aviso: te acercas al límite.":"🟢 Espacio suficiente.";
+var s="**Tamaño del proyecto:** `"+bar+"` "+mb(t.bytes)+" de "+mb(t.limite)+" ("+pc.toFixed(p<0.01?3:1)+" %) · quedan "+mb(Math.max(0,t.limite-t.bytes))+" · "+est;
+if(t.seguro&&t.bytes>=t.seguro*0.8)s+="\n\n⚠️ _Sin almacenamiento R2, el Worker solo puede empaquetar con seguridad hasta "+mb(t.seguro)+"._";
+if(t.dup>0)s+="\n\n_Hay archivos idénticos repetidos ("+mb(t.dup)+") que podrían optimizarse._";return s}
+function tamBytes(files){var n=0;for(var i=0;i<files.length;i++){var c=files[i]&&files[i].content;if(typeof c==="string"){try{n+=new TextEncoder().encode(c).length}catch(e){n+=c.length}}}return n}
 function fichaMc(f,name,nfiles,fallos,extra){
 var L=["## ✅ "+((f&&f.nombre)||"Tu add-on")+" está listo","","**Archivo:** `"+name+"` · "+(nfiles||"varios")+" archivos",""];
+if(f&&f.tam){L.push(tamLinea(f.tam),"")}
 if(f&&f.incluye&&f.incluye.length){L.push("**Qué incluye**");f.incluye.forEach(function(x){L.push("- "+x)});L.push("")}
 if(f&&f.prueba&&f.prueba.length){L.push("**Cómo probarlo**");f.prueba.forEach(function(x,i){L.push((i+1)+". "+x)});L.push("")}
 if(f&&f.revision){var rv=f.revision;L.push("**Revisión de requisitos:** "+rv.cumplidos+" de "+rv.total+" cosas que pediste están verificadas dentro del archivo.");(rv.faltan||[]).forEach(function(x){L.push("- ⚠️ "+x)});L.push("")}
