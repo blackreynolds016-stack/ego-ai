@@ -11,7 +11,7 @@
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.59.1 — MODO «MEJORAR MI ADD-ON» (RECUERDA TU ÚLTIMA VERSIÓN, SIN REENVIAR), TEXTURAS HD HASTA 128×128, BÚSQUEDA WEB REPARADA, MODELOS POR PROVEEDOR EN VIVO, ESQUEMA OFICIAL DE ENTIDADES, MEMORIA DEL CREADOR EN ADD-ONS, MEMORIA DE ERRORES, PARTÍCULAS OFICIALES (AURA VISIBLE), PODER REAL EN ARMADURAS, SIN COFRES NO PEDIDOS, BASE OFICIAL DE MOBS VANILLA, AUDITORÍA CON CÓDIGO REAL, REVISOR DE TIPOS CONTRA LA API OFICIAL DE MOJANG, REFERENCIA OFICIAL PARA LOS MODELOS, ESQUEMAS OFICIALES, ARREGLOS AUTOMÁTICOS DE EVENTOS, REPARADOR MÁS RÁPIDO, ARMADURA PUESTA, ÍCONOS POR PIEZA, SIN PODERES/KIT NO PEDIDOS, SIN ERRORES EN EL CHAT, GUÍA DE ERRORES REALES, PLANTILLAS DE RESPALDO, 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
+// EGO AI WORKER v14.60 PROFESSIONAL — REPARACIÓN QUIRÚRGICA SIN BORRAR LÓGICA, ESTADO HONESTO DE HABILIDADES, MODO «MEJORAR MI ADD-ON» (RECUERDA TU ÚLTIMA VERSIÓN, SIN REENVIAR), TEXTURAS HD HASTA 128×128, BÚSQUEDA WEB REPARADA, MODELOS POR PROVEEDOR EN VIVO, ESQUEMA OFICIAL DE ENTIDADES, MEMORIA DEL CREADOR EN ADD-ONS, MEMORIA DE ERRORES, PARTÍCULAS OFICIALES (AURA VISIBLE), PODER REAL EN ARMADURAS, SIN COFRES NO PEDIDOS, BASE OFICIAL DE MOBS VANILLA, AUDITORÍA CON CÓDIGO REAL, REVISOR DE TIPOS CONTRA LA API OFICIAL DE MOJANG, REFERENCIA OFICIAL PARA LOS MODELOS, ESQUEMAS OFICIALES, ARREGLOS AUTOMÁTICOS DE EVENTOS, REPARADOR MÁS RÁPIDO, ARMADURA PUESTA, ÍCONOS POR PIEZA, SIN PODERES/KIT NO PEDIDOS, SIN ERRORES EN EL CHAT, GUÍA DE ERRORES REALES, PLANTILLAS DE RESPALDO, 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -1714,6 +1714,7 @@ function mcApiReferencia(){
   L.push("PARTÍCULAS válidas para spawnParticle (usa \"minecraft:\"+nombre; cualquier otra NO se ve): "+MC_PARTICULAS.join(","));
   L.push("PEDIDOS DE PODER: si el usuario pide algo poderoso/invencible/que protege, impleméntalo con efectos reales (addEffect resistance amplifier hasta 4, regeneration, fire_resistance, strength) según piezas equipadas; la propiedad protection del ítem por sí sola es débil. Nunca añadas cofres, botín o kits que no se pidieron.");
   L.push("REGLAS EXTRA: ItemStack.amount se puede cambiar pero para CONSUMIR un objeto debes reasignar el stack: container.setItem(slot, nuevo) (si amount llega a 0 usa setItem(slot, undefined)); itemStack.amount-- NO modifica el inventario. Los mobs vanilla (minecraft:cow, minecraft:pig…) NO se redefinen: para cambiarles algo usa script (triggerEvent con eventos propios) y deja el comportamiento original. EntityVariantComponent.value y EntityMarkVariantComponent.value son solo lectura. Para escalar un mob usa component_groups con minecraft:scale activados por eventos propios; entity.triggerEvent(\"ns:evento\").");
+  L.push("MENÚS Y PANTALLA: player.onScreenDisplay (ScreenDisplay) solo tiene setActionBar, setTitle, updateSubtitle, hideAllExcept, setHudVisibility… NO existe addActionListener ni subscribe; Entity NO tiene lastChatMessage. Para un menú usa ActionFormData/MessageFormData de @minecraft/server-ui con form.show(player).then(r=>{ if(r.canceled)return; r.selection }) abierto desde world.afterEvents.itemUse (system.run). No hay API para leer el chat en 2.10.0 estable: usa ítems o /scriptevent (system.afterEvents.scriptEventReceive).");
   L.push("REGLAS: chatSend NO existe en 2.10.0 estable; runCommandAsync NO existe (usa runCommand); Entity NO tiene sendMessage (solo Player y World); Container NO tiene length (usa size); la salud es getComponent(\"minecraft:health\").currentValue; las familias se consultan con entity.matches({families:[\"monster\"]}); en entityHurt/entityDie el atacante es ev.damageSource.damagingEntity; en entityHitEntity son ev.damagingEntity y ev.hitEntity; playerSpawn/playerJoin NO tienen ev.player en playerJoin (solo playerId/playerName); la armadura puesta se lee con getComponent(\"minecraft:equippable\").getEquipment(\"Head\"|\"Chest\"|\"Legs\"|\"Feet\").");
   __mcApiRef=L.join("\n");return __mcApiRef;
 }
@@ -2010,7 +2011,7 @@ function crearPartesRespaldoMinecraft(prompt){
 }
 
 const RX_3D=/(?:modelo\s*(?:3\s*d|propio|grande|personalizado|custom)|\b3\s*d\b|geometr[ií]a|jefe\s+(?:gigante|enorme|grande)|boss\s+gigante|dise[nñ]o\s+propio)/i;
-// ===== v14.59.1 · Modo «mejorar mi add-on»: EGO recuerda el último add-on de cada usuario (KV, comprimido) =====
+// ===== v14.60.0 · Modo «mejorar mi add-on»: EGO recuerda el último add-on de cada usuario (KV, comprimido) =====
 async function egoGz(u8){const cs=new CompressionStream("gzip");const w=cs.writable.getWriter();w.write(u8);w.close();return new Uint8Array(await new Response(cs.readable).arrayBuffer());}
 async function egoGunzip(u8){const ds=new DecompressionStream("gzip");const w=ds.writable.getWriter();w.write(u8);w.close();return new Uint8Array(await new Response(ds.readable).arrayBuffer());}
 function egoUidMc(body){const u=String((body&&(body.usuario||body.correo))||"").trim();return u?cleanUser(u).slice(0,64):null;}
@@ -2129,7 +2130,7 @@ function limpiarPlan(j,prompt){
   }
   if(j.mejora&&typeof j.mejora==='object')base.mejora={base:Math.max(1,Math.min(9999,Number(j.mejora.base)||1))};
   if(!base.mejora&&!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes=crearPartesRespaldoMinecraft(prompt);
-  // v14.59.1: poderes solo para el jugador → los genera el código; se deja UNA parte "de relleno" para que mc_part nunca reciba un plan sin partes (antes: error 500 «reading titulo»)
+  // v14.60.0: poderes solo para el jugador → los genera el código; se deja UNA parte "de relleno" para que mc_part nunca reciba un plan sin partes (antes: error 500 «reading titulo»)
   if(!base.mejora&&!base.partes.length) base.partes=[{titulo:"Manifest y poderes del jugador (generados por código)",tipo:"misc",detalle:"Los manifests y los poderes del jugador los genera el código.",archivos:[]}];
 
   {const ents=base.objetos.filter(o=>o.tipo==="entity");const pedidos=new Map();
@@ -4765,7 +4766,7 @@ async function repararCoberturaRequisitosAddon(files,prompt,env){
   return {audit,rounds:models.length,models};
 }
 
-// ===== v14.59.1 · Informe de calidad real (0-100) + comprobación final de PNG =====
+// ===== v14.60.0 · Informe de calidad real (0-100) + comprobación final de PNG =====
 function egoVerificarPng(files,notas){
   let malos=0;
   for(const f of files){
@@ -4778,18 +4779,185 @@ function egoVerificarPng(files,notas){
   }
   return malos;
 }
-function egoInformeCalidad(files,validacion,auditoria,pngMalos){
+function egoInformeCalidad(files,validacion,auditoria,pngMalos,estadoHab){
   let score=100;const problemas=[],aciertos=[];
   const sc=files.filter(f=>/^BP\/scripts\/.+\.js$/i.test(f.path)),en=files.filter(f=>/^BP\/entities\/.+\.json$/i.test(f.path)),cl=files.filter(f=>/^RP\/entity\/.+\.json$/i.test(f.path)),tx=files.filter(f=>/\.png$/i.test(f.path)&&!/pack_icon/.test(f.path));
   const nErr=validacion&&validacion.errores?validacion.errores.length:0,nAv=validacion&&validacion.avisos?validacion.avisos.length:0;
   if(nErr){score-=Math.min(40,nErr*10);problemas.push(nErr+" error(es) estructural(es)");}else aciertos.push("sin errores estructurales");
   if(nAv){score-=Math.min(10,nAv*2);problemas.push(nAv+" aviso(s) de revisión");}
-  if(sc.length)aciertos.push(sc.length+" script(s) con sintaxis y API verificadas");
+  {const lim=sc.filter(f=>typeof f.content==="string"&&!/EGO-PENDIENTE|^\/\/ EGO AI: este módulo contenía/.test(f.content)).length;if(lim)aciertos.push(lim+" script(s) sin errores de sintaxis ni de API (revisión estática)");}
   if(en.length>cl.length){score-=15;problemas.push((en.length-cl.length)+" criatura(s) sin client_entity");}else if(en.length)aciertos.push(en.length+" criatura(s) con su parte visual");
   if(tx.length)aciertos.push(tx.length+" textura(s) PNG válidas");
   if(pngMalos){score-=10;problemas.push(pngMalos+" PNG inválido(s) reemplazado(s)");}
   if(auditoria&&auditoria.total){const f=auditoria.total-auditoria.passed;if(f>0){score-=Math.min(30,Math.round(30*f/auditoria.total));problemas.push((auditoria.passed)+"/"+auditoria.total+" requisitos verificados");}else aciertos.push("todos los requisitos pedidos verificados");}
+  {const pen=(estadoHab||[]).filter(h=>h.estado==='PENDIENTE'||h.estado==='NO COMPATIBLE').length;if(pen){score-=Math.min(30,pen*8);problemas.push(pen+" módulo(s) pendiente(s) o no compatible(s)");}}
   return {score:Math.max(0,score),problemas,aciertos};
+}
+// ===== v14.60 · Reparación quirúrgica de scripts (sin borrar lógica, sin sustituir menús en silencio) =====
+// Orden: (1) alternativa oficial exacta si existe; (2) comentar SOLO la sentencia afectada conservando su texto original como «EGO-PENDIENTE»;
+// (3) si el archivo no se puede salvar, se conserva el original comentado y se marca PENDIENTE. Todo cambio se compara antes/después y se revierte si empeora.
+function cqEsc(t){return String(t).replace(/\*\//g,"* /").replace(/\s+/g," ").trim();}
+function cqSentencia(texto,linea){
+  const lim=ttLimpiar(texto);const lineas=lim.split("\n");
+  if(linea<1||linea>lineas.length)return null;
+  let ini=0;for(let i=0;i<linea-1;i++)ini+=lineas[i].length+1;
+  const fila=lineas[linea-1];const ind=fila.match(/^\s*/)[0].length;const cab=fila.trim();
+  let m=/^(?:\}\s*)?(?:else\s+)?(?:if|while)\s*\(/.exec(cab);
+  if(m){const pa=ini+ind+cab.indexOf("(");const cp=ttParen(lim,pa);if(cp<0)return null;return {a:pa,b:cp+1,tipo:"cond"};}
+  m=/^(const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/.exec(cab);
+  const a=ini+ind;let d=0,fin=-1;
+  for(let k=a;k<lim.length;k++){const c=lim[k];
+    if("([{".includes(c))d++;else if(")]}".includes(c)){d--;if(d<0)return null;}
+    else if(d===0&&c===";"){fin=k+1;break;}
+    else if(d===0&&c==="\n"&&k>a){const antes=lim.slice(a,k),sig=lim.slice(k+1,k+40);if(!/[=,(+\-*\/&|?:.]\s*$/.test(antes)&&!/^\s*[.?:+\-*\/&|]/.test(sig)){fin=k;break;}}}
+  if(fin<0)return null;
+  if(m)return {a,b:fin,tipo:"decl",kw:m[1],nombre:m[2]};
+  if(/^(return|throw|break|continue|import|export|function|class|\}|\{)/.test(cab))return null;
+  return {a,b:fin,tipo:"expr"};
+}
+// Alternativas oficiales exactas (no cambian el comportamiento). Devuelve el texto nuevo del archivo o null.
+function cqAlternativa(t,linea,problema){
+  const lineas=t.split("\n");const L=lineas[linea-1];if(L===undefined)return null;
+  if(/«runCommandAsync»/.test(problema)&&/\.runCommandAsync\(/.test(L)){lineas[linea-1]=L.replace(/\.runCommandAsync\(/g,".runCommand(");return lineas.join("\n");}
+  if(/«length»/.test(problema)&&/Container/.test(problema)&&/\.length\b/.test(L)){lineas[linea-1]=L.replace(/(container|inv|inventory|inventario|cont)\.length\b/g,"$1.size");if(lineas[linea-1]!==L)return lineas.join("\n");}
+  if(/«setTimeout»|setTimeout/.test(problema)&&/\bsetTimeout\(/.test(L)){lineas[linea-1]=L.replace(/\bsetTimeout\(/g,"system.runTimeout(");return lineas.join("\n");}
+  return null;
+}
+function cqExtraerOpcionesMenu(texto){
+  const out=[];for(const m of String(texto).matchAll(/\.button\(\s*(["'`])((?:\\.|(?!\1).){1,60})\1/g)){const n=m[2].replace(/§./g,"").replace(/[<>"\\\n]/g," ").trim();if(n&&!out.includes(n))out.push(n);}
+  return out.slice(0,24);
+}
+function cqMenuRespaldo(plan,opcionesOriginales){
+  const ent=[];const vistos=new Set();
+  for(const o of (plan.objetos||[]).slice(0,40)){if(!o||!o.id)continue;const n=String(o.nombre||o.id).replace(/[<>"\\\n]/g," ").slice(0,40);vistos.add(n.toLowerCase());ent.push({id:o.id,nombre:n,tipo:o.tipo==="entity"?"entity":"item"});}
+  for(const n of (opcionesOriginales||[])){if(vistos.has(n.toLowerCase()))continue;vistos.add(n.toLowerCase());ent.push({id:"",nombre:n,tipo:"pendiente"});}
+  return `// MENÚ DE RESPALDO generado por EGO AI porque el menú original tenía código que no existe en Minecraft (ver BP/EGO_PENDIENTES/).
+// Usa solo APIs reales de @minecraft/server y @minecraft/server-ui. Abre con clic derecho en una brújula.
+import { world, system, ItemStack } from "@minecraft/server";
+import { ActionFormData } from "@minecraft/server-ui";
+
+const ENTRADAS = ${JSON.stringify(ent)};
+const abiertos = new Set();
+
+function abrirMenu(player, intento = 0) {
+  if (!player || !player.isValid || abiertos.has(player.id)) return;
+  abiertos.add(player.id);
+  const form = new ActionFormData().title(${JSON.stringify(String(plan.nombre||"Menú EGO").slice(0,40))}).body("Elige una opción.");
+  for (const e of ENTRADAS) form.button(e.tipo === "pendiente" ? e.nombre + " §7(pendiente)" : e.nombre);
+  if (!ENTRADAS.length) form.button("Cerrar");
+  form.show(player).then((r) => {
+    abiertos.delete(player.id);
+    if (r.canceled) {
+      if (r.cancelationReason === "UserBusy" && intento < 3) system.runTimeout(() => abrirMenu(player, intento + 1), 20);
+      return;
+    }
+    const e = ENTRADAS[r.selection];
+    if (!e || !player.isValid) return;
+    try {
+      if (e.tipo === "pendiente") { player.sendMessage("§e«" + e.nombre + "» quedó pendiente: pide a EGO AI «mejorar mi add-on»."); return; }
+      if (e.tipo === "entity") player.dimension.spawnEntity(e.id, player.location);
+      else player.getComponent("minecraft:inventory").container.addItem(new ItemStack(e.id, 1));
+      player.sendMessage("§aListo: " + e.nombre);
+    } catch (err) {
+      player.sendMessage("§cNo se pudo: " + e.nombre);
+    }
+  }).catch(() => { abiertos.delete(player.id); });
+}
+
+world.afterEvents.itemUse.subscribe((ev) => {
+  if (ev.itemStack.typeId !== "minecraft:compass") return;
+  const player = ev.source;
+  system.run(() => abrirMenu(player));
+});
+`;
+}
+// Dependencias del manifest según los imports reales de los scripts
+function egoAsegurarDeps(files,ver){
+  const cambios=[];const bp=files.find(x=>x.path==="BP/manifest.json");if(!bp||typeof bp.content!=="string")return cambios;
+  const usados=new Set();
+  for(const f of files)if(/^BP\/scripts\/.+\.js$/i.test(f.path)&&typeof f.content==="string")for(const m of f.content.matchAll(/from\s+["'](@minecraft\/[a-z-]+)["']|import\s+["'](@minecraft\/[a-z-]+)["']/g))usados.add(m[1]||m[2]);
+  try{const m=JSON.parse(bp.content);m.dependencies=Array.isArray(m.dependencies)?m.dependencies:[];
+    const vUI=/^2\.11(?:\.|$)/.test(String(ver))?"2.3.0":/^2\./.test(String(ver))?"2.2.0":"1.3.0";
+    for(const [mod,v] of [["@minecraft/server",String(ver||"2.10.0")],["@minecraft/server-ui",vUI]])
+      if(usados.has(mod)&&!m.dependencies.some(d=>d&&d.module_name===mod)){m.dependencies.push({module_name:mod,version:v});cambios.push("manifest: se declaró la dependencia "+mod+" "+v+" porque un script la importa");}
+    if(cambios.length)bp.content=JSON.stringify(m,null,2)+"\n";
+  }catch(_){}
+  return cambios;
+}
+function cuarentenaScripts(files,ver,plan){
+  const cambios=[],pend=[];
+  const rutas=new Set(files.map(f=>f.path));
+  for(const f of files){
+    if(!/^BP\/scripts\/.+\.js$/i.test(f.path)||typeof f.content!=="string")continue;
+    const original=f.content;let t=original,hecho=0,ok=true;
+    const antes=lintScriptApiTipado(original,ver).length+(balanceJs(original)?1:0);
+    t=t.replace(/^\s*import\s+["'](\.{1,2}\/[^"']+)["'];?\s*$/gm,(l,sp)=>{const base=f.path.replace(/[^/]+$/,"")+sp.replace(/^\.\//,"");const cand=[base,base+".js",base.replace(/\.js$/,"")+".js"];if(cand.some(c=>rutas.has(c)))return l;hecho++;cambios.push(f.path+": import «"+sp+"» comentado (el archivo no existe)");return "/* EGO-PENDIENTE (archivo inexistente): "+cqEsc(l)+" */";});
+    let bal=balanceJs(t);
+    for(let it=0;it<16&&!bal;it++){
+      const probs=lintScriptApiTipado(t,ver);if(!probs.length)break;
+      const pr=probs.find(x=>/^línea \d+:/.test(x));if(!pr){ok=false;break;}
+      const ln=Number(/^línea (\d+):/.exec(pr)[1]);const msg=pr.replace(/^línea \d+:\s*/,"");
+      const alt=cqAlternativa(t,ln,pr);
+      if(alt&&!balanceJs(alt)&&lintScriptApiTipado(alt,ver).length<probs.length){t=alt;hecho++;cambios.push(f.path+" línea "+ln+": corregido con la alternativa oficial → "+msg.slice(0,90));continue;}
+      const s=cqSentencia(t,ln);if(!s){ok=false;break;}
+      const orig=t.slice(s.a,s.b);let nuevo;
+      const marca="/* EGO-PENDIENTE (API inexistente): "+cqEsc(orig).slice(0,380)+" */";
+      if(s.tipo==="cond")nuevo="(false "+marca+")";else if(s.tipo==="decl")nuevo=s.kw+" "+s.nombre+" = undefined; "+marca;else nuevo=marca+";";
+      const nt=t.slice(0,s.a)+nuevo+t.slice(s.b);
+      if(balanceJs(nt)||lintScriptApiTipado(nt,ver).length>=probs.length){ok=false;break;}
+      t=nt;hecho++;const estado=/ScreenDisplay|lastChatMessage|chatSend/.test(msg)?"NO COMPATIBLE":"PENDIENTE";
+      pend.push({path:f.path,linea:ln,estado,detalle:msg.replace(/\. Miembros reales.*$/,"").slice(0,140)});
+      cambios.push(f.path+" línea "+ln+": "+msg.slice(0,100)+" → sentencia comentada (código original conservado) · "+estado);
+    }
+    const despues=lintScriptApiTipado(t,ver).length+(balanceJs(t)?1:0);
+    if(!ok||despues>0||despues>antes){
+      // no se pudo salvar: se conserva el original comentado (para reparar luego) y se deja el módulo vacío
+      const esMenu=/menu|men[uú]/i.test(f.path)||/ActionFormData|onScreenDisplay/.test(original);
+      const carpeta="BP/EGO_PENDIENTES/"+f.path.split("/").pop()+".txt";
+      files.push({path:carpeta,content:"// Código ORIGINAL de "+f.path+" (conservado por EGO AI; contenía código no compatible).\n"+original});
+      f.content="// EGO AI: este módulo contenía código no compatible con @minecraft/server "+ver+" y quedó PENDIENTE. El original está en "+carpeta+".\nexport {};\n";
+      pend.push({path:f.path,linea:0,estado:"PENDIENTE",detalle:"módulo completo pendiente de reparación"});
+      cambios.push(f.path+": no se pudo reparar de forma segura → original conservado en "+carpeta+" y módulo marcado PENDIENTE");
+      if(esMenu){
+        const rp="BP/scripts/ego_menu_respaldo.js";
+        files.push({path:rp,content:cqMenuRespaldo(plan,cqExtraerOpcionesMenu(original))});
+        const mj=files.find(x=>x.path==="BP/scripts/main.js");if(mj&&typeof mj.content==="string"&&!/ego_menu_respaldo/.test(mj.content))mj.content+='import "./ego_menu_respaldo.js";\n';
+        cambios.push("Se AÑADIÓ un menú de respaldo (brújula + clic derecho) con "+((plan.objetos||[]).length+cqExtraerOpcionesMenu(original).length)+" opción(es); tu menú original NO se perdió: quedó pendiente.");
+      }
+      continue;
+    }
+    if(hecho)f.content=t;
+  }
+  for(const x of egoAsegurarDeps(files,ver))cambios.push(x);
+  return {cambios,pend};
+}
+// Estado honesto de cada módulo de habilidades (verificación ESTÁTICA; nunca se llama «funcional» sin prueba en juego)
+function egoEstadoHabilidades(files,pend){
+  const scripts=files.filter(f=>/^BP\/scripts\/.+\.js$/i.test(f.path)&&typeof f.content==="string");
+  const imp=new Set(["BP/scripts/main.js"]);const por=new Map(scripts.map(f=>[f.path,f]));
+  for(let vuelta=0;vuelta<6;vuelta++)for(const p of [...imp]){const f=por.get(p);if(!f)continue;for(const m of f.content.matchAll(/import\s+(?:[^"']*?from\s+)?["'](\.{1,2}\/[^"']+)["']/g)){const base=p.replace(/[^/]+$/,"")+m[1].replace(/^\.\//,"");for(const c of [base,base+".js"])if(por.has(c))imp.add(c);}}
+  const out=[];
+  for(const f of scripts){
+    if(/main\.js$/.test(f.path)||/^BP\/scripts\/ego_(menu_respaldo|poderes)\.js$/.test(f.path)&&false)continue;
+    const t=f.content.replace(/\/\*[\s\S]*?\*\//g,"").replace(/^\s*\/\/.*$/gm,"");
+    if(!t.replace(/export\s*\{\s*\}\s*;?/,"").trim()){out.push({path:f.path,estado:"PENDIENTE",faltan:["módulo vacío (código original conservado)"]});continue;}
+    const act=/(afterEvents|beforeEvents)\.\w+\.subscribe|runInterval|runTimeout|scriptEventReceive|system\.run\(/.test(t);
+    const efe=/addEffect|applyDamage|applyKnockback|spawnParticle|spawnEntity|setOnFire|teleport|runCommand|addTag|sendMessage|ActionFormData|ModalFormData|MessageFormData|setItem|addItem|setDynamicProperty|playSound|kill\(|setBlockType|fillBlocks/.test(t);
+    const cool=/cooldown|enfriamiento|system\.currentTick|Date\.now\(\)/i.test(t),err=/try\s*\{|\.catch\(/.test(t);
+    const pj=pend.filter(x=>x.path===f.path);const faltan=[];
+    if(!imp.has(f.path))faltan.push("no se importa desde main.js");
+    if(!act)faltan.push("sin evento/mecanismo de activación");
+    if(!efe)faltan.push("sin efectos ejecutados");
+    if(!cool&&/itemUse|itemStartUse|hitEntity|entityHit/.test(t))faltan.push("sin cooldown");
+    if(!err)faltan.push("sin control de errores");
+    let estado;
+    if(pj.some(x=>x.estado==="NO COMPATIBLE"))estado="NO COMPATIBLE";
+    else if(pj.length)estado="PARCIAL";
+    else if(!imp.has(f.path)||!act||!efe)estado="PENDIENTE";
+    else estado=faltan.length?"PARCIAL":"IMPLEMENTADO";
+    out.push({path:f.path,estado,faltan,pendientes:pj.map(x=>"línea "+x.linea+": "+x.detalle)});
+  }
+  return out;
 }
 async function mcBuild(body,env,request){
   let prompt=String(body.prompt||"").slice(0,12000);
@@ -4835,7 +5003,15 @@ async function mcBuild(body,env,request){
     for(const x of vz.fallos)r.notas.push("Voz: "+x);
     const reparacionCobertura=await repararCoberturaRequisitosAddon(r.files,prompt,env);
     const ciclo=await cicloReparacionAutomatica(r.files,env,{minecraft:true});
-    const validacion=ciclo.validacion||validarAddonEstructural(r.files,env.MC_SERVER_VERSION||"2.10.0");
+    let validacion=ciclo.validacion||validarAddonEstructural(r.files,env.MC_SERVER_VERSION||"2.10.0");
+    let pendientes=[];
+    if(validacion.errores&&validacion.errores.some(x=>/API incompatible|error de sintaxis|import local no resuelto/.test(x))){
+      try{const cq=cuarentenaScripts(r.files,env.MC_SERVER_VERSION||"2.10.0",plan);pendientes=cq.pend;
+        if(cq.cambios.length){for(const x of cq.cambios.slice(0,14))r.notas.push("Reparación quirúrgica: "+x);r.notas.push("HABILIDADES PENDIENTES: lo que usaba funciones que no existen en Minecraft quedó comentado (el código original se conserva) y NO cuenta como funcionando. Pide «mejorar mi add-on» para rehacerlo con una alternativa compatible.");validacion=validarAddonEstructural(r.files,env.MC_SERVER_VERSION||"2.10.0");}
+      }catch(e){console.error("cuarentena",String(e&&e.message||e).slice(0,120));}
+    }
+    try{for(const x of egoAsegurarDeps(r.files,env.MC_SERVER_VERSION||"2.10.0"))r.notas.push("Corregido: "+x);}catch(_){}
+    let estadoHab=[];try{estadoHab=egoEstadoHabilidades(r.files,pendientes);}catch(_){}
     const auditoriaIA = auditarArquitecturaIAAddon(r.files, prompt);
     for (const aviso of auditoriaIA.warnings) r.notas.push(aviso);
     const auditoriaRequisitos = auditarRequisitosAddonAvanzado(r.files, prompt, {
@@ -4864,8 +5040,14 @@ async function mcBuild(body,env,request){
     const au=await auditarAddon(plan,r.files,r.conteo.habilidades,env);
     if(au&&au.faltan.length)r.notas.unshift("Revisión final: no pude confirmar "+au.faltan.length+" de "+au.total+" cosas que pediste → "+au.faltan.slice(0,3).join(" · "));
     const pngMalos=egoVerificarPng(r.files,r.notas);
-    const informe=egoInformeCalidad(r.files,validacion,auditoriaRequisitos,pngMalos);
+    const informe=egoInformeCalidad(r.files,validacion,auditoriaRequisitos,pngMalos,estadoHab);
     {const rd=r.files.find(f=>/^BP\/README\.md$/i.test(f.path));if(rd&&typeof rd.content==="string")rd.content+="\n\n## Informe de calidad EGO AI\n- Puntuación: "+informe.score+"/100\n"+informe.aciertos.map(x=>"- OK: "+x).join("\n")+(informe.problemas.length?"\n"+informe.problemas.map(x=>"- Revisar: "+x).join("\n"):"")+"\n";}
+    if(estadoHab.length){
+      const cnt={};for(const h of estadoHab)cnt[h.estado]=(cnt[h.estado]||0)+1;
+      const rd2=r.files.find(f=>/^BP\/README\.md$/i.test(f.path));
+      if(rd2&&typeof rd2.content==="string")rd2.content+="\n## Estado de las habilidades (verificación ESTÁTICA, sin prueba dentro del juego)\n"+estadoHab.map(h=>"- "+h.estado+" · "+h.path.replace("BP/scripts/","")+((h.faltan&&h.faltan.length)?" — falta: "+h.faltan.join("; "):"")+((h.pendientes&&h.pendientes.length)?" — pendiente: "+h.pendientes.join("; "):"")).join("\n")+"\nIMPLEMENTADO = lógica conectada que pasó las comprobaciones estáticas. PARCIAL = existe pero le faltan piezas. PENDIENTE = no está bien implementado. NO COMPATIBLE = la API de Minecraft no permite hacerlo como se pidió.\n";
+      r.notas.push("Habilidades: "+Object.entries(cnt).map(([k,v])=>v+" "+k).join(" · ")+" (revisión estática; falta probarlas en el juego)");
+    }
     r.notas.push("Calidad: "+informe.score+"/100"+(informe.problemas.length?" ("+informe.problemas.join("; ")+")":""));
     const zip=await createZip(r.files);
     let guardado=false;try{guardado=await mcGuardarUltimo(env,uid,{ver:verNueva,plan,prompt,files:r.files,modelos3d:plan._modelos3d,nivelTex:plan._nivelTex});}catch(e){console.error("mc_ult",String(e&&e.message||e).slice(0,120));}
@@ -4873,7 +5055,7 @@ async function mcBuild(body,env,request){
     const nombre="ego-"+slugAscii(plan.nombre)+(verNueva>1?"-v"+verNueva:"")+(esParcial?"-parcial":"");
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,...egoTamHeaders(zip),"X-EGO-Files":String(r.files.length),"X-EGO-Version":String(verNueva),"X-EGO-Score":String(informe.score),"X-EGO-Model":"por-partes","X-EGO-Parcial":esParcial?"1":"0","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,...egoTamHeaders(zip),"X-EGO-Files":String(r.files.length),"X-EGO-Version":String(verNueva),"X-EGO-Score":String(informe.score),"X-EGO-Habilidades":encodeURIComponent(JSON.stringify(estadoHab.map(h=>[h.path.replace("BP/scripts/",""),h.estado])).slice(0,1500)),"X-EGO-Model":"por-partes","X-EGO-Parcial":esParcial?"1":"0","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     if((e?.code==="EGO_PROJECT_TOO_LARGE"||e?.code==="EGO_WORKER_MEMORY_CAP")) return json({error:String(e.message),code:e.code,limiteBytes:e.projectLimitBytes,tamanoMinimoBytes:e.projectBytes},413);
@@ -4983,7 +5165,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.59.1",
+    version: "14.60.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -5647,7 +5829,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
 // El modelo solo decide nombre/tipo/habilidad/color; los archivos los arma el código,
 // así el manifest, el ícono, la textura PNG y el script siempre salen correctos.
 // ============================================================
-// ===== v14.59.1 · Texturas HD (hasta 128×128; armadura hasta 256×128) =====
+// ===== v14.60.0 · Texturas HD (hasta 128×128; armadura hasta 256×128) =====
 // Nivel según el pedido: pixel (16) · normal (32, por defecto) · alta (64) · max (128). Se reduce solo si el peso se acerca al límite.
 function egoNivelTexturas(prompt){
   const t=String(prompt||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
@@ -6295,7 +6477,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     const scoreAntes = validacion.errores.length * 10 + validacion.avisos.length;
     const diagnostico = hallazgos.map(x => (validacion.errores.includes(x) ? "CRÍTICO: " : "ADVERTENCIA: ") + x).join("\n").slice(0, 9000);
     const messages = [
-      { role: "system", content: `Eres el reparador de código de EGO AI. Corrige SOLO problemas demostrables. No reescribas el proyecto ni cambies su diseño; no borres código válido. Conserva compatibilidad con Minecraft Bedrock y @minecraft/server ${String(env.MC_SERVER_VERSION || "2.10.0")} (no uses APIs eliminadas como runCommandAsync ni eventos que no existan). Puedes corregir archivos existentes y CREAR archivos que falten SOLO si el diagnóstico lo exige (JSON/JS/lang en BP/ o RP/, nunca manifest ni PNG). Devuelve ÚNICAMENTE JSON válido: {"patches":[{"path":"ruta","content":"contenido COMPLETO del archivo"}]}. Si no puedes justificar una corrección devuelve {"patches":[]}. No uses Markdown, no inventes APIs ni afirmes haber ejecutado pruebas.` + (mc ? "\n\n" + mcApiReferencia() : "") },
+      { role: "system", content: `Eres el reparador de código de EGO AI. Corrige SOLO problemas demostrables. RESTRICCIONES: modifica únicamente los archivos listados y solo las líneas del error; no toques otros archivos; usa solo miembros que existan en la clase indicada por el diagnóstico (el diagnóstico lista los miembros reales); si no hay alternativa oficial, deja el código como está y dilo en vez de inventar una función. No reescribas el proyecto ni cambies su diseño; no borres código válido. Conserva compatibilidad con Minecraft Bedrock y @minecraft/server ${String(env.MC_SERVER_VERSION || "2.10.0")} (no uses APIs eliminadas como runCommandAsync ni eventos que no existan). Puedes corregir archivos existentes y CREAR archivos que falten SOLO si el diagnóstico lo exige (JSON/JS/lang en BP/ o RP/, nunca manifest ni PNG). Devuelve ÚNICAMENTE JSON válido: {"patches":[{"path":"ruta","content":"contenido COMPLETO del archivo"}]}. Si no puedes justificar una corrección devuelve {"patches":[]}. No uses Markdown, no inventes APIs ni afirmes haber ejecutado pruebas.` + (mc ? "\n\n" + mcApiReferencia() : "") },
       { role: "user", content: `RONDA ${ronda}. DIAGNÓSTICO:\n${diagnostico}\n\nARCHIVOS DEL PROYECTO (inventario):\n${inventario.join("\n")}\n\nARCHIVOS A CORREGIR:\n${JSON.stringify(snapshot)}` }
     ];
     informe.rondas = ronda;
@@ -6667,7 +6849,7 @@ function medirProyectoBytes(files){
   }
   return { bytes: total, megabytes: total / 1048576, files: n, limitBytes: limite, safeBytes: safe };
 }
-// v14.59.1: categoría según el tamaño real del paquete. Pequeño ≤ 1 MiB · Mediano ≤ 10 MiB · Grande hasta el límite (25 MiB por defecto).
+// v14.60.0: categoría según el tamaño real del paquete. Pequeño ≤ 1 MiB · Mediano ≤ 10 MiB · Grande hasta el límite (25 MiB por defecto).
 function egoCategoria(bytes){ return bytes <= 1048576 ? "pequeño" : bytes <= 10485760 ? "mediano" : "grande"; }
 function egoTextoTam(bytes){
   const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(2) + " MB";
@@ -6795,7 +6977,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.59.1", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.60.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -6824,7 +7006,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.59.1 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.60.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
