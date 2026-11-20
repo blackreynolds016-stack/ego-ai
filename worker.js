@@ -11,7 +11,7 @@
  *  - Proveedores y secretos existentes conservados. Secretos de Cloudflare sin cambios.
  */
 // ============================================================
-// EGO AI WORKER v14.55.2 — BÚSQUEDA WEB REPARADA, MODELOS POR PROVEEDOR EN VIVO, ESQUEMA OFICIAL DE ENTIDADES, MEMORIA DEL CREADOR EN ADD-ONS, MEMORIA DE ERRORES, PARTÍCULAS OFICIALES (AURA VISIBLE), PODER REAL EN ARMADURAS, SIN COFRES NO PEDIDOS, BASE OFICIAL DE MOBS VANILLA, AUDITORÍA CON CÓDIGO REAL, REVISOR DE TIPOS CONTRA LA API OFICIAL DE MOJANG, REFERENCIA OFICIAL PARA LOS MODELOS, ESQUEMAS OFICIALES, ARREGLOS AUTOMÁTICOS DE EVENTOS, REPARADOR MÁS RÁPIDO, ARMADURA PUESTA, ÍCONOS POR PIEZA, SIN PODERES/KIT NO PEDIDOS, SIN ERRORES EN EL CHAT, GUÍA DE ERRORES REALES, PLANTILLAS DE RESPALDO, 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
+// EGO AI WORKER v14.59.1 — MODO «MEJORAR MI ADD-ON» (RECUERDA TU ÚLTIMA VERSIÓN, SIN REENVIAR), TEXTURAS HD HASTA 128×128, BÚSQUEDA WEB REPARADA, MODELOS POR PROVEEDOR EN VIVO, ESQUEMA OFICIAL DE ENTIDADES, MEMORIA DEL CREADOR EN ADD-ONS, MEMORIA DE ERRORES, PARTÍCULAS OFICIALES (AURA VISIBLE), PODER REAL EN ARMADURAS, SIN COFRES NO PEDIDOS, BASE OFICIAL DE MOBS VANILLA, AUDITORÍA CON CÓDIGO REAL, REVISOR DE TIPOS CONTRA LA API OFICIAL DE MOJANG, REFERENCIA OFICIAL PARA LOS MODELOS, ESQUEMAS OFICIALES, ARREGLOS AUTOMÁTICOS DE EVENTOS, REPARADOR MÁS RÁPIDO, ARMADURA PUESTA, ÍCONOS POR PIEZA, SIN PODERES/KIT NO PEDIDOS, SIN ERRORES EN EL CHAT, GUÍA DE ERRORES REALES, PLANTILLAS DE RESPALDO, 7 AGENTES, MODELOS EN VIVO, ENTREGA PARCIAL, NORMALIZADOR DE ESQUEMAS BEDROCK
 // ============================================================
 
 // Cada cadena se prueba en orden: si un modelo falla (p. ej. tu plan de Cloudflare no lo incluye) pasa al siguiente.
@@ -62,7 +62,7 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, X-Usuario-Correo, Authorization",
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas, X-EGO-Validacion, X-EGO-Reparacion, X-EGO-Cobertura, X-EGO-Parcial"
+  "Access-Control-Expose-Headers": "Content-Disposition, X-EGO-Files, X-EGO-Model, X-EGO-Avisos, X-EGO-Resumen, X-EGO-Ficha, X-EGO-Spec, X-EGO-NoAplicado, X-EGO-Notas, X-EGO-Validacion, X-EGO-Reparacion, X-EGO-Cobertura, X-EGO-Parcial, X-EGO-Bytes, X-EGO-Limit, X-EGO-Safe, X-EGO-Tam, X-EGO-Categoria, X-EGO-Dup, X-EGO-MaxFiles"
 };
 
 const MSG_NO_APRENDE = "EGO AI no puede aprender de los usuarios. Solo su creador puede enseñarle.";
@@ -2010,6 +2010,95 @@ function crearPartesRespaldoMinecraft(prompt){
 }
 
 const RX_3D=/(?:modelo\s*(?:3\s*d|propio|grande|personalizado|custom)|\b3\s*d\b|geometr[ií]a|jefe\s+(?:gigante|enorme|grande)|boss\s+gigante|dise[nñ]o\s+propio)/i;
+// ===== v14.59.1 · Modo «mejorar mi add-on»: EGO recuerda el último add-on de cada usuario (KV, comprimido) =====
+async function egoGz(u8){const cs=new CompressionStream("gzip");const w=cs.writable.getWriter();w.write(u8);w.close();return new Uint8Array(await new Response(cs.readable).arrayBuffer());}
+async function egoGunzip(u8){const ds=new DecompressionStream("gzip");const w=ds.writable.getWriter();w.write(u8);w.close();return new Uint8Array(await new Response(ds.readable).arrayBuffer());}
+function egoUidMc(body){const u=String((body&&(body.usuario||body.correo))||"").trim();return u?cleanUser(u).slice(0,64):null;}
+function egoB64(u8){let s="";for(let i=0;i<u8.length;i+=8192)s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));return btoa(s);}
+function egoB64Inv(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
+const EGO_ULT_CACHE=new Map();
+async function mcCargarUltimo(env,uid){
+  if(!uid)return null;
+  const c=EGO_ULT_CACHE.get(uid);if(c&&Date.now()-c.ts<600000)return c.snap;
+  if(!env||!env.EGO_BIBLIOTECA)return null;
+  try{
+    const buf=await Promise.race([env.EGO_BIBLIOTECA.get("mc_ult:"+uid,"arrayBuffer"),new Promise(r=>setTimeout(()=>r(null),3000))]);
+    if(!buf)return null;
+    const snap=JSON.parse(new TextDecoder().decode(await egoGunzip(new Uint8Array(buf))));
+    if(!snap||snap.v!==1||!Array.isArray(snap.files))return null;
+    EGO_ULT_CACHE.set(uid,{ts:Date.now(),snap});return snap;
+  }catch(_){return null;}
+}
+const EGO_ULT_EXCLUIR=/(^|\/)manifest\.json$|\.png$|(^|\/)README\.md$|^RP\/textures\/(item|terrain)_texture\.json$/i;
+async function mcGuardarUltimo(env,uid,dat){
+  if(!uid)return false;
+  const files=[],bin=[];let binBytes=0;
+  for(const f of dat.files){
+    if(EGO_ULT_EXCLUIR.test(f.path))continue;
+    if(typeof f.content==="string")files.push({path:f.path,content:f.content});
+    else if(f.content instanceof Uint8Array&&binBytes+f.content.length<3*1048576&&/\.(wav|ogg|mp3)$/i.test(f.path)){binBytes+=f.content.length;bin.push({path:f.path,b64:egoB64(f.content)});}
+  }
+  const man={};for(const p of ["BP","RP"]){const m=dat.files.find(f=>f.path===p+"/manifest.json");if(m&&typeof m.content==="string")man[p]=m.content;}
+  const p=dat.plan||{};
+  const plan={nombre:p.nombre,ns:p.ns,resumen:p.resumen,requisitos:p.requisitos,objetos:p.objetos,poderesJugador:p.poderesJugador,kit:p.kit};
+  let pr=String(dat.prompt||"");if(pr.length>12000)pr=pr.slice(0,7000)+"\n[…]\n"+pr.slice(-4800);
+  const snap={v:1,ver:dat.ver,ts:Date.now(),prompt:pr,nivelTex:dat.nivelTex||"normal",plan,modelos3d:dat.modelos3d||[],files,bin,manifests:man};
+  const gz=await egoGz(new TextEncoder().encode(JSON.stringify(snap)));
+  if(gz.length>24*1048576)return false;
+  EGO_ULT_CACHE.set(uid,{ts:Date.now(),snap});
+  if(!env||!env.EGO_BIBLIOTECA)return false;
+  await Promise.race([env.EGO_BIBLIOTECA.put("mc_ult:"+uid,gz,{expirationTtl:60*86400}),new Promise((_,j)=>setTimeout(()=>j(new Error("tiempo kv")),5000))]);
+  return true;
+}
+function mcEsMejora(prompt,snap,body){
+  if(!snap)return false;
+  if(body&&body.nuevo===true)return false;
+  if(body&&body.mejorar===true)return true;
+  const t=normMc(prompt);
+  const ref=/\b(mi add-?on|el add-?on|el addon|ese add-?on|este add-?on|lo que (hiciste|creaste|generaste)|anterior|el mismo|la misma|ultimo|ultima|esa version|la version|tu add-?on)\b/.test(t);
+  const otro=/\b(nuevo|nueva|otro|otra|diferente|distinto|distinta)\s+(add-?on|addon|mod|pack)\b|\bdesde cero\b|\bempieza de nuevo\b/.test(t);
+  if(otro&&!/\bmismo\b/.test(t))return false;
+  const verbo=/\b(mejor\w*|corrig\w*|arregl\w*|agreg\w*|anad\w*|ponle|ponles|quitale|quita\w*|cambia\w*|modific\w*|actualiz\w*|amplia\w*|aumenta\w*|sube|baja|reduce\w*|falla\w*|no funciona\w*|no sirve\w*|error\w*|bug|le falta\w*|faltan?|version \d|otra version|nueva version|ademas|hazlo|hazla|hazlos|que (sea|tenga|vuele)|mas (fuerte|poderos\w*|grande|rapid\w*)|texturas? (hd|de alta|mejor))\b/.test(t);
+  const crea=/\b(crea|creame|haz|hazme|genera|generame|quiero)\w* (un|una|otro|otra|unos|unas) /.test(t);
+  if(ref&&verbo)return true;
+  return verbo&&t.length<500&&!crea;
+}
+function mcTextoExistentes(files,parte){
+  const pref=new Set((parte&&parte.archivos||[]).map(String));
+  const peso=(p)=>pref.has(p)?0:(/^BP\/scripts\//.test(p)?1:(/^BP\/entities\//.test(p)?2:(/^BP\/(items|blocks)\//.test(p)?3:4)));
+  const lista=[...files].sort((a,b)=>peso(a.path)-peso(b.path));
+  let out="Archivos que ya tiene el add-on: "+lista.map(f=>f.path).join(", ").slice(0,2500)+"\n";
+  for(const f of lista){
+    const bloque="=== ARCHIVO: "+f.path+" ===\n"+f.content.slice(0,peso(f.path)<=1?4500:2500)+"\n=== FIN ===\n";
+    if(out.length+bloque.length>14000)continue;out+=bloque;
+  }
+  return out;
+}
+function mcFusionarPlan(snapPlan,d){
+  const p=Object.assign({},d);
+  p.nombre=snapPlan.nombre||d.nombre;p.ns=snapPlan.ns||d.ns;p.resumen=snapPlan.resumen||d.resumen;
+  const un=(a,b,k)=>{const m=new Map();for(const x of (a||[]))m.set(k?x[k]:String(x),x);for(const x of (b||[]))m.set(k?x[k]:String(x),x);return [...m.values()];};
+  p.requisitos=un(snapPlan.requisitos,d.requisitos).slice(0,60);
+  p.objetos=un(snapPlan.objetos,d.objetos,"id");
+  p.poderesJugador=[...new Set([...(snapPlan.poderesJugador||[]),...(d.poderesJugador||[])])];
+  p.kit=d.kit||snapPlan.kit;
+  p.sonidos=[];
+  return p;
+}
+function mcContinuidadManifests(files,snap,ver){
+  const nv=[1,0,ver];let rpViejo=null,rpNuevo=null;
+  const leer=(t)=>{try{return JSON.parse(t);}catch(_){return null;}};
+  for(const pk of ["RP","BP"]){
+    const f=files.find(x=>x.path===pk+"/manifest.json"),old=leer(snap.manifests&&snap.manifests[pk]);
+    if(!f||!old||!old.header)continue;
+    const n=leer(f.content);if(!n||!n.header)continue;
+    if(pk==="RP"){rpNuevo=n.header.uuid;rpViejo=old.header.uuid;}
+    n.header.uuid=old.header.uuid;n.header.version=nv;
+    n.modules=(n.modules||[]).map(m=>{const o=(old.modules||[]).find(q=>q.type===m.type);return Object.assign({},m,{uuid:o?o.uuid:m.uuid,version:nv});});
+    if(pk==="BP"&&Array.isArray(n.dependencies))n.dependencies=n.dependencies.map(d=>(d&&d.uuid&&rpNuevo&&d.uuid===rpNuevo)?{uuid:rpViejo,version:nv}:d);
+    f.content=JSON.stringify(n,null,2)+"\n";
+  }
+}
 function limpiarPlan(j,prompt){
   const base={nombre:"Add-on EGO",ns:"ego",resumen:String(prompt||"").slice(0,300),objetos:[],partes:[]};
   if(!j||typeof j!=="object") j={};
@@ -2038,7 +2127,10 @@ function limpiarPlan(j,prompt){
     const arch=(Array.isArray(p&&p.archivos)?p.archivos:[]).map(x=>safeProjectPath(x)).filter(x=>x&&/^(BP|RP)\//.test(x)&&!/manifest\.json$|\.png$/i.test(x)).slice(0,12);
     base.partes.push({titulo:String((p&&p.titulo)||"Parte "+(base.partes.length+1)).slice(0,60),tipo,detalle:String((p&&p.detalle)||"").slice(0,1500),archivos:arch});
   }
-  if(!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes=crearPartesRespaldoMinecraft(prompt);
+  if(j.mejora&&typeof j.mejora==='object')base.mejora={base:Math.max(1,Math.min(9999,Number(j.mejora.base)||1))};
+  if(!base.mejora&&!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes=crearPartesRespaldoMinecraft(prompt);
+  // v14.59.1: poderes solo para el jugador → los genera el código; se deja UNA parte "de relleno" para que mc_part nunca reciba un plan sin partes (antes: error 500 «reading titulo»)
+  if(!base.mejora&&!base.partes.length) base.partes=[{titulo:"Manifest y poderes del jugador (generados por código)",tipo:"misc",detalle:"Los manifests y los poderes del jugador los genera el código.",archivos:[]}];
 
   {const ents=base.objetos.filter(o=>o.tipo==="entity");const pedidos=new Map();
    for(const q of (Array.isArray(j.modelos3d)?j.modelos3d:[]).slice(0,12)){const id=mcId(base.ns,q&&(q.entidad||q.id));if(ents.some(e=>e.id===id))pedidos.set(id,String((q&&q.descripcion)||"").slice(0,500));}
@@ -2100,6 +2192,7 @@ function jsonTolerante(t){
 
 // Pedido grande: varias partes pequeñas y paralelas (una parte gigante agota el tiempo). Solo la llama mcPlan, para que los índices del plan no cambien después.
 function dividirTrabajoGrande(base,prompt){
+  if(base&&base.mejora)return base;
   const grande=String(prompt||"").length>2200||(base.requisitos||[]).length>=8;
   if(!grande||!Array.isArray(base.partes))return base;
   const antes3d=base.partes.filter(p=>p.tipo==="modelo3d");
@@ -2155,9 +2248,30 @@ async function mcRegistrarErrores(env,cambios){
     await env.EGO_BIBLIOTECA.put("mc_errores_frecuentes",JSON.stringify(Object.fromEntries(e)));
   }catch(_){}
 }
+async function mcPlanMejora(body,env,prompt,snap){
+  const inv=inventarioAddon(snap.files,[]).slice(0,9000);
+  const sys=MC_GUIA_BASE+`\n\nMODO MEJORAR UN ADD-ON YA CREADO (versión ${snap.ver}). El usuario NO vuelve a enviarlo: EGO lo recuerda. Tu tarea: planificar SOLO los cambios que pide ahora. Devuelve SOLO un JSON (sin Markdown):
+{"requisitos":["solo lo NUEVO o lo que cambia, una línea por cosa concreta"],"objetos":[{"id":"${snap.plan.ns||"ego"}:nombre","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","icono":"cómo se ve","habilidad":"rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna","entrega":"kit|crafteo|creativo|botin|aparece","poderes":[]}],"poderes_jugador":[],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn|misc","detalle":"qué archivos cambiar o crear y cómo, con números e ids exactos","archivos":["BP/scripts/x.js"]}]}
+REGLAS: (1) "objetos" = solo objetos NUEVOS, o existentes que haya que reescribir (mismo id). Conserva el prefijo "${snap.plan.ns||"ego"}". (2) "partes" = solo lo necesario; si solo piden mejor calidad/texturas o no hace falta código nuevo, "partes":[] . (3) Si algo falla, indica en la parte el archivo EXISTENTE a corregir y el error probable. (4) No recrees lo que ya funciona. (5) Mantén el límite de 25 MB.`;
+  const usr="ADD-ON ACTUAL «"+(snap.plan.nombre||"")+"» (versión "+snap.ver+"). Pedido original:\n"+String(snap.prompt||"").slice(0,2500)+"\n\nINVENTARIO ACTUAL:\n"+inv+"\n\nCAMBIOS QUE PIDE AHORA EL USUARIO:\n"+prompt;
+  let j=null,modelo="plan-mejora";
+  try{
+    const r=await Promise.race([egoRoleChat("planner",[{role:"system",content:sys},{role:"user",content:usr}],env,4000,{maxTotalMs:70000,maxModels:3,perModelMs:35000,providerTimeoutMs:30000,providerModels:3,cfModels:1,cfTimeoutMs:30000,
+      validateContent:(c)=>{try{const x=extractJson(c);return !!(x&&typeof x==="object");}catch(_){return false;}}}),tmoMc(75000)]);
+    j=extractJson(r.content);modelo=r.model;
+  }catch(_){j=null;}
+  if(!j||typeof j!=="object")j={requisitos:[prompt.slice(0,400)],partes:[{titulo:"Mejora pedida",tipo:"misc",detalle:prompt.slice(0,3000),archivos:[]}]};
+  j.mejora={base:snap.ver};j.nombre=snap.plan.nombre;j.ns=snap.plan.ns;
+  const plan=limpiarPlan(j,prompt);
+  plan.nombre=snap.plan.nombre||plan.nombre;plan.ns=snap.plan.ns||plan.ns;plan.mejora={base:snap.ver};
+  plan.resumen=(snap.plan.resumen||"")+" · mejora v"+(snap.ver+1);
+  dividirTrabajoGrande(plan,"");
+  return json({ok:true,plan,model:modelo,modo:"mejora",versionBase:snap.ver,versionNueva:snap.ver+1,aviso:"Mejorando tu último add-on (versión "+snap.ver+") sin que lo vuelvas a enviar."});
+}
 async function mcPlan(body,env){
   const prompt=String(body.prompt||"").trim().slice(0,12000);
   if(!prompt) return respuestaJsonError("Falta prompt.");
+  try{const uid=egoUidMc(body);const snap=await mcCargarUltimo(env,uid);if(mcEsMejora(prompt,snap,body))return await mcPlanMejora(body,env,prompt,snap);}catch(_){}
   const sys=MC_GUIA_BASE+`\n\nTu tarea ahora: PLANIFICAR el add-on pedido. Devuelve SOLO un JSON (sin Markdown) con esta forma:
 {"nombre":"Nombre del add-on","ns":"prefijo corto en minúsculas (por defecto ego)","resumen":"qué hace en 1-2 frases","requisitos":["una línea por cada cosa CONCRETA que pidió el usuario, con sus detalles; si algo no se puede hacer en Minecraft Bedrock, empieza la línea con IMPOSIBLE: y explica qué se hará en su lugar"],"objetos":[{"id":"ns:nombre_en_minusculas","tipo":"item|block|entity","nombre":"Nombre visible","descripcion":"cómo se comporta","icono":"arma_fuego|pistola|rifle|escopeta|francotirador|botiquin|municion|armadura|escudo|espada|hacha|pico|vara|reloj|libro|corona|botella|anillo|lingote|orbe|gema: cómo se ve el ítem","habilidad":"solo para ítems de arma/herramienta: rayo|fuego|hielo|explosion|veneno|viento|curacion|ninguna (EGO programa esa habilidad automáticamente: clic derecho + golpe)","entrega":"kit|crafteo|creativo|botin|aparece: DÓNDE y CUÁNDO recibe el jugador este objeto según el pedido (si dijo que viene en el cofre inicial, kit)","poderes":["solo si el ítem da poderes pasivos o de vuelo: vuelo|vision_nocturna|velocidad|fuerza|regeneracion|resistencia|salto|respirar_agua|sin_hambre|resistencia_fuego"]}],"kit":null,"poderes_jugador":[],"modelos3d":[],"sonidos":[],"partes":[{"titulo":"corto","tipo":"items|blocks|entities|script|recipes|loot|spawn","detalle":"instrucciones exactas y completas de lo que debe contener esta parte (comportamientos, números, ids que usa)","archivos":["BP/items/nombre.json"]}]}
 ANÁLISIS PROFUNDO: antes de planificar, lee el pedido palabra por palabra y enumera en "requisitos" TODO lo que pidió (nada más, nada menos). Cada objeto, habilidad y parte del plan debe servir a un requisito. No interpretes a tu gusto: si el usuario no lo dijo, no lo agregues.
@@ -2432,8 +2546,10 @@ async function mcPart(body,env){
   const i=Math.max(0,Math.min(plan.partes.length-1,Number(body.parte)||0));
   const pe=body.parteExtra&&typeof body.parteExtra==='object'?body.parteExtra:null;
   const parte=pe?{titulo:String(pe.titulo||"Completar").slice(0,60),tipo:MC_TIPOS_PARTE.includes(pe.tipo)?pe.tipo:"script",detalle:String(pe.detalle||"").slice(0,3000),archivos:[]}:plan.partes[i];
+  if(!parte)return json({ok:true,files:[],model:"generado-por-codigo",equipo:{},revisado:"este add-on no necesita partes escritas por IA: lo genera el código",fallosModelos:[],avisos:[],parte:i,titulo:"Contenido generado por código"});
   if(parte&&parte.tipo==="modelo3d")return await mcModelo3d(parte,plan,prompt,env);
-  const existentes=String(body.existentes||"").slice(0,14000);
+  let existentes=String(body.existentes||"").slice(0,14000);
+  if(!existentes&&plan.mejora){try{const sn=await mcCargarUltimo(env,egoUidMc(body));if(sn)existentes=mcTextoExistentes(sn.files,parte);}catch(_){}}
   const previos=(Array.isArray(body.previos)?body.previos:[]).map(x=>String(x).slice(0,120)).slice(0,120);
   const memoriaPart=await mcMemoriaCreador(env,prompt+" "+(parte.titulo||""));
   const sys=MC_GUIA_BASE+"\n\n"+(MC_GUIAS[parte.tipo]||MC_GUIAS.misc)+
@@ -2961,6 +3077,7 @@ function detectarKit(plan){return plan.kit||null;}
 const MC_PODERES_JUG={inmortal:"Inmortalidad (no mueres por daño)",vida_infinita:"Vida infinita",vuelo:"Vuelo (toca saltar dos veces rápido; sprint = velocidad extrema; agacharte = bajar)",velocidad:"Velocidad extrema",fuerza:"Fuerza extrema",dano_infinito:"Daño infinito (todo lo que golpeas muere)",aura:"Aura divina (el mundo tiembla a tu alrededor)",miedo_mobs:"Los monstruos huyen de ti",adoracion_aldeanos:"Los aldeanos te adoran",destruccion:"Poder de destrucción (al romper un bloque se rompe el área; agachado rompes uno solo)",telekinesis:"Telequinesis (agachado y mirando algo, lo levantas)",vision_nocturna:"Visión nocturna",salto:"Super salto",respirar_agua:"Respirar bajo el agua",sin_hambre:"Sin hambre",resistencia_fuego:"Inmune al fuego y la lava"};
 function detectarPoderesJugador(prompt){
   const t=normMc(prompt),r=[];
+  if(/(superman|super ?heroe|super ?heroina|poderes? (?:de|al estilo de) (?:un )?super)/.test(t))r.push("vuelo","velocidad","fuerza","inmortal","salto","resistencia_fuego");
   if(/(inmortal|no morir|no muero|invencible|invulnerab)/.test(t))r.push("inmortal");
   if(/(vida infinita|salud infinita|vida ilimitada)/.test(t))r.push("vida_infinita");
   if(/(\bvolar\b|\bvuelo\b|volando)/.test(t))r.push("vuelo");
@@ -2978,7 +3095,7 @@ function detectarPoderesJugador(prompt){
   if(/(respirar (?:bajo el )?agua)/.test(t))r.push("respirar_agua");
   if(/(sin hambre|no tener hambre|hambre infinit)/.test(t))r.push("sin_hambre");
   if(/(inmune al fuego|resistencia al fuego|no quemar|inmune a la lava)/.test(t))r.push("resistencia_fuego");
-  return r;
+  return [...new Set(r)];
 }
 function scriptPoderesJugador(lista){
   const P=new Set(lista);const has=k=>P.has(k);
@@ -3147,13 +3264,16 @@ function postprocesarAddon(entrada,plan,verSrv){
     entidades.push({id,archivo:p.split("/").pop().replace(/\.json$/,"")});
   }
   // --- texturas de ítems
+  const nivelTex=plan._nivelTex||egoNivelTexturas(plan._prompt||plan.resumen||"");plan._nivelTex=nivelTex;
+  const resTx=egoResTexturas(nivelTex,iconos.length*(1+0.5)+bloques.reduce((n,b)=>n+b.cortos.length,0)+iconos.length*0.8*8);
+  if(resTx>32)notas.push("Texturas "+resTx+"×"+resTx+" (modo "+nivelTex+"; ropa de armadura hasta "+Math.min(256,resTx*4)+"×"+Math.min(128,resTx*2)+"). Para pixel-art clásico pide «estilo pixel art».");
   const png=[];
   if(iconos.length){
     const dat={};let primero=null;
     for(const ic of iconos){
       const nom=nombreDeId(ic.id,plan),col=colorDeNombre(nom+" "+((plan.objetos||[]).find(x=>x.id===ic.id)||{}).descripcion),px=dibujarGenerico(tipoIconoDe(nom+" "+ic.corto+" "+(((plan.objetos||[]).find(x=>x.id===ic.id)||{}).icono||"")+((((plan.objetos||[]).find(x=>x.id===ic.id)||{}).habilidad&&!/^\s*(ninguna|ninguno|none|no|null|-)?\s*$/i.test(String(((plan.objetos||[]).find(x=>x.id===ic.id)||{}).habilidad))&&!/(vara|baston|cetro|varita)/.test(normMc(nom)))?" espada":"")),col,mezcla(hexRgb(col),[255,255,255],.45).length?"#"+mezcla(hexRgb(col),[255,236,140],.6).map(v=>v.toString(16).padStart(2,"0")).join(""):"#ffffff");
       dat[ic.corto]={textures:"textures/items/"+ic.corto};
-      mapa.set("RP/textures/items/"+ic.corto+".png",pngBytes(16,16,px));
+      mapa.set("RP/textures/items/"+ic.corto+".png",pngBytes(resTx,resTx,texturaHD(px,16,16,resTx/16,{tipo:"item",sem:semillaDe(ic.corto)})));
       if(!primero)primero={px,col};
     }
     mapa.set("RP/textures/item_texture.json",JSON.stringify({resource_pack_name:ns,texture_name:"atlas.items",texture_data:dat},null,2)+"\n");
@@ -3171,7 +3291,7 @@ function postprocesarAddon(entrada,plan,verSrv){
         const tx=new Uint8Array(64*32*4);
         for(let y=0;y<32;y++)for(let x=0;x<64;x++){const i=(y*64+x)*4;const c=((x+y)%7===0)?CL:(((x*3+y*5)%11===0)?OS:P);tx[i]=c[0];tx[i+1]=c[1];tx[i+2]=c[2];tx[i+3]=255;}
         const rutaTx="textures/models/armor/"+ic.corto;
-        mapa.set("RP/"+rutaTx+".png",pngBytes(64,32,tx));
+        {const fa=Math.min(4,resTx/16);mapa.set("RP/"+rutaTx+".png",pngBytes(64*fa,32*fa,texturaHD(tx,64,32,fa,{tipo:"armadura",sem:semillaDe(ic.corto)})));}
         mapa.set("RP/attachables/"+ic.corto+".json",JSON.stringify({format_version:"1.8.0","minecraft:attachable":{description:{identifier:ic.id,materials:{default:"armor",enchanted:"armor_enchanted"},textures:{default:rutaTx,enchanted:"textures/misc/enchanted_actor_glint"},geometry:{default:"geometry.humanoid.armor."+mp[0]},scripts:{parent_setup:"variable."+mp[1]+" = 0.0;"},render_controllers:["controller.render.armor"]}}},null,2)+"\n");
         notas.push("«"+nombreDeId(ic.id,plan)+"»: se creó su modelo de armadura puesta (textura lisa generada).");
       }catch(_){}
@@ -3183,7 +3303,7 @@ function postprocesarAddon(entrada,plan,verSrv){
     for(const b of bloques)for(const c of b.cortos){
       const nom=nombreDeId(b.id,plan);const col=colorDeNombre(nom+" "+c);const estilo=/(mena|ore|mineral|cristal)/.test(normMc(nom+" "+c))?"mena":(/(liso|ladrillo|pulid|placa)/.test(normMc(nom))?"liso":"piedra");
       dat[c]={textures:"textures/blocks/"+c};
-      mapa.set("RP/textures/blocks/"+c+".png",pngBytes(16,16,dibujarBloque(col,estilo,semillaDe(c))));
+      mapa.set("RP/textures/blocks/"+c+".png",pngBytes(resTx,resTx,texturaHD(dibujarBloque(col,estilo,semillaDe(c)),16,16,resTx/16,{tipo:"bloque",tile:true,sem:semillaDe(c)})));
     }
     mapa.set("RP/textures/terrain_texture.json",JSON.stringify({resource_pack_name:ns,texture_name:"atlas.terrain",padding:8,num_mip_levels:4,texture_data:dat},null,2)+"\n");
     if(!plan._icono){const col=colorDeNombre(nombreDeId(bloques[0].id,plan));plan._icono={px:dibujarBloque(col,"piedra",7),col};}
@@ -4645,9 +4765,36 @@ async function repararCoberturaRequisitosAddon(files,prompt,env){
   return {audit,rounds:models.length,models};
 }
 
+// ===== v14.59.1 · Informe de calidad real (0-100) + comprobación final de PNG =====
+function egoVerificarPng(files,notas){
+  let malos=0;
+  for(const f of files){
+    if(!/\.png$/i.test(f.path))continue;
+    const b=f.content;
+    const ok=b instanceof Uint8Array&&b.length>=33&&b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71&&b[4]===13&&b[5]===10&&b[6]===26&&b[7]===10;
+    if(ok)continue;
+    malos++;const px=new Uint8Array(16*16*4);for(let i=0;i<256;i++){px[i*4]=128;px[i*4+1]=128;px[i*4+2]=140;px[i*4+3]=255;}
+    f.content=pngBytes(16,16,px);notas.push("PNG inválido reemplazado por uno de respaldo: "+f.path);
+  }
+  return malos;
+}
+function egoInformeCalidad(files,validacion,auditoria,pngMalos){
+  let score=100;const problemas=[],aciertos=[];
+  const sc=files.filter(f=>/^BP\/scripts\/.+\.js$/i.test(f.path)),en=files.filter(f=>/^BP\/entities\/.+\.json$/i.test(f.path)),cl=files.filter(f=>/^RP\/entity\/.+\.json$/i.test(f.path)),tx=files.filter(f=>/\.png$/i.test(f.path)&&!/pack_icon/.test(f.path));
+  const nErr=validacion&&validacion.errores?validacion.errores.length:0,nAv=validacion&&validacion.avisos?validacion.avisos.length:0;
+  if(nErr){score-=Math.min(40,nErr*10);problemas.push(nErr+" error(es) estructural(es)");}else aciertos.push("sin errores estructurales");
+  if(nAv){score-=Math.min(10,nAv*2);problemas.push(nAv+" aviso(s) de revisión");}
+  if(sc.length)aciertos.push(sc.length+" script(s) con sintaxis y API verificadas");
+  if(en.length>cl.length){score-=15;problemas.push((en.length-cl.length)+" criatura(s) sin client_entity");}else if(en.length)aciertos.push(en.length+" criatura(s) con su parte visual");
+  if(tx.length)aciertos.push(tx.length+" textura(s) PNG válidas");
+  if(pngMalos){score-=10;problemas.push(pngMalos+" PNG inválido(s) reemplazado(s)");}
+  if(auditoria&&auditoria.total){const f=auditoria.total-auditoria.passed;if(f>0){score-=Math.min(30,Math.round(30*f/auditoria.total));problemas.push((auditoria.passed)+"/"+auditoria.total+" requisitos verificados");}else aciertos.push("todos los requisitos pedidos verificados");}
+  return {score:Math.max(0,score),problemas,aciertos};
+}
 async function mcBuild(body,env,request){
-  const prompt=String(body.prompt||"").slice(0,12000);
-  const plan=limpiarPlan(body.plan,prompt);
+  let prompt=String(body.prompt||"").slice(0,12000);
+  let plan=limpiarPlan(body.plan,prompt);
+  const uid=egoUidMc(body);let snap=null,verNueva=1;
   const entrada=[];const vistos=new Set();
   for(const f of (Array.isArray(body.files)?body.files:[]).slice(0,400)){
     const path=safeProjectPath(f&&f.path);
@@ -4656,13 +4803,30 @@ async function mcBuild(body,env,request){
     if(/manifest\.json$|\.(png|jpg|zip|mcaddon)$/i.test(path)) continue;
     vistos.add(path);entrada.push({path,content:f.content});
   }
+  if(plan.mejora){
+    snap=await mcCargarUltimo(env,uid);
+    if(!snap)return json({error:"No encontré tu add-on anterior para mejorarlo (se guarda 60 días). Pide uno nuevo o vuelve a enviarlo.",codigo:"sin_version_previa"},409);
+    verNueva=snap.ver+1;
+    const nuevos=new Map(entrada.map(f=>[f.path,f]));
+    const baseF=snap.files.filter(f=>!nuevos.has(f.path)&&typeof f.content==="string").map(f=>({path:f.path,content:f.content}));
+    entrada.length=0;for(const f of baseF)entrada.push(f);for(const f of nuevos.values())entrada.push(f);
+    plan=Object.assign(mcFusionarPlan(snap.plan,plan),{mejora:plan.mejora});
+    const nv=egoNivelTexturas(prompt);plan._nivelTex=nv!=="normal"?nv:(snap.nivelTex||"normal");
+    prompt=(String(snap.prompt||"")+"\n\nMEJORA v"+verNueva+" PEDIDA:\n"+prompt).slice(-12000);
+  }
   if(!entrada.length&&!(plan.poderesJugador&&plan.poderesJugador.length)&&!plan.kit) return json({error:"No hay archivos para armar el add-on."},400);
   try{
     plan._prompt=prompt;
     plan._modelos3d=(Array.isArray(body.modelos3d)?body.modelos3d:[]).slice(0,4).map(q=>({entidad:String(q&&q.entidad||""),partes:limpiarModelo3d(q&&q.partes)})).filter(q=>q.entidad&&q.partes.length>=3);
+    if(snap){const ya=new Set(plan._modelos3d.map(q=>q.entidad));for(const q of (snap.modelos3d||[]))if(!ya.has(q.entidad))plan._modelos3d.push(q);}
     const vz=await generarVocesAddon(plan,env);plan._voces=vz.out;
     const rellenados=completarObjetosFaltantes(entrada,plan);
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
+    if(snap){
+      mcContinuidadManifests(r.files,snap,verNueva);
+      for(const b of (snap.bin||[]))if(!r.files.some(f=>f.path===b.path)){try{r.files.push({path:b.path,content:egoB64Inv(b.b64)});}catch(_){}}
+      r.notas.unshift("Versión "+verNueva+": mejora de tu versión "+snap.ver+". EGO conservó lo ya creado (sin que lo reenvíes) y aplicó solo los cambios pedidos. Mismo add-on: al importarlo reemplaza al anterior.");
+    }
     if(rellenados.length)r.notas.push("Se completaron con una plantilla válida (la IA no los escribió): "+rellenados.join(", ")+". Son básicos: revísalos o pide mejorarlos.");
     try{const hd=endurecerAddonBedrock(r.files,plan);for(const g of hd.generado)r.notas.push("Módulo añadido: "+g);for(const x of hd.cambios.slice(0,30))r.notas.push("Corregido: "+x.path+" — "+x.motivo);r.conteo.scripts=r.files.filter(f=>/^BP\/scripts\/.+\.js$/.test(f.path)).length;}catch(e){r.notas.push("El endurecimiento automático falló y se omitió: "+String(e&&e.message||e).slice(0,100));}
     const npcAI=integrarArquitecturaNPC(r.files,plan,prompt,env.MC_SERVER_VERSION);
@@ -4699,13 +4863,20 @@ async function mcBuild(body,env,request){
     if(readme)readme.content+="\n\n## Validación estructural de EGO AI\n- Resultado: "+(validacion.ok?"sin errores estructurales detectados":"se detectaron problemas que debes revisar")+"\n- Archivos revisados: "+validacion.archivos+"\n"+[...validacion.errores,...validacion.avisos].map(x=>"- "+x).join("\n")+"\n- Esta revisión estática no sustituye la importación y prueba dentro de Minecraft.\n\n## Cobertura de requisitos solicitados\n- Resultado: "+(auditoriaRequisitos.total?auditoriaRequisitos.passed+"/"+auditoriaRequisitos.total+" verificaciones de características detectables.":"NO VERIFICADO: no se pudo comprobar ningún requisito automáticamente; pruébalo en el juego.")+"\n"+auditoriaRequisitos.findings.map(x=>"- ["+(x.ok?"VERIFICADO":"NO VERIFICADO")+"] "+x.label+": "+x.evidence).join("\n")+"\n- Un requisito no verificado no debe anunciarse como implementado.\n";
     const au=await auditarAddon(plan,r.files,r.conteo.habilidades,env);
     if(au&&au.faltan.length)r.notas.unshift("Revisión final: no pude confirmar "+au.faltan.length+" de "+au.total+" cosas que pediste → "+au.faltan.slice(0,3).join(" · "));
+    const pngMalos=egoVerificarPng(r.files,r.notas);
+    const informe=egoInformeCalidad(r.files,validacion,auditoriaRequisitos,pngMalos);
+    {const rd=r.files.find(f=>/^BP\/README\.md$/i.test(f.path));if(rd&&typeof rd.content==="string")rd.content+="\n\n## Informe de calidad EGO AI\n- Puntuación: "+informe.score+"/100\n"+informe.aciertos.map(x=>"- OK: "+x).join("\n")+(informe.problemas.length?"\n"+informe.problemas.map(x=>"- Revisar: "+x).join("\n"):"")+"\n";}
+    r.notas.push("Calidad: "+informe.score+"/100"+(informe.problemas.length?" ("+informe.problemas.join("; ")+")":""));
     const zip=await createZip(r.files);
-    const nombre="ego-"+slugAscii(plan.nombre)+(esParcial?"-parcial":"");
+    let guardado=false;try{guardado=await mcGuardarUltimo(env,uid,{ver:verNueva,plan,prompt,files:r.files,modelos3d:plan._modelos3d,nivelTex:plan._nivelTex});}catch(e){console.error("mc_ult",String(e&&e.message||e).slice(0,120));}
+    try{r.notas.push(egoTextoTam((zip.egoInfo&&zip.egoInfo.bytes)||zip.length));}catch(_){}
+    const nombre="ego-"+slugAscii(plan.nombre)+(verNueva>1?"-v"+verNueva:"")+(esParcial?"-parcial":"");
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,"X-EGO-Files":String(r.files.length),"X-EGO-Model":"por-partes","X-EGO-Parcial":esParcial?"1":"0","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,...egoTamHeaders(zip),"X-EGO-Files":String(r.files.length),"X-EGO-Version":String(verNueva),"X-EGO-Score":String(informe.score),"X-EGO-Model":"por-partes","X-EGO-Parcial":esParcial?"1":"0","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
+    if((e?.code==="EGO_PROJECT_TOO_LARGE"||e?.code==="EGO_WORKER_MEMORY_CAP")) return json({error:String(e.message),code:e.code,limiteBytes:e.projectLimitBytes,tamanoMinimoBytes:e.projectBytes},413);
     return json({error:"No se pudo armar el add-on.",detail:String(e&&e.message||e).slice(0,160)},500);
   }
 }
@@ -4812,7 +4983,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.46.0",
+    version: "14.59.1",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -5336,7 +5507,7 @@ async function generarProyecto(body, env, minecraft, request) {
       const readme = files.find(f=>/^BP\/README\.md$/i.test(f.path));
       if(readme && avisos.length) readme.content += "\n\n## Revisión de EGO AI\n"+avisos.map(x=>"- "+x).join("\n")+"\n";
       const zip = await createZip(files);
-      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
+      return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),...egoTamHeaders(zip),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
     } catch(e) { console.error("tpl_addon",String(e?.message||e).slice(0,200)); return json({avanzado:true,motivo:"plantilla no disponible"}); }
   }
   const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 90 : 35)), minecraft ? 100 : 50));
@@ -5462,9 +5633,10 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     if (coberturaAddon && !coberturaAddon.ok) avisos.push("Cobertura funcional incompleta: " + coberturaAddon.missing.join(" | "));
     if(avisos.length){const ix=files.findIndex(f=>/(^|\/)README\.md$/i.test(f.path));if(ix>=0)files[ix].content+="\n\n## Avisos y validación de EGO AI\n"+avisos.map(a=>"- "+a).join("\n")+"\n- La validación estática no sustituye la importación y prueba dentro de Minecraft.\n";}
     const zip=await createZip(files);
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Model":model,"X-EGO-Files":String(files.length),...(minecraft?{"X-EGO-Artifact":"addon","X-EGO-Importable":"true",...(coberturaAddon?{"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(coberturaAddon).slice(0,4000))}:{})}:{}),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${name}${minecraft?".mcaddon":".zip"}"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Model":model,...egoTamHeaders(zip),"X-EGO-Files":String(files.length),...(minecraft?{"X-EGO-Artifact":"addon","X-EGO-Importable":"true",...(coberturaAddon?{"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(coberturaAddon).slice(0,4000))}:{})}:{}),"Cache-Control":"no-store"}});
   } catch(e) {
     console.error("project_generate",String(e?.message||e).slice(0,250));
+    if((e?.code==="EGO_PROJECT_TOO_LARGE"||e?.code==="EGO_WORKER_MEMORY_CAP")) return json({error:String(e.message),code:e.code,limiteBytes:e.projectLimitBytes,tamanoMinimoBytes:e.projectBytes},413);
     return json({error:"No se pudo generar el proyecto. Revisa la configuración del proveedor y los logs.",detail:String(e?.message||e).slice(0,180)},503);
   }
 }
@@ -5475,6 +5647,63 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
 // El modelo solo decide nombre/tipo/habilidad/color; los archivos los arma el código,
 // así el manifest, el ícono, la textura PNG y el script siempre salen correctos.
 // ============================================================
+// ===== v14.59.1 · Texturas HD (hasta 128×128; armadura hasta 256×128) =====
+// Nivel según el pedido: pixel (16) · normal (32, por defecto) · alta (64) · max (128). Se reduce solo si el peso se acerca al límite.
+function egoNivelTexturas(prompt){
+  const t=String(prompt||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  if(/(pixel ?art|pixelado|estilo (vanilla|minecraft clasico)|16 ?x ?16|texturas? (simples|basicas))/.test(t))return "pixel";
+  if(/(maxim[ao]s? calidad|calidad maxima|al maximo|ultra ?hd|\b4k\b|\b8k\b|hiper ?realista|fotorrealista|texturas? (hd|ultra|realistas?)|128 ?x ?128|256 ?x ?256|alta calidad al maximo)/.test(t))return "max";
+  if(/(alta calidad|buena calidad|\bhd\b|detallad[ao]s?|realista|profesional|64 ?x ?64|calidad alta|texturas? (bonitas|buenas|nitidas))/.test(t))return "alta";
+  return "normal";
+}
+function egoResTexturas(nivel,nTex,presupuesto){
+  let r={pixel:16,normal:32,alta:64,max:128}[nivel]||32;
+  const tope=presupuesto||14*1048576;
+  while(r>16&&nTex*r*r*4>tope)r=r/2;
+  return r;
+}
+function egoEpx(src,w,h,wrap){
+  const o=new Uint8Array(w*2*h*2*4),g=(x,y)=>{if(wrap){x=(x+w)%w;y=(y+h)%h;}else{x=x<0?0:x>=w?w-1:x;y=y<0?0:y>=h?h-1:y;}const i=(y*w+x)*4;return [((src[i]<<24)|(src[i+1]<<16)|(src[i+2]<<8)|src[i+3])>>>0,i];};
+  const put=(x,y,k)=>{const i=(y*w*2+x)*4;o[i]=src[k];o[i+1]=src[k+1];o[i+2]=src[k+2];o[i+3]=src[k+3];};
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const [P,kp]=g(x,y),[A,ka]=g(x,y-1),[B,kb]=g(x+1,y),[C,kc]=g(x-1,y),[D,kd]=g(x,y+1);
+    put(x*2,y*2,(C===A&&C!==D&&A!==B)?ka:kp);
+    put(x*2+1,y*2,(A===B&&A!==C&&B!==D)?kb:kp);
+    put(x*2,y*2+1,(D===C&&D!==B&&C!==A)?kc:kp);
+    put(x*2+1,y*2+1,(B===D&&B!==A&&D!==C)?kd:kp);
+  }
+  return o;
+}
+function texturaHD(px,w,h,f,opt){
+  opt=opt||{};f=Math.max(1,Math.floor(f||1));
+  if(f<=1||!px||px.length!==w*h*4)return px;
+  const tile=!!opt.tile;let cur=px,cw=w,ch=h,k=f;
+  while(k>1){cur=egoEpx(cur,cw,ch,tile);cw*=2;ch*=2;k=k/2;}
+  const W=cw,H=ch,out=new Uint8Array(cur.length),at=(x,y)=>{if(tile){x=(x+W)%W;y=(y+H)%H;}else{x=x<0?0:x>=W?W-1:x;y=y<0?0:y>=H?H-1:y;}return (y*W+x)*4;};
+  // suavizado 3×3 solo en color (el borde transparente se conserva nítido)
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=(y*W+x)*4;out[i+3]=cur[i+3];
+    if(!cur[i+3]){continue;}
+    let r=0,g=0,b=0,n=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const j=at(x+dx,y+dy);if(!cur[j+3])continue;const wt=(dx===0&&dy===0)?4:((dx===0||dy===0)?2:1);r+=cur[j]*wt;g+=cur[j+1]*wt;b+=cur[j+2]*wt;n+=wt;}
+    out[i]=Math.round(cur[i]*.4+(r/n)*.6);out[i+1]=Math.round(cur[i+1]*.4+(g/n)*.6);out[i+2]=Math.round(cur[i+2]*.4+(b/n)*.6);
+  }
+  const rnd=prng((opt.sem|0)+W*7+H);const bord=Math.max(1,Math.round(f/4));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=(y*W+x)*4;if(!out[i+3])continue;
+    let m=1+(rnd()-.5)*(opt.tipo==="bloque"?.07:.045);
+    if(opt.tipo==="bloque"){
+      const dx=Math.min(x,W-1-x),dy=Math.min(y,H-1-y);
+      if(x<bord||y<bord)m*=1.12;else if(x>=W-bord||y>=H-bord)m*=.86;
+      const lum=((x*.7+y*.7)/(W*1.4));m*=1.06-lum*.12; // luz suave desde arriba-izquierda
+    }else if(opt.tipo==="item"){
+      let borde=false;for(const [dx,dy] of [[-bord,0],[bord,0],[0,-bord],[0,bord]]){const j=at(x+dx,y+dy);if(!out[j+3]||j<0)borde=true;}
+      if(borde)m*=.72;else{const lum=((y/H)-.5);m*=1.06-lum*.22;}
+    }else{m*=1.04-((y/H)-.5)*.14;}
+    out[i]=Math.max(0,Math.min(255,Math.round(out[i]*m)));out[i+1]=Math.max(0,Math.min(255,Math.round(out[i+1]*m)));out[i+2]=Math.max(0,Math.min(255,Math.round(out[i+2]*m)));
+  }
+  return out;
+}
 function pngBytes(w,h,rgba){
   const enc=(s)=>Array.from(s).map(c=>c.charCodeAt(0));
   const raw=new Uint8Array(h*(1+w*4));
@@ -6399,22 +6628,98 @@ function repararAddon(files,verSrv){
   return avisos;
 }
 
-// ZIP clásico sin compresión (STORE), compatible con navegadores y Minecraft.
-const CRC_TABLE = (()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
-function crc32(bytes){let c=0xffffffff;for(const b of bytes)c=CRC_TABLE[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0;}
-function u16(n){return [n&255,(n>>>8)&255];} function u32(n){return [n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255];}
-function concatBytes(parts){let len=parts.reduce((a,b)=>a+b.length,0),out=new Uint8Array(len),o=0;let pos=0;for(const p of parts){out.set(p,pos);pos+=p.length;}return out;}
-async function createZip(files){
-  const enc=new TextEncoder(), local=[], central=[];let offset=0;
-  const ahora=new Date(), DT=((ahora.getUTCHours()<<11)|(ahora.getUTCMinutes()<<5)|(ahora.getUTCSeconds()>>1))&0xffff, DD=(((ahora.getUTCFullYear()-1980)<<9)|((ahora.getUTCMonth()+1)<<5)|ahora.getUTCDate())&0xffff;
-  for(const f of files){const name=enc.encode(f.path),data=(typeof f.content==="string")?enc.encode(f.content):f.content,crc=crc32(data);
-    const lh=new Uint8Array([...u32(0x04034b50),...u16(20),...u16(0x0800),...u16(0),...u16(DT),...u16(DD),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...name]);
-    local.push(lh,data);
-    const ch=new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(DT),...u16(DD),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(offset),...name]);
-    central.push(ch);offset+=lh.length+data.length;
+// Presupuesto de proyectos EGO AI (v14.58).
+//  - LÍMITE DEL PROYECTO: 25 MiB (26.214.400 bytes) y 2.500 archivos. Es la recomendación oficial de Microsoft para add-ons
+//    (guía "Improving performance and resource usage"): por encima aumentan los fallos de memoria, de importación en móvil y de multijugador.
+//    Se puede subir con la variable EGO_MAX_PROJECT_MB (techo absoluto 500 MiB). Nada supera nunca los 500 MiB.
+//  - Además, sin R2 un Worker tiene ~128 MB de memoria: empaquetar en memoria solo es seguro hasta ~48 MiB (EGO_MAX_WORKER_MB).
+//  El servidor es la autoridad: mide los bytes reales (UTF-8 para texto) de TODOS los archivos antes de construir el ZIP.
+const EGO_ABS_MAX_BYTES = 500 * 1024 * 1024;
+const EGO_MAX_PROJECT_MB = 500;
+const EGO_LIMITE_MB_DEFECTO = 25;
+const EGO_MAX_ARCHIVOS = 2500;
+const EGO_SAFE_MB_DEFECTO = 48;
+function egoMb(v, def, tope){ const mb = Number(v); return (Number.isFinite(mb) && mb > 0 ? Math.min(mb, tope) : def); }
+function egoLimiteBytes(){ return Math.floor(Math.min(egoMb(globalThis.__egoMaxMb, EGO_LIMITE_MB_DEFECTO, EGO_MAX_PROJECT_MB), EGO_MAX_PROJECT_MB) * 1048576); }
+function egoSafeBytes(){ return Math.floor(egoMb(globalThis.__egoSafeMb, EGO_SAFE_MB_DEFECTO, EGO_MAX_PROJECT_MB) * 1048576); }
+function utf8Len(s){ let n = 0; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c < 0x80) n += 1; else if (c < 0x800) n += 2; else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length && (s.charCodeAt(i + 1) & 0xFC00) === 0xDC00) { n += 4; i++; } else n += 3; } return n; }
+function medirProyectoBytes(files){
+  let total = 0, n = 0;
+  const lista = Array.isArray(files) ? files : [];
+  const limite = egoLimiteBytes(), safe = egoSafeBytes();
+  const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(2) + " MB";
+  if (lista.length > EGO_MAX_ARCHIVOS) {
+    const error = new Error(`El proyecto tiene ${lista.length} archivos y el máximo recomendado para un add-on es ${EGO_MAX_ARCHIVOS}. Quita archivos innecesarios o divide el add-on en varios paquetes.`);
+    error.code = "EGO_PROJECT_TOO_LARGE"; error.projectBytes = 0; error.projectLimitBytes = limite; throw error;
   }
-  const cd=concatBytes(central), end=new Uint8Array([...u32(0x06054b50),...u16(0),...u16(0),...u16(files.length),...u16(files.length),...u32(cd.length),...u32(offset),...u16(0)]);
-  return concatBytes([...local,cd,end]);
+  for (const f of lista) {
+    const c = f && f.content;
+    total += typeof c === "string" ? utf8Len(c) : (c && Number.isFinite(c.byteLength) ? c.byteLength : 0);
+    n++;
+    if (total > limite) {
+      const error = new Error(`El proyecto supera el límite de ${fmt(limite)} (al menos ${fmt(total)}). Es el tamaño recomendado por Microsoft para add-ons: más grandes fallan más en móvil y multijugador. Reduce u optimiza los recursos antes de exportar.`);
+      error.code = "EGO_PROJECT_TOO_LARGE"; error.projectBytes = total; error.projectLimitBytes = limite; throw error;
+    }
+    if (total > safe) {
+      const error = new Error(`El proyecto pesa al menos ${fmt(total)} y, sin almacenamiento R2, el Worker solo puede empaquetar con seguridad hasta ${fmt(safe)}. Divide el add-on en paquetes más pequeños o activa R2.`);
+      error.code = "EGO_WORKER_MEMORY_CAP"; error.projectBytes = total; error.projectLimitBytes = safe; throw error;
+    }
+  }
+  return { bytes: total, megabytes: total / 1048576, files: n, limitBytes: limite, safeBytes: safe };
+}
+// v14.59.1: categoría según el tamaño real del paquete. Pequeño ≤ 1 MiB · Mediano ≤ 10 MiB · Grande hasta el límite (25 MiB por defecto).
+function egoCategoria(bytes){ return bytes <= 1048576 ? "pequeño" : bytes <= 10485760 ? "mediano" : "grande"; }
+function egoTextoTam(bytes){
+  const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(2) + " MB";
+  const lim = egoLimiteBytes(), pc = bytes / lim * 100;
+  return `Tamaño: ${fmt(bytes)} (${pc.toFixed(pc < 1 ? 2 : 1)} % del límite de ${fmt(lim)}) → add-on ${egoCategoria(bytes).toUpperCase()}. Escala: pequeño hasta 1 MB · mediano hasta 10 MB · grande hasta ${fmt(lim)}.`;
+}
+function egoEstadoTam(bytes){ const p = bytes / egoLimiteBytes(); return p >= 1 ? "bloqueado" : p >= 0.95 ? "critico" : p >= 0.8 ? "aviso" : "ok"; }
+function egoTamHeaders(zip){
+  const i = (zip && zip.egoInfo) || {}; const b = Number(i.bytes) || (zip && zip.length) || 0;
+  return { "X-EGO-Bytes": String(b), "X-EGO-Limit": String(egoLimiteBytes()), "X-EGO-MaxFiles": String(EGO_MAX_ARCHIVOS), "X-EGO-Safe": String(egoSafeBytes()), "X-EGO-Tam": egoEstadoTam(b), "X-EGO-Categoria": encodeURIComponent(egoCategoria(b)), "X-EGO-Dup": String(i.bytesDuplicados || 0) };
+}
+
+// ZIP clásico sin compresión (STORE, sin ZIP64), compatible con navegadores y Minecraft.
+// v14.58: una sola reserva de memoria del tamaño exacto (antes: lista de trozos + copia final = el doble), CRC con índice (más rápido)
+// y detección de archivos idénticos (se informan; no se borran porque Bedrock necesita cada ruta).
+const CRC_TABLE = (()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+function crc32(bytes){let c=0xffffffff;for(let i=0;i<bytes.length;i++)c=CRC_TABLE[(c^bytes[i])&255]^(c>>>8);return (c^0xffffffff)>>>0;}
+function u16(n){return [n&255,(n>>>8)&255];} function u32(n){return [n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255];}
+function concatBytes(parts){let len=parts.reduce((a,b)=>a+b.length,0),out=new Uint8Array(len),pos=0;for(const p of parts){out.set(p,pos);pos+=p.length;}return out;}
+async function createZip(files){
+  // Un solo control centralizado: ningún exportador puede saltarse el techo global.
+  const med = medirProyectoBytes(files);
+  const lista = files.map(f => ({ name: new TextEncoder().encode(String(f.path)), c: f.content }));
+  let total = 22;
+  for (const e of lista) { e.len = typeof e.c === "string" ? utf8Len(e.c) : e.c.byteLength; total += 30 + e.name.length + e.len + 46 + e.name.length; }
+  if (lista.length > 65535 || total >= 0xFFFFFFFF) { const er = new Error("El paquete necesitaría ZIP64, que Minecraft Bedrock no garantiza importar. Divídelo en paquetes más pequeños."); er.code = "EGO_PROJECT_TOO_LARGE"; er.projectBytes = total; er.projectLimitBytes = 0xFFFFFFFF; throw er; }
+  const out = new Uint8Array(total), dv = new DataView(out.buffer), enc = new TextEncoder();
+  const ahora = new Date();
+  const DT = ((ahora.getUTCHours() << 11) | (ahora.getUTCMinutes() << 5) | (ahora.getUTCSeconds() >> 1)) & 0xffff;
+  const DD = (((ahora.getUTCFullYear() - 1980) << 9) | ((ahora.getUTCMonth() + 1) << 5) | ahora.getUTCDate()) & 0xffff;
+  let off = 0; const vistos = new Map(); let dup = 0, bytesDup = 0;
+  for (const e of lista) {
+    e.off = off;
+    dv.setUint32(off, 0x04034b50, true); dv.setUint16(off + 4, 20, true); dv.setUint16(off + 6, 0x0800, true); dv.setUint16(off + 8, 0, true);
+    dv.setUint16(off + 10, DT, true); dv.setUint16(off + 12, DD, true); dv.setUint32(off + 18, e.len, true); dv.setUint32(off + 22, e.len, true);
+    dv.setUint16(off + 26, e.name.length, true); dv.setUint16(off + 28, 0, true);
+    out.set(e.name, off + 30); const d0 = off + 30 + e.name.length;
+    if (typeof e.c === "string") enc.encodeInto(e.c, out.subarray(d0, d0 + e.len)); else out.set(e.c, d0);
+    e.crc = crc32(out.subarray(d0, d0 + e.len)); dv.setUint32(off + 14, e.crc, true);
+    const k = e.crc + ":" + e.len; if (e.len > 2000) { if (vistos.has(k)) { dup++; bytesDup += e.len; } else vistos.set(k, 1); }
+    off = d0 + e.len;
+  }
+  const cdIni = off;
+  for (const e of lista) {
+    dv.setUint32(off, 0x02014b50, true); dv.setUint16(off + 4, 20, true); dv.setUint16(off + 6, 20, true); dv.setUint16(off + 8, 0x0800, true); dv.setUint16(off + 10, 0, true);
+    dv.setUint16(off + 12, DT, true); dv.setUint16(off + 14, DD, true); dv.setUint32(off + 16, e.crc, true); dv.setUint32(off + 20, e.len, true); dv.setUint32(off + 24, e.len, true);
+    dv.setUint16(off + 28, e.name.length, true); dv.setUint32(off + 42, e.off, true);
+    out.set(e.name, off + 46); off += 46 + e.name.length;
+  }
+  dv.setUint32(off, 0x06054b50, true); dv.setUint16(off + 8, lista.length, true); dv.setUint16(off + 10, lista.length, true); dv.setUint32(off + 12, off - cdIni, true); dv.setUint32(off + 16, cdIni, true);
+  out.egoInfo = { bytes: med.bytes, zipBytes: out.length, archivos: lista.length, duplicados: dup, bytesDuplicados: bytesDup };
+  return out;
 }
 
 // ============================================================
@@ -6472,6 +6777,8 @@ function corsPara(request, env) {
 
 async function manejar(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { headers: corsPara(request, env) });
+  globalThis.__egoSafeMb = env.EGO_MAX_WORKER_MB;
+  globalThis.__egoMaxMb = env.EGO_MAX_PROJECT_MB;
   const espera = limitar(request, env);
   if (espera) {
     return new Response(JSON.stringify({ error: "Demasiadas peticiones. Espera " + espera + " s e inténtalo de nuevo.", limite: true }), {
@@ -6488,7 +6795,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.46.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.59.1", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -6517,7 +6824,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.55.2 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.59.1 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
@@ -6639,6 +6946,7 @@ async function manejar(request, env) {
   if (body.action === "texture_generate") return await generarTextura(body, env);
   if (body.action === "tts" || body.action === "voice_generate" || body.action === "addon_voice") return await generarVoz(body, env, request);
   if (body.action === "web_search") { const q = String(body.query || "").slice(0, 300); if (!q) return json({ error: "Falta query" }, 400); const c = await contextoWeb(q, env, true); return json({ ok: true, fuentes: c.fuentes, usadas: c.usadas, contexto: c.texto }); }
+  if (body && typeof body === "object" && !body.usuario) { const hu = request.headers.get("X-Usuario-Correo"); if (hu) body.usuario = hu; }
   if (body.action === "mc_plan") return await mcPlan(body, env);
   if (body.action === "mc_part") return await mcPart(body, env);
   if (body.action === "mc_build") return await mcBuild(body, env, request);
