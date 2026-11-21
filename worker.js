@@ -1978,6 +1978,55 @@ function completarObjetosFaltantes(entrada,plan){
   return hechos;
 }
 
+// Generación determinista de recursos que la IA no alcanzó a escribir: ítems/bloques/
+// entidades del plan, recetas de crafteo pedidas y tablas de botín para criaturas hostiles.
+// Nunca inventa binarios ni manifests; solo JSON válido conectado a lo existente.
+function completarRecursosDeterminista(files, plan, verSrv, notas){
+  notas=notas||[];
+  const porRuta=new Map(files.map(f=>[String(f.path||"").toLowerCase(),f]));
+  const put=(path,content)=>{const k=path.toLowerCase();if(porRuta.has(k))return false;files.push({path,content});porRuta.set(k,{path,content});notas.push("Recurso creado automáticamente: "+path);return true;};
+  const raizDe=f=>{try{return JSON.parse(String(f.content||""))["minecraft:item"]||JSON.parse(String(f.content||""))["minecraft:block"]||JSON.parse(String(f.content||""))["minecraft:entity"];}catch(_){return null;}};
+  // 1) objetos del plan sin definición BP
+  for(const o of (plan&&Array.isArray(plan.objetos)?plan.objetos:[])){
+    if(!o||!o.id)continue;
+    const existe=files.some(f=>{const r=raizDe(f);return r&&r.description&&r.description.identifier===o.id;});
+    if(existe)continue;
+    try{const t=plantillaObjetoMc(o);if(!porRuta.has(t.path.toLowerCase()))put(t.path,JSON.stringify(t.obj,null,2)+"\n");}catch(_){}
+  }
+  // 2) recetas para ítems cuando el pedido menciona crafteo o el objeto dice entregarse así
+  const pedido=String(plan&&plan.resumen||"").toLowerCase();
+  const pideReceta=/receta|craft|crafte|fabric|craftear|hacer .*espada|hacer .*arma/.test(pedido);
+  for(const f of files){
+    if(!/^BP\/items\/.+\.json$/i.test(f.path))continue;
+    const root=raizDe(f);const id=root&&root.description&&root.description.identifier;
+    if(!id||/^minecraft:/.test(id))continue;
+    const stem=id.split(":")[1];
+    const conReceta=files.some(g=>/^BP\/recipes\//i.test(g.path)&&String(g.content||"").includes('"'+id+'"'));
+    const entrega=(plan.objetos||[]).find(o=>o.id===id)?.entrega;
+    if(conReceta||!(pideReceta||entrega==="crafteo"))continue;
+    const rec={format_version:"1.21.0","minecraft:recipe_shaped":{description:{identifier:id+"_recipe"},tags:["crafting_table"],pattern:["###","###"],key:{"#":{"item":"minecraft:iron_ingot"}},result:{item:id,count:1}}};
+    put("BP/recipes/"+stem+".json",JSON.stringify(rec,null,2)+"\n");
+  }
+  // 3) botín para entidades hostiles sin tabla conectada
+  for(const f of files){
+    if(!/^BP\/entities\/.+\.json$/i.test(f.path))continue;
+    let j;try{j=JSON.parse(String(f.content||""));}catch(_){continue;}
+    const ent=j["minecraft:entity"];if(!ent)continue;
+    const id=ent.description&&ent.description.identifier;if(!id)continue;
+    const stem=f.path.split("/").pop().replace(/\.json$/i,"");
+    ent.components=ent.components||{};
+    const fam=ent.components["minecraft:type_family"]&&ent.components["minecraft:type_family"].family||[];
+    const hostil=/monster|zombi|zombie|esquelet|araña|spider|mutant|mutante|demon|boss|jefe|infect|vampiro|fantasma|espectro|titan|coloso/i.test(String(id)+" "+fam.join(" "));
+    if(!hostil)continue;
+    const loot=ent.components["minecraft:loot"];
+    const lootRef=typeof loot==="string"?loot:loot&&loot.table;
+    if(lootRef)continue;
+    const lp="loot_tables/entities/"+stem+".json";
+    const tabla={pools:[{rolls:1,entries:[{type:"item",name:"minecraft:rotten_flesh",weight:1,functions:[{function:"minecraft:set_count",count:{min:0,max:2}}]}]}]};
+    if(put("BP/"+lp,JSON.stringify(tabla,null,2)+"\n")){ent.components["minecraft:loot"]=lp;f.content=JSON.stringify(j,null,2)+"\n";}
+  }
+  return notas;
+}
 function mcNs(v){const s=String(v||"").toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,12);return /^[a-z][a-z0-9_]{1,11}$/.test(s)?s:"ego";}
 function mcId(ns,v){const x=String(v||"").toLowerCase().replace(/^[^:]*:/,"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,40);return x?ns+":"+x:"";}
 const MC_TIPOS_PARTE=["items","blocks","entities","script","recipes","loot","spawn","misc"];
@@ -2440,27 +2489,36 @@ function construirModelo3d(geoId,partes){
 }
 function construirModelo3dPaleta(geoId,partes){
   const ps=limpiarModelo3d(partes);if(ps.length<3)return null;
-  const cols=[...new Set(ps.map(p=>p.color))].slice(0,256);const idx=new Map(cols.map((c,i)=>[c,i]));
-  const px=new Uint8Array(16*16*4);
-  cols.forEach((c,i)=>{const o=i*4;px[o]=parseInt(c.slice(1,3),16);px[o+1]=parseInt(c.slice(3,5),16);px[o+2]=parseInt(c.slice(5,7),16);px[o+3]=255});
-  for(let i=cols.length;i<256;i++){px[i*4+3]=255;px[i*4]=px[i*4+1]=px[i*4+2]=128}
+  const W=64,px=new Uint8Array(W*W*4);
+  const seed0=[...geoId].reduce((a,c)=>(a*31+c.charCodeAt(0))|0,7);
+  const clamp=(v)=>Math.max(0,Math.min(255,Math.round(v)));
+  const poner=(X,Y,r,g,b)=>{if(X<0||Y<0||X>=W||Y>=W)return;const o=(Y*W+X)*4;px[o]=clamp(r);px[o+1]=clamp(g);px[o+2]=clamp(b);px[o+3]=255;};
+  const uvPorCubo=ps.map(()=>({}));
+  ps.forEach((p,i)=>{
+    const base=hexRgb(p.color||"#8a8f98");
+    const col=i%8,row=Math.floor(i/8),ox=2+col*8,oy=2+row*8;
+    for(let dy=0;dy<6;dy++)for(let dx=0;dx<6;dx++){
+      const k=(hshT(dx,dy,seed0+i*17)-.5)*.34+(dy===0?.1:(dy===5?-.12:0));
+      poner(ox+dx,oy+dy,base[0]*(1+k),base[1]*(1+k),base[2]*(1+k));
+    }
+    for(const cara of ["north","south","east","west","up","down"])uvPorCubo[i][cara]={uv:[ox,oy],uv_size:[6,6]};
+  });
   const nombres=new Set(ps.map(p=>p.nombre));
   let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9,minZ=1e9,maxZ=-1e9;
-  const bones=ps.map(p=>{
-    const ci=idx.has(p.color)?idx.get(p.color):0,u=ci%16,v=Math.floor(ci/16);
-    const cara={uv:[u,v],uv_size:[1,1]};
+  const bones=ps.map((p,i)=>{
     const t=p.tam.map(x=>Math.max(x,0));
     minX=Math.min(minX,p.origen[0]);maxX=Math.max(maxX,p.origen[0]+t[0]);minY=Math.min(minY,p.origen[1]);maxY=Math.max(maxY,p.origen[1]+t[1]);minZ=Math.min(minZ,p.origen[2]);maxZ=Math.max(maxZ,p.origen[2]+t[2]);
-    const b={name:p.nombre,pivot:p.pivote||[p.origen[0]+t[0]/2,p.origen[1]+t[1]/2,p.origen[2]+t[2]/2],cubes:[{origin:p.origen,size:t,uv:{north:cara,east:cara,south:cara,west:cara,up:cara,down:cara}}]};
+    const b={name:p.nombre,pivot:p.pivote||[p.origen[0]+t[0]/2,p.origen[1]+t[1]/2,p.origen[2]+t[2]/2],cubes:[{origin:p.origen,size:t,uv:uvPorCubo[i]}]};
     if(p.padre&&p.padre!==p.nombre&&nombres.has(p.padre))b.parent=p.padre;
     if(p.rot)b.rotation=p.rot;
     return b;
   });
   const ancho=Math.max(2,Math.ceil(Math.max(Math.abs(minX),Math.abs(maxX),Math.abs(minZ),Math.abs(maxZ))*2/16)+1),alto=Math.max(2,Math.ceil(maxY/16)+1);
-  const geo={format_version:"1.12.0","minecraft:geometry":[{description:{identifier:geoId,texture_width:16,texture_height:16,visible_bounds_width:ancho,visible_bounds_height:alto,visible_bounds_offset:[0,alto/2,0]},bones}]};
+  const geo={format_version:"1.12.0","minecraft:geometry":[{description:{identifier:geoId,texture_width:W,texture_height:W,visible_bounds_width:ancho,visible_bounds_height:alto,visible_bounds_offset:[0,alto/2,0]},bones}]};
   const FASE={pierna_i:1,pierna_d:-1,bota_i:1,bota_d:-1,brazo_i:-1,brazo_d:1,manga_i:-1,manga_d:1,hombrera_i:-1,hombrera_d:1,pata_di:1,pata_dd:-1,pata_ti:-1,pata_td:1};
-  const ab={};for(const p of ps){const f=FASE[p.nombre]??(/^pata_/.test(p.nombre)?((Number((p.nombre.match(/\d+$/)||["0"])[0])%2)?-1:1):0);if(f){const amp=/brazo|manga|hombrera/.test(p.nombre)?28:36;ab[p.nombre]={rotation:["Math.cos(query.modified_distance_moved * 38.17) * "+(f*amp)+" * query.modified_move_speed",0,0]};}}
-  return {geo:JSON.stringify(geo,null,2)+"\n",png:pngBytes(16,16,px),cubos:ps.length,colores:cols.length,alto:maxY-minY,ancho:Math.max(maxX-minX,maxZ-minZ),animados:Object.keys(ab).length,bonesAnim:ab};
+  const ab={};for(const p of ps){const f=FASE[p.nombre]??(/^pata_/.test(p.nombre)?((Number((p.nombre.match(/\d+$/)||["0"])[0])%2)?-1:1):0);if(f){const brazo=/brazo|manga|hombrera/.test(p.nombre);const amp=brazo?28:36;ab[p.nombre]={rotation:["Math.cos(query.modified_distance_moved * 38.17) * "+(f*amp)+" * query.modified_move_speed",0,0]};}}
+  const cols=new Set(ps.map(p=>p.color));
+  return {geo:JSON.stringify(geo,null,2)+"\n",png:pngBytes(W,W,px),cubos:ps.length,colores:cols.size,alto:maxY-minY,ancho:Math.max(maxX-minX,maxZ-minZ),animados:Object.keys(ab).length,bonesAnim:ab,texturaPx:W};
 }
 // ===== GENERADORES DE MODELOS: proporciones correctas garantizadas por código =====
 function aclararMc(hex,f){const c=hexRgb(hex);return "#"+mezcla(c,f>0?[255,255,255]:[0,0,0],Math.abs(f)).map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,"0")).join("");}
@@ -2565,7 +2623,7 @@ async function mcPart(body,env){
     `\nPedido original del usuario (para mantener fidelidad):\n${prompt}`;
   let desde=0,errores=[],mejor=null,modelo="",fallosM=[];
   const t0=Date.now(),ligero=!!body.ligero,esEntidades=parte.tipo==="entities";
-  const maxTokensParte=ligero?4200:(esEntidades?5200:7600);
+  const maxTokensParte=ligero?5200:(esEntidades?8000:10500);
   const timeoutParte=210000; // v14.47.2: más tiempo por parte (el frontend espera hasta 260 s)
   // Roles: JSON de datos → agente "datos"; scripts → agente "coder"
   const rolGen=parte.tipo==="script"?"coder":"datos";
@@ -2637,14 +2695,16 @@ async function mcPart(body,env){
           if(!t.ok){nuevosErrores.push(path+": JSON inválido ("+t.error+")");continue;}
           files.push({path,content:JSON.stringify(t.obj,null,2)+"\n"});
         }else if(/\.js$/i.test(path)){
-          const bal=balanceJs(f.content);
+          let contenido=f.content;
+          let bal=balanceJs(contenido);
           const apiVersion=String(env.MC_SERVER_VERSION||"2.10.0");
-          const apiIssues=lintScriptApi(f.content,apiVersion);
+          if(bal){const reparado=cerrarJsTruncado(contenido);if(reparado&&!balanceJs(reparado)){contenido=reparado;bal="";nuevosErrores.push(path+": salida cortada por límite de tokens; se cerraron llaves/paréntesis automáticamente para conservar el archivo.");}}
+          let apiIssues=lintScriptApi(contenido,apiVersion);
           if(bal){nuevosErrores.push(path+": "+bal);continue;}
           if(apiIssues.length){for(const pr of apiIssues)nuevosErrores.push(path+": "+pr+". Usa solo la API oficial de @minecraft/server "+apiVersion+".");continue;}
-          let tipados=[];try{if(/^2\.10(?:\.|$)/.test(apiVersion))tipados=lintTipadoOficial(f.content,MC_API_T);}catch(_){}
+          let tipados=[];try{if(/^2\.10(?:\.|$)/.test(apiVersion))tipados=lintTipadoOficial(contenido,MC_API_T);}catch(_){}
           if(tipados.length&&intento<2&&restante(timeoutParte)>40000){for(const pr of tipados)nuevosErrores.push(path+": "+pr);continue;}
-          files.push({path,content:f.content});
+          files.push({path,content:contenido});
         }else if(f.content.length>300000)nuevosErrores.push(path+": archivo supera 300000 caracteres; no se truncó.");
         else files.push({path,content:f.content});
       }
@@ -2687,7 +2747,7 @@ async function mcPart(body,env){
       }else revisado="revisado por auditor + reasoner + revisor de API";
     }catch(e){revisado="revisión colaborativa incompleta: "+String(e&&e.message||e).slice(0,120);}
   }
-  if(!mejor||!mejor.files.length||mejor.errores.length) {
+  if(!mejor||!mejor.files.length) {
     const diagnostico={
       parte:parte.tipo,
       titulo:parte.titulo,
@@ -2710,7 +2770,9 @@ async function mcPart(body,env){
       reintentos:3
     },502);
   }
-  return json({ok:true,files:mejor.files,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:[],parte:i,titulo:parte.titulo});
+  const parcial=!!mejor.errores.length;
+  if(parcial)revisado=(revisado?revisado+" \u00b7 ":"")+"PARCIAL: "+mejor.errores.length+" archivo(s) rechazado(s); se conservan los "+mejor.files.length+" archivos v\u00e1lidos y la reparaci\u00f3n final intenta completarlos.";
+  return json({ok:true,parcial,files:mejor.files,errores:mejor.errores,model:modelo,equipo:{coder:modelo,...modelosRevision},revisado,fallosModelos:fallosM,avisos:[],parte:i,titulo:parte.titulo});
 }
 // Revisa llaves/paréntesis/comillas de un script (no ejecuta nada).
 function balanceJs(src){
@@ -2757,6 +2819,33 @@ function balanceJs(src){
 
 
 // ---------- Texturas generadas por código (PNG reales) ----------
+// Recupera un JS cortado a media salida (límite de tokens): cierra llaves/paréntesis/
+// corchetes sin romper strings ni comentarios. Devuelve null si no se puede salvar.
+function cerrarJsTruncado(src){
+  if(!src||typeof src!=="string")return null;
+  let t=src;
+  for(let intento=0;intento<4;intento++){
+    const st=[];let i=0,quote="",block=false,line=false,ok=true;
+    const cierre={"}":"{",")":"(","]":"["};
+    while(i<t.length){
+      const c=t[i],n=t[i+1];
+      if(line){if(c==="\n")line=false;i++;continue;}
+      if(block){if(c==="*"&&n==="/"){block=false;i+=2;}else{i++;}continue;}
+      if(quote){if(c==="\\"){i+=2;continue;}if(c===quote)quote="";i++;continue;}
+      if(c==="/"&&n==="/"){line=true;i++;continue;}
+      if(c==="/"&&n==="*"){block=true;i+=2;continue;}
+      if(c==='"'||c==="'"||c==="`"){quote=c;i++;continue;}
+      if(c==="{"||c==="("||c==="[")st.push(c);
+      else if(c==="}"||c===")"||c==="]"){if(st.pop()!==cierre[c]){ok=false;break;}}
+      i++;
+    }
+    if(ok&&!quote&&!block&&!st.length&&!balanceJs(t))return t;
+    const k=t.lastIndexOf("\n");
+    if(k<0)break;
+    t=t.slice(0,k);
+  }
+  return balanceJs(t)?null:t;
+}
 function semillaDe(t){let h=2166136261;for(const c of String(t)){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;}
 function prng(seed){let s=seed||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};}
 function colorDeNombre(t){
@@ -2928,6 +3017,61 @@ function dibujarBloque(principal,estilo,semilla){
   } else if(estilo==="liso"){
     for(let y=3;y<W;y+=4)for(let x=1;x<W-1;x++){const i=(y*W+x)*4;px[i]=Math.round(px[i]*0.9);px[i+1]=Math.round(px[i+1]*0.9);px[i+2]=Math.round(px[i+2]*0.9);}
   }
+  return px;
+}
+// Bloques dibujados nativos a la resolución pedida (antes: 16×16 con ruido y reescalado).
+function dibujarBloqueHD(principal,estilo,semilla,size){
+  const W=Math.max(16,size||32),px=new Uint8Array(W*W*4),P=hexRgb(principal),r=prng(semilla);
+  const set=(x,y,c)=>{if(x<0||y<0||x>=W||y>=W)return;const i=(y*W+x)*4;px[i]=c[0];px[i+1]=c[1];px[i+2]=c[2];px[i+3]=255;};
+  const luz=(c,k)=>mezcla(c,[255,255,255],Math.max(0,Math.min(1,k)));
+  const sombra=(c,k)=>mezcla(c,[0,0,0],Math.max(0,Math.min(1,k)));
+  for(let y=0;y<W;y++)for(let x=0;x<W;x++){
+    let c=P.slice();const k=(r()-.5)*.22;c=c.map(v=>Math.max(0,Math.min(255,Math.round(v*(1+k)))));
+    const borde=(x===0||y===0||x===W-1||y===W-1);if(borde)c=c.map(v=>Math.round(v*.8));
+    set(x,y,c);
+  }
+  if(estilo==="mena"){
+    const mineral=mezcla(P,[255,255,255],.25);
+    for(let n=0;n<Math.max(5,Math.floor(W/6));n++){const cx=2+Math.floor(r()*(W-6)),cy=2+Math.floor(r()*(W-6));
+      for(let dy=0;dy<3;dy++)for(let dx=0;dx<3;dx++)if(r()<.75)set(cx+dx,cy+dy,(dx+dy)%2?luz(mineral,.15):sombra(mineral,.05));}
+  }else if(estilo==="madera"){
+    const paso=Math.max(3,Math.round(W/5));
+    for(let y=0;y<W;y+=paso){for(let x=0;x<W;x++){const i=(y*W+x)*4;const v=(r()-.5)*.14;px[i]=Math.round(px[i]*(1+v));px[i+1]=Math.round(px[i+1]*(1+v));px[i+2]=Math.round(px[i+2]*(1+v));}
+      for(let x=0;x<W;x++)set(x,y,sombra(P,.35));}
+  }else if(estilo==="metal"){
+    for(let y=0;y<W;y++)for(let x=0;x<W;x++){if(x%8===0)set(x,y,sombra(P,.28));if(y%8===0)set(x,y,sombra(P,.18));}
+    for(let kx=4;kx<W;kx+=8)for(let ky=4;ky<W;ky+=8)for(const d of [[0,0],[1,0],[0,1]])set(kx+d[0],ky+d[1],[230,232,238]);
+    for(let x=0;x<W;x++){const i=x*4;px[i]=Math.min(255,px[i]+26);px[i+1]=Math.min(255,px[i+1]+26);px[i+2]=Math.min(255,px[i+2]+26);}
+  }else if(estilo==="tela"){
+    for(let y=0;y<W;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4;if((x+y)%2===0){px[i]=Math.round(px[i]*.86);px[i+1]=Math.round(px[i+1]*.86);px[i+2]=Math.round(px[i+2]*.86);}}
+  }else if(estilo==="hielo"){
+    for(let k=0;k<Math.max(3,Math.floor(W/8));k++){let x=Math.floor(r()*W),y=Math.floor(r()*W);for(let s=0;s<Math.floor(W/4);s++){set(x,y,[190,225,255]);if(r()<.5)x++;else y++;}}
+  }else if(estilo==="liso"){
+    for(let y=Math.round(W*.2);y<W;y+=Math.max(3,Math.round(W/4)))for(let x=1;x<W-1;x++)set(x,y,sombra(P,.22));
+  }else{
+    for(let k=0;k<Math.max(3,Math.floor(W/7));k++){let x=Math.floor(r()*W),y=Math.floor(r()*W);for(let s=0;s<Math.max(4,Math.floor(W/3));s++){set(x,y,sombra(P,.42));if(r()<.5)x++;else y++;}}
+    for(let x=0;x<W;x+=Math.max(4,Math.round(W/3)))set(x,Math.floor(W/2),sombra(P,.3));
+  }
+  return px;
+}
+// Armadura: placas metálicas con brillo, sombra y remaches (antes eran franjas de ruido).
+function dibujarArmadura(slot,principal,seed){
+  const W=64,H=32,px=new Uint8Array(W*H*4),P=hexRgb(principal),r=prng(seed);
+  const set=(x,y,c)=>{if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*4;px[i]=c[0];px[i+1]=c[1];px[i+2]=c[2];px[i+3]=255;};
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    let c=P.slice();const k=(r()-.5)*.12;c=c.map(v=>Math.round(v*(1+k)));
+    if(y<4)c=mezcla(c,[255,255,255],.18);if(y>H-5)c=mezcla(c,[0,0,0],.22);
+    set(x,y,c);
+  }
+  for(const mitad of [0,1]){const ox=mitad*32;
+    for(let x=ox+3;x<ox+29;x++){set(x,4,mezcla(P,[255,255,255],.34));set(x,H-5,mezcla(P,[0,0,0],.36));}
+    for(let y=5;y<H-5;y++){set(ox+3,y,mezcla(P,[0,0,0],.3));set(ox+28,y,mezcla(P,[0,0,0],.3));}
+    for(const rx of [ox+6,ox+15,ox+24])for(const ry of [8,16,24])set(rx,ry,[235,237,242]);
+  }
+  if(slot==="head"){for(let y=2;y<10;y++)for(let x=4;x<28;x++)if(!((x<6||x>25)&&(y<4||y>8)))set(x,y,mezcla(P,[255,255,255],.08));}
+  if(slot==="feet"){for(let y=H-8;y<H-2;y++)for(let x=4;x<28;x++)set(x,y,mezcla(P,[0,0,0],.12));}
+  if(slot==="legs"){for(let y=14;y<H-4;y++)for(let x=36;x<60;x++)set(x,y,mezcla(P,y>H/2?[0,0,0]:[255,255,255],.08));}
+  if(slot==="chest"){for(let y=4;y<H-4;y++)for(let x=36;x<60;x++){const i=(y*W+x)*4;px[i]=Math.min(255,px[i]+18);px[i+1]=Math.min(255,px[i+1]+18);px[i+2]=Math.min(255,px[i+2]+18);}}
   return px;
 }
 const MC_MODELOS_VANILLA={
@@ -3171,7 +3315,23 @@ function scriptPoderesJugador(lista){
   L.push('world.afterEvents.playerSpawn.subscribe((ev) => {','  try { if (ev.initialSpawn) ev.player.sendMessage("§6Poderes divinos activos: §f"+PODERES.join(", ")); } catch (e) {}','});','');
   return L.join("\n");
 }
-function modeloProceduralEntidad(obj, archivo){
+// Variación procedural: dos criaturas del mismo arquetipo no salen con la misma silueta.
+function variarPartes(P,semilla){
+  if(!Array.isArray(P)||!P.length)return P||[];
+  const rnd=prng(semilla||1);const fac=.93+rnd()*.14;
+  for(const p of P){if(Array.isArray(p.tam))p.tam=p.tam.map(v=>Math.max(1,+(v*fac).toFixed(2)));}
+  const extras=[];
+  if(rnd()<.4)extras.push({nombre:"pua_dorsal",origen:[-1.2,16,-1],tam:[2.4,3.4,1.4],color:"#d9d3c2"});
+  if(rnd()<.35)extras.push({nombre:"oreja_i",origen:[1.6,24.5,-3.4],tam:[1.8,2.6,1],color:"#6f5b49"});
+  if(rnd()<.35)extras.push({nombre:"oreja_d",origen:[-3.4,24.5,-3.4],tam:[1.8,2.6,1],color:"#6f5b49"});
+  if(rnd()<.3)extras.push({nombre:"cola_extra",origen:[-1,6,6],tam:[2,1.6,3.4],color:P[0]&&P[0].color||"#7a6a55"});
+  return P.concat(extras);
+}
+function modeloProceduralEntidad(obj,archivo){
+  const base=modeloProceduralEntidadBase(obj,archivo);
+  return variarPartes(base,semillaDe(String(obj&&obj.nombre||archivo||"criatura")));
+}
+function modeloProceduralEntidadBase(obj, archivo){
   const nombre=String(obj?.nombre||archivo||"criatura");
   const texto=normMc(nombre+" "+String(obj?.descripcion||"")+" "+archivo);
   const base=colorDeNombre(nombre+" "+archivo);
@@ -3188,6 +3348,53 @@ function modeloProceduralEntidad(obj, archivo){
     add("ojo_i",[-4,10,-6.5],[3,2,1],"#f5f5f5");add("ojo_d",[1,10,-6.5],[3,2,1],"#f5f5f5");
     add("pupila_i",[-3,10,-7],[1,1,0.5],"#202020");add("pupila_d",[2,10,-7],[1,1,0.5],"#202020");
     add("boca",[-2,7,-6.7],[4,1,0.6],c2);return P;
+  }
+  if(/ave|pajaro|pájaro|pollo|gallina|aguila|águila|cuervo|paloma|falcon|gallo|pajaro/.test(texto)){
+    const P=[];const add=(n,o,t,c,x)=>P.push(Object.assign({nombre:n,origen:o,tam:t,color:c},x||{}));
+    add("cuerpo",[-4,7,-4],[8,5,10],base);add("pecho",[-3,6,-7],[6,5,5],c2);
+    add("cabeza",[-3,11,-8],[6,5,6],base);add("pico",[-1.5,11.5,-12],[3,1.6,4],ac);
+    add("ojo_i",[1.2,13,-8.6],[1.2,1.2,.6],"#ffcc33");add("ojo_d",[-2.6,13,-8.6],[1.2,1.2,.6],"#ffcc33");
+    add("ala_i",[-8,10,-3],[4,1.4,8],c2,{rot:[0,0,-12]});add("ala_d",[4,10,-3],[4,1.4,8],c2,{rot:[0,0,12]});
+    add("cola",[-1.5,8,5],[3,1.4,5],c2);
+    add("pata_i",[-2,1,-1],[1.4,6,1.4],"#c9862f");add("pata_d",[1,1,-1],[1.4,6,1.4],"#c9862f");
+    return P;
+  }
+  if(/pez|fish|tibur[oó]n|medusa|marino|acuatico|acuático|ballena|delfin|delfín/.test(texto)){
+    const P=[];const add=(n,o,t,c)=>P.push({nombre:n,origen:o,tam:t,color:c});
+    add("cuerpo",[-8,7,-3],[16,7,6],base);add("vientre",[-7,5,-2],[14,3,4],c2);
+    add("cola_a",[7,7,-2],[4,7,1.4],ac);add("cola_b",[10,8,-3],[2,5,3],ac);
+    add("aleta_dorsal",[-2,14,-2],[6,3,1.4],c2);add("aleta_i",[-6,7,-6],[4,1.4,3],c2);add("aleta_d",[2,7,3],[4,1.4,3],c2);
+    add("ojo_i",[-5,10,-6.2],[1.4,1.4,.6],"#1c1c1c");add("ojo_d",[-5,10,6.2],[1.4,1.4,.6],"#1c1c1c");
+    return P;
+  }
+  if(/serpiente|serp|vibora|víbora|dragon|dragón|wyvern|leviatan|leviatán|culebra/.test(texto)){
+    const P=[];const add=(n,o,t,c,x)=>P.push(Object.assign({nombre:n,origen:o,tam:t,color:c},x||{}));
+    for(let k=0;k<6;k++)add("segmento_"+k,[-5+k*2,5+Math.sin(k*.9)*2,-2],[4,4,4],k%2?base:c2);
+    add("cabeza",[7,8,-3],[6,5,6],base);add("fauce",[8,6.5,-6],[4,1.4,3],c2);
+    add("ojo_i",[9.5,9.5,-5.6],[1.2,1.2,.6],ac);add("ojo_d",[9.5,9.5,-.6],[1.2,1.2,.6],ac);
+    if(/dragon|dragón|wyvern/.test(texto)){add("ala_i",[-6,12,-2],[8,1,6],ac,{rot:[0,0,-18]});add("ala_d",[-2,12,-2],[8,1,6],ac,{rot:[0,0,18]});add("cuerno_i",[8,13,-5],[1,3,1],"#efe9d8");add("cuerno_d",[8,13,-1],[1,3,1],"#efe9d8");}
+    return P;
+  }
+  if(/golem|gólem|aut[oó]mata|titan de piedra|gólem/.test(texto)){
+    const P=[];const add=(n,o,t,c)=>P.push({nombre:n,origen:o,tam:t,color:c});
+    add("base",[-5,0,-5],[10,4,10],c2);add("torso",[-6,4,-5],[12,10,8],base);add("hombro_i",[-10,12,-4],[5,4,6],c2);add("hombro_d",[5,12,-4],[5,4,6],c2);
+    add("brazo_i",[-11,4,-4],[3.4,11,4],c2);add("brazo_d",[7.6,4,-4],[3.4,11,4],c2);
+    add("cabeza",[-3,15,-4],[6,5,6],base);add("ojo_i",[-1.8,17,-7.2],[1.2,1,.4],ac);add("ojo_d",[1,17,-7.2],[1.2,1,.4],ac);
+    add("pierna_i",[-4,0,-3],[3.4,4,4],c2);add("pierna_d",[1,0,-3],[3.4,4,4],c2);
+    return P;
+  }
+  if(/fantasma|ghost|espiritu|espíritu|wisp|sombra espectral|alma/.test(texto)){
+    const P=[];const add=(n,o,t,c)=>P.push({nombre:n,origen:o,tam:t,color:c});
+    add("cuerpo",[-4,8,-4],[8,9,6],ac);add("capa_inf",[-3,3,-3],[6,6,4],c2);
+    add("cola_a",[-2,0,-2],[2,3,2],c2);add("cola_b",[0,-3,-1],[2,3,2],c2);
+    add("ojo_i",[-2.4,14,-4.6],[1.6,1.6,.6],"#ffffff");add("ojo_d",[.8,14,-4.6],[1.6,1.6,.6],"#ffffff");
+    add("brazo_i",[-7.5,9,-3],[2.4,7,2.4],c2);add("brazo_d",[5,9,-3],[2.4,7,2.4],c2);
+    return P;
+  }
+  if(/gato|gata|felino|tigre|leon|león|zorro|fox|lince|pantera/.test(texto)){
+    const P=modeloBestia({altura:24,colores:{piel:base,armadura:c2,armadura2:c2,acento:ac,ojos:"#ffcc33"},rasgos:{cuernos:false,alas:false,cola:true}});
+    P.push({nombre:"oreja_i",origen:[1.6,21,-3.4],tam:[1.8,3,1.2],color:c2},{nombre:"oreja_d",origen:[-3.3,21,-3.4],tam:[1.8,3,1.2],color:c2});
+    return P;
   }
   const bestia=/(perro|lobo|wolf|dog|dragon|dinosaur|dinosaurio|bestia|animal|oso|bear|felino|tigre|leon|leon|jabal|araña|spider|insecto|serpiente)/.test(texto);
   if(bestia){
@@ -3276,7 +3483,7 @@ function postprocesarAddon(entrada,plan,verSrv){
     for(const ic of iconos){
       const nom=nombreDeId(ic.id,plan),col=colorDeNombre(nom+" "+((plan.objetos||[]).find(x=>x.id===ic.id)||{}).descripcion),px=dibujarGenerico(tipoIconoDe(nom+" "+ic.corto+" "+(((plan.objetos||[]).find(x=>x.id===ic.id)||{}).icono||"")+((((plan.objetos||[]).find(x=>x.id===ic.id)||{}).habilidad&&!/^\s*(ninguna|ninguno|none|no|null|-)?\s*$/i.test(String(((plan.objetos||[]).find(x=>x.id===ic.id)||{}).habilidad))&&!/(vara|baston|cetro|varita)/.test(normMc(nom)))?" espada":"")),col,mezcla(hexRgb(col),[255,255,255],.45).length?"#"+mezcla(hexRgb(col),[255,236,140],.6).map(v=>v.toString(16).padStart(2,"0")).join(""):"#ffffff");
       dat[ic.corto]={textures:"textures/items/"+ic.corto};
-      mapa.set("RP/textures/items/"+ic.corto+".png",pngBytes(resTx,resTx,texturaHD(px,16,16,resTx/16,{tipo:"item",sem:semillaDe(ic.corto)})));
+      mapa.set("RP/textures/items/"+ic.corto+".png",pngBytes(resTx,resTx,texturaHD(px,16,16,resTx/16,{tipo:"item",sem:semillaDe(ic.corto),crisp:nivelTex!=="alta"&&nivelTex!=="max"})));
       if(!primero)primero={px,col};
     }
     mapa.set("RP/textures/item_texture.json",JSON.stringify({resource_pack_name:ns,texture_name:"atlas.items",texture_data:dat},null,2)+"\n");
@@ -3290,9 +3497,8 @@ function postprocesarAddon(entrada,plan,verSrv){
         const mp={"slot.armor.head":["helmet","helmet_layer_visible","1"],"slot.armor.chest":["chestplate","chest_layer_visible","1"],"slot.armor.legs":["leggings","leg_layer_visible","2"],"slot.armor.feet":["boots","boot_layer_visible","1"]}[sl];
         if(!mp)continue;
         const ob=(plan.objetos||[]).find(x=>x.id===ic.id)||{};
-        const col=colorDeNombre(nombreDeId(ic.id,plan)+" "+ob.descripcion),P=hexRgb(col),CL=mezcla(P,[255,255,255],.3),OS=mezcla(P,[0,0,0],.35);
-        const tx=new Uint8Array(64*32*4);
-        for(let y=0;y<32;y++)for(let x=0;x<64;x++){const i=(y*64+x)*4;const c=((x+y)%7===0)?CL:(((x*3+y*5)%11===0)?OS:P);tx[i]=c[0];tx[i+1]=c[1];tx[i+2]=c[2];tx[i+3]=255;}
+        const col=colorDeNombre(nombreDeId(ic.id,plan)+" "+ob.descripcion);
+        const tx=dibujarArmadura(sl,col,semillaDe(ic.corto));
         const rutaTx="textures/models/armor/"+ic.corto;
         {const fa=Math.min(4,resTx/16);mapa.set("RP/"+rutaTx+".png",pngBytes(64*fa,32*fa,texturaHD(tx,64,32,fa,{tipo:"armadura",sem:semillaDe(ic.corto)})));}
         mapa.set("RP/attachables/"+ic.corto+".json",JSON.stringify({format_version:"1.8.0","minecraft:attachable":{description:{identifier:ic.id,materials:{default:"armor",enchanted:"armor_enchanted"},textures:{default:rutaTx,enchanted:"textures/misc/enchanted_actor_glint"},geometry:{default:"geometry.humanoid.armor."+mp[0]},scripts:{parent_setup:"variable."+mp[1]+" = 0.0;"},render_controllers:["controller.render.armor"]}}},null,2)+"\n");
@@ -3306,7 +3512,7 @@ function postprocesarAddon(entrada,plan,verSrv){
     for(const b of bloques)for(const c of b.cortos){
       const nom=nombreDeId(b.id,plan);const col=colorDeNombre(nom+" "+c);const estilo=/(mena|ore|mineral|cristal)/.test(normMc(nom+" "+c))?"mena":(/(liso|ladrillo|pulid|placa)/.test(normMc(nom))?"liso":"piedra");
       dat[c]={textures:"textures/blocks/"+c};
-      mapa.set("RP/textures/blocks/"+c+".png",pngBytes(resTx,resTx,texturaHD(dibujarBloque(col,estilo,semillaDe(c)),16,16,resTx/16,{tipo:"bloque",tile:true,sem:semillaDe(c)})));
+      mapa.set("RP/textures/blocks/"+c+".png",pngBytes(resTx,resTx,dibujarBloqueHD(col,estilo,semillaDe(c),resTx)));
     }
     mapa.set("RP/textures/terrain_texture.json",JSON.stringify({resource_pack_name:ns,texture_name:"atlas.terrain",padding:8,num_mip_levels:4,texture_data:dat},null,2)+"\n");
     if(!plan._icono){const col=colorDeNombre(nombreDeId(bloques[0].id,plan));plan._icono={px:dibujarBloque(col,"piedra",7),col};}
@@ -4765,6 +4971,7 @@ async function repararCoberturaRequisitosAddon(files,prompt,env){
       audit=auditarRequisitosAddonAvanzado(files,prompt,evidence);
     }catch(e){models.push(String(e?.message||e).slice(0,100));}
   }
+  try{completarRecursosDeterminista(files,{objetos:[]},String(env.MC_SERVER_VERSION||"2.10.0"),[]);audit=auditarRequisitosAddonAvanzado(files,prompt,evidence);}catch(_){}
   return {audit,rounds:models.length,models};
 }
 
@@ -5189,6 +5396,7 @@ async function mcBuild(body,env,request){
     const vz=await generarVocesAddon(plan,env);plan._voces=vz.out;
     const rellenados=completarObjetosFaltantes(entrada,plan);
     const r=postprocesarAddon(entrada,plan,env.MC_SERVER_VERSION);
+    try{completarRecursosDeterminista(r.files,plan,env.MC_SERVER_VERSION||"2.10.0",r.notas);}catch(e){r.notas.push("Completado determinista omitido: "+String(e&&e.message||e).slice(0,90));}
     if(snap){
       mcContinuidadManifests(r.files,snap,verNueva);
       for(const b of (snap.bin||[]))if(!r.files.some(f=>f.path===b.path)){try{r.files.push({path:b.path,content:egoB64Inv(b.b64)});}catch(_){}}
@@ -5237,7 +5445,8 @@ async function mcBuild(body,env,request){
       repairState: ciclo && ciclo.informe ? ciclo.informe.estado : "no disponible"
     });
     if (!validacion.ok || validacion.errores.length) {
-      return respuestaValidacionFallida(validacion, ciclo);
+      if (env.MC_ESTRICTO === "1") return respuestaValidacionFallida(validacion, ciclo);
+      r.notas.unshift("ADD-ON ENTREGADO EN MODO PARCIAL: quedaron " + validacion.errores.length + " hallazgos estructurales; el ZIP se entrega igual para que no pierdas el trabajo. Revisa la lista del README y pruébalo en el juego.");
     }
     // v14.48.1: ya no se tira todo el trabajo cuando faltan requisitos. Se entrega el add-on como PARCIAL,
     // con la lista honesta de lo que no se pudo verificar (solo MC_ESTRICTO=1 vuelve a bloquear).
@@ -5604,8 +5813,16 @@ function leerProyectoModelo(raw) {
       let c=t.slice(mk.fin,sig);
       const f=c.search(/^===\s*FIN\s*===\s*$/m);
       const terminado=f>=0; if(terminado) c=c.slice(0,f);
-      if(!terminado && i===marcas.length-1 && incompleto) return; // último archivo cortado: se descarta
-      c=c.replace(/^\n/,"").replace(/\s+$/,"")+"\n";
+      if(!terminado && i===marcas.length-1 && incompleto){
+        // Antes se descartaba el último archivo cortado (pérdida silenciosa). Los scripts
+        // suficientemente largos se conservan y la reparación sintáctica los cierra; los
+        // JSON cortados siguen descartándose (no se puede sintetizar un JSON válido).
+        const sueldo=c.replace(/^\n/,"").replace(/\s+$/,"");
+        if(/\.json$/i.test(mk.ruta)||sueldo.length<180) return;
+        c=sueldo+"\n";
+      } else {
+        c=c.replace(/^\n/,"").replace(/\s+$/,"")+"\n";
+      }
       const fence=c.match(/^```[a-zA-Z0-9]*\n([\s\S]*?)\n```\n?$/); if(fence) c=fence[1]+"\n";
       files.push({path:mk.ruta,content:c});
     });
@@ -5905,15 +6122,16 @@ async function generarProyecto(body, env, minecraft, request) {
       const reparaciones = repararAddon(files, env.MC_SERVER_VERSION);
       const ciclo = await cicloReparacionAutomatica(files, env, { minecraft: true });
       const validacion = ciclo.validacion || validarAddonEstructural(files);
-      if (!validacion.ok || validacion.errores.length) return respuestaValidacionFallida(validacion, ciclo);
+      if ((!validacion.ok || validacion.errores.length) && env.MC_ESTRICTO === "1") return respuestaValidacionFallida(validacion, ciclo);
       const avisos = [...reparaciones, ...ciclo.informe.cambios.map(x=>`Auto-reparación (ronda ${x.ronda}): ${x.path}`), ...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x), ...validacion.errores.map(x=>"Validación pendiente: "+x), ...validacion.avisos.map(x=>"Revisión: "+x)];
+      if (!validacion.ok || validacion.errores.length) avisos.unshift("Entrega PARCIAL: validación con " + validacion.errores.length + " hallazgos; el ZIP se genera igual para no perder el trabajo.");
       const readme = files.find(f=>/^BP\/README\.md$/i.test(f.path));
       if(readme && avisos.length) readme.content += "\n\n## Revisión de EGO AI\n"+avisos.map(x=>"- "+x).join("\n")+"\n";
       const zip = await createZip(files);
       return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="ego-${spec.id}.mcaddon"`,"X-EGO-Avisos":String(avisos.length),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Model":"plantilla-ego","X-EGO-Resumen":encodeURIComponent(`${spec.nombre} (${spec.tipo}, habilidad de ${spec.habilidad}, daño ${spec.danio}, id ego:${spec.id}; con textura PNG, receta, aura de partículas y habilidades${spec.buscar?", busca objetivo":""}${spec.velocidad?", velocidad al correr":""}; no incluye animación 3D del modelo)`),"X-EGO-Spec":encodeURIComponent(JSON.stringify(spec)),"X-EGO-NoAplicado":encodeURIComponent(r0.noAplicado.join(" | ")),...egoTamHeaders(zip),"X-EGO-Files":String(files.length),"Cache-Control":"no-store"}});
     } catch(e) { console.error("tpl_addon",String(e?.message||e).slice(0,200)); return json({avanzado:true,motivo:"plantilla no disponible"}); }
   }
-  const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 90 : 35)), minecraft ? 100 : 50));
+  const maxFiles = Math.max(1, Math.min(Number(body.maxFiles || (minecraft ? 160 : 45)), minecraft ? 220 : 60));
   const system = minecraft
     ? (mcKind === "addon" ? `Eres un ingeniero experto en Minecraft BEDROCK Edition (Android, Windows, consolas). NUNCA uses Java, Forge ni Fabric. Genera un ADD-ON COMPLETO.
 Estructura obligatoria con DOS packs enlazados: carpeta "BP/" (behavior pack) y carpeta "RP/" (resource pack). Cada uno con su manifest.json (format_version 2, header con name, description, uuid, version [1,0,0], min_engine_version [1,26,50]; modules con su propio uuid distinto; SOLO el BP depende del RP (uuid del header del RP, version [1,0,0]); el RP NO depende de nada; el BP con script añade la dependencia {\"module_name\":\"@minecraft/server\",\"version\":\"${String(env.MC_SERVER_VERSION || "2.10.0")}\"}). Todos los UUID deben ser v4 válidos y DISTINTOS entre sí.
@@ -5959,7 +6177,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
     // En proyectos grandes el equipo genera y revisa una propuesta unificada antes del fallback legado.
     if (routerApiKey(env) && env.EGO_TEAM_MODE !== "0") {
       try {
-        const equipo = await egoTeamChat(mensajes, env, 16000, minecraft ? `minecraft-bedrock-${mcKind}` : "software-project");
+        const equipo = await egoTeamChat(mensajes, env, 20000, minecraft ? `minecraft-bedrock-${mcKind}` : "software-project");
         if (equipo?.content) {
           const p = leerProyectoModelo(equipo.content);
           const valido = p && p.files.length && (!minecraft || p.files.some(f => /manifest\.json$/i.test(f.path)));
@@ -5982,16 +6200,26 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
       if (Date.now()>limite) { intentos.push("se agotó el tiempo"); break; }
       let raw="", etiqueta=c.tipo==="or"?`openrouter:${c.id}`:c.id;
       try {
-        if (c.tipo==="cf") { const r=await cfChat(c.id,mensajes,env,12000); raw=r.content; }
+        if (c.tipo==="cf") { const r=await cfChat(c.id,mensajes,env,16000); raw=r.content; }
         else {
-          const r=await openRouterChat(mensajes,env,16000,c.id);
+          const r=await openRouterChat(mensajes,env,24000,c.id);
           raw=r.content;
         }
       } catch(err) { intentos.push(`${etiqueta.split("/").pop()}: ${String(err?.message||err).slice(0,90)}`); continue; }
       const p=leerProyectoModelo(raw);
       const ok=p && p.files.length && (!minecraft || p.files.some(f=>/manifest\.json$/i.test(f.path)));
-      if (ok) { parsed=p; model=etiqueta; break; }
-      intentos.push(`${etiqueta.split("/").pop()}: ${raw?`respuesta no válida (${raw.length} caracteres)`:"respuesta vacía"}`);
+      if (ok) {
+        if(!parsed){parsed=p;model=etiqueta;}
+        else{
+          const vistos=new Set(parsed.files.map(f=>f.path.toLowerCase()));
+          let agregados=0;
+          for(const f of p.files){const path=safeProjectPath(f&&f.path);if(!path||vistos.has(path.toLowerCase())||typeof f.content!=="string")continue;parsed.files.push({path,content:f.content});vistos.add(path.toLowerCase());agregados++;}
+          if(agregados)intentos.push(`${etiqueta.split("/").pop()}: +${agregados} archivos fusionados (${parsed.files.length} en total)`);
+          model=model||etiqueta;
+        }
+        const suficientes=parsed.files.length>=18&&(!minecraft||parsed.files.some(f=>/manifest\.json$/i.test(f.path)));
+        if(suficientes)break;
+      } else intentos.push(`${etiqueta.split("/").pop()}: ${raw?`respuesta no válida (${raw.length} caracteres)`:"respuesta vacía"}`);
     }
     if(!parsed) return json({error:"Ningún modelo devolvió un proyecto válido. Intentos: "+intentos.join(" | ").slice(0,420)+". Prueba de nuevo o con una petición más concreta.",intentos},502);
     const files=[]; const seen=new Set();
@@ -6024,13 +6252,15 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
       const planGen=planDesdeArchivosMinecraft(files,name,prompt);
       const procesado=postprocesarAddon(files,planGen,env.MC_SERVER_VERSION);
       files.splice(0,files.length,...procesado.files);
+      try{completarRecursosDeterminista(files,planGen,env.MC_SERVER_VERSION||"2.10.0",intentos);}catch(e){intentos.push("completado-determinista: "+String(e&&e.message||e).slice(0,90));}
       try{endurecerAddonBedrock(files,planGen);pulidoFinalAddon(files,planGen,prompt);}catch(e){console.warn('endurecer',String(e&&e.message||e).slice(0,100));}
     }
     const avisos=minecraft?repararAddon(files,env.MC_SERVER_VERSION):[];
     if (minecraft && mcKind === "addon") avisos.push(...auditarArquitecturaIAAddon(files, prompt).warnings);
     const ciclo=await cicloReparacionAutomatica(files,env,{minecraft});
     const validacion=ciclo.validacion||(minecraft?validarAddonEstructural(files):{ok:true,errores:[],avisos:[],archivos:files.length});
-    if (minecraft && (!validacion.ok || validacion.errores.length)) return respuestaValidacionFallida(validacion, ciclo);
+    if (minecraft && (!validacion.ok || validacion.errores.length) && env.MC_ESTRICTO === "1") return respuestaValidacionFallida(validacion, ciclo);
+    if (minecraft && !validacion.ok) intentos.push("Validación: entrega en modo PARCIAL (estricto desactivado); " + validacion.errores.length + " hallazgos pendientes.");
     avisos.push(...ciclo.informe.cambios.map(x=>`Auto-reparación ronda ${x.ronda}: ${x.path}`),...ciclo.informe.avisosFinales.map(x=>"Auto-reparación: "+x));
     if(minecraft) avisos.push(...validacion.errores.map(x=>"Validación pendiente: "+x),...validacion.avisos.map(x=>"Revisión: "+x));
     if (coberturaAddon && !coberturaAddon.ok) avisos.push("Cobertura funcional incompleta: " + coberturaAddon.missing.join(" | "));
@@ -6060,9 +6290,9 @@ function egoNivelTexturas(prompt){
   return "normal";
 }
 function egoResTexturas(nivel,nTex,presupuesto){
-  let r={pixel:16,normal:32,alta:64,max:128}[nivel]||32;
-  const tope=presupuesto||14*1048576;
-  while(r>16&&nTex*r*r*4>tope)r=r/2;
+  let r={pixel:16,normal:40,alta:80,max:160}[nivel]||40;
+  const tope=presupuesto||24*1048576;
+  while(r>24&&nTex*r*r*4>tope)r=r/2;
   return r;
 }
 function egoEpx(src,w,h,wrap){
@@ -6082,14 +6312,17 @@ function texturaHD(px,w,h,f,opt){
   if(f<=1||!px||px.length!==w*h*4)return px;
   const tile=!!opt.tile;let cur=px,cw=w,ch=h,k=f;
   while(k>1){cur=egoEpx(cur,cw,ch,tile);cw*=2;ch*=2;k=k/2;}
-  const W=cw,H=ch,out=new Uint8Array(cur.length),at=(x,y)=>{if(tile){x=(x+W)%W;y=(y+H)%H;}else{x=x<0?0:x>=W?W-1:x;y=y<0?0:y>=H?H-1:y;}return (y*W+x)*4;};
-  // suavizado 3×3 solo en color (el borde transparente se conserva nítido)
+  const W=cw,H=ch,out=new Uint8Array(cur.length);
+  // crisp: pixel-art nítido (solo ampliación EPX, sin desenfoque); ítems en modos pixel/normal.
+  if(opt.crisp){for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4;out[i]=cur[i];out[i+1]=cur[i+1];out[i+2]=cur[i+2];out[i+3]=cur[i+3];}return out;}
+  const at=(x,y)=>{if(tile){x=(x+W)%W;y=(y+H)%H;}else{x=x<0?0:x>=W?W-1:x;y=y<0?0:y>=H?H-1:y;}return (y*W+x)*4;};
+  // suavizado 3×3 suave (no aplasta el detalle); el borde transparente se conserva nítido
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=(y*W+x)*4;out[i+3]=cur[i+3];
     if(!cur[i+3]){continue;}
     let r=0,g=0,b=0,n=0;
-    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const j=at(x+dx,y+dy);if(!cur[j+3])continue;const wt=(dx===0&&dy===0)?4:((dx===0||dy===0)?2:1);r+=cur[j]*wt;g+=cur[j+1]*wt;b+=cur[j+2]*wt;n+=wt;}
-    out[i]=Math.round(cur[i]*.4+(r/n)*.6);out[i+1]=Math.round(cur[i+1]*.4+(g/n)*.6);out[i+2]=Math.round(cur[i+2]*.4+(b/n)*.6);
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const j=at(x+dx,y+dy);if(!cur[j+3])continue;const wt=(dx===0&&dy===0)?6:((dx===0||dy===0)?2:1);r+=cur[j]*wt;g+=cur[j+1]*wt;b+=cur[j+2]*wt;n+=wt;}
+    out[i]=Math.round(cur[i]*.62+(r/n)*.38);out[i+1]=Math.round(cur[i+1]*.62+(g/n)*.38);out[i+2]=Math.round(cur[i+2]*.62+(b/n)*.38);
   }
   const rnd=prng((opt.sem|0)+W*7+H);const bord=Math.max(1,Math.round(f/4));
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -6677,7 +6910,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     return { validacion, informe };
   };
   if (!informe.habilitado) { if (validacion.errores.length || validacion.avisos.length) informe.avisosFinales.push("Reparación con IA desactivada: no hay proveedor de chat disponible o EGO_AUTO_REPAIR=0; solo se aplicaron reparaciones deterministas."); return cerrar(); }
-  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 3), 3));
+  const maxRondas = Math.max(1, Math.min(Number(env.EGO_AUTO_REPAIR_ROUNDS || 4), 5));
   const modelosReparador = [...new Set([EGO_TEAM_MODELS.coder, EGO_TEAM_MODELS.reasoner, EGO_TEAM_MODELS.planner].filter(Boolean))];
   const rutaCreable = p => /^(?:BP|RP)\/(?:entities|entity|items|blocks|recipes|loot_tables|spawn_rules|animations|animation_controllers|render_controllers|models\/entity|texts|sounds|scripts|functions|trading)\/.+\.(?:json|js|lang|mcfunction)$/i.test(p) && !/manifest\.json$/i.test(p);
   for (let ronda = 1; ronda <= maxRondas; ronda++) {
@@ -6691,7 +6924,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     if (!objetivo.length && validacion.errores.length) objetivo = candidatos.filter(f => /\.json$/i.test(f.path) && !/manifest\.json$/i.test(f.path)).slice(0, 8);
     objetivo = [...new Map(objetivo.map(f => [f.path, f])).values()].slice(0, 12);
     if (!objetivo.length && !validacion.errores.length) break;
-    const snapshot = objetivo.map(f => ({ path: f.path, content: f.content.slice(0, 18000) }));
+    const snapshot = objetivo.map(f => ({ path: f.path, content: f.content.slice(0, 24000) }));
     const inventario = files.map(f => f.path).slice(0, 300);
     const estadoAntes = new Map(files.map(f => [f.path, f.content]));
     const erroresAntesSet = new Set(validacion.errores);
@@ -6734,7 +6967,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
     if (usado && !informe.modelos.includes(usado)) informe.modelos.push(usado);
     const creados = [], tocados = [];
     let nuevos = 0;
-    for (const patch of parsed.patches.slice(0, 10)) {
+    for (const patch of parsed.patches.slice(0, 16)) {
       const path = safeProjectPath(patch && patch.path);
       if (!path || typeof patch.content !== "string" || patch.content.length > 300000 || !/\.(?:js|json|lang|mcfunction)$/i.test(path) || /manifest\.json$/i.test(path)) continue;
       if (/\.json$/i.test(path) && !jsonTolerante(patch.content).ok) { informe.avisosFinales.push(`Parche rechazado en ${path}: JSON inválido.`); continue; }
@@ -6745,7 +6978,7 @@ async function cicloReparacionAutomatica(files, env, opciones = {}) {
         if (patch.content.length < original.content.length * 0.35 && original.content.length > 800) { informe.avisosFinales.push(`Parche rechazado en ${path}: eliminaba más del 65% del archivo (reparación destructiva).`); continue; }
         original.content = /\.json$/i.test(path) ? JSON.stringify(jsonTolerante(patch.content).obj, null, 2) : patch.content; tocados.push(path);
       } else {
-        if (!rutaCreable(path) || creados.length >= 4) continue;
+        if (!rutaCreable(path) || creados.length >= 10) continue;
         files.push({ path, content: /\.json$/i.test(path) ? JSON.stringify(jsonTolerante(patch.content).obj, null, 2) : patch.content }); creados.push(path);
       }
       nuevos++;
