@@ -2011,7 +2011,7 @@ function crearPartesRespaldoMinecraft(prompt){
 }
 
 const RX_3D=/(?:modelo\s*(?:3\s*d|propio|grande|personalizado|custom)|\b3\s*d\b|geometr[ií]a|jefe\s+(?:gigante|enorme|grande)|boss\s+gigante|dise[nñ]o\s+propio)/i;
-// ===== v14.60.0 · Modo «mejorar mi add-on»: EGO recuerda el último add-on de cada usuario (KV, comprimido) =====
+// ===== v14.61.0 · Modo «mejorar mi add-on»: EGO recuerda el último add-on de cada usuario (KV, comprimido) =====
 async function egoGz(u8){const cs=new CompressionStream("gzip");const w=cs.writable.getWriter();w.write(u8);w.close();return new Uint8Array(await new Response(cs.readable).arrayBuffer());}
 async function egoGunzip(u8){const ds=new DecompressionStream("gzip");const w=ds.writable.getWriter();w.write(u8);w.close();return new Uint8Array(await new Response(ds.readable).arrayBuffer());}
 function egoUidMc(body){const u=String((body&&(body.usuario||body.correo))||"").trim();return u?cleanUser(u).slice(0,64):null;}
@@ -2130,7 +2130,7 @@ function limpiarPlan(j,prompt){
   }
   if(j.mejora&&typeof j.mejora==='object')base.mejora={base:Math.max(1,Math.min(9999,Number(j.mejora.base)||1))};
   if(!base.mejora&&!base.partes.length&&!(sinObj&&base.poderesJugador.length)) base.partes=crearPartesRespaldoMinecraft(prompt);
-  // v14.60.0: poderes solo para el jugador → los genera el código; se deja UNA parte "de relleno" para que mc_part nunca reciba un plan sin partes (antes: error 500 «reading titulo»)
+  // v14.61.0: poderes solo para el jugador → los genera el código; se deja UNA parte "de relleno" para que mc_part nunca reciba un plan sin partes (antes: error 500 «reading titulo»)
   if(!base.mejora&&!base.partes.length) base.partes=[{titulo:"Manifest y poderes del jugador (generados por código)",tipo:"misc",detalle:"Los manifests y los poderes del jugador los genera el código.",archivos:[]}];
 
   {const ents=base.objetos.filter(o=>o.tipo==="entity");const pedidos=new Map();
@@ -2282,7 +2282,8 @@ ARQUITECTURA NPC INTELIGENTE EGO (OBLIGATORIA CUANDO EL PEDIDO INCLUYA COMPAÑER
 Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (ítems, bloques, criaturas, scripts, recetas, botín, aparición); cada parte debe poder escribirse sola usando los ids de "objetos"; los scripts van en BP/scripts/ (el principal es BP/scripts/main.js); no incluyas manifests ni imágenes. Sé fiel al pedido y no recortes funciones: si el usuario pide mucho, haz muchas partes.`;
   try{
     const memoriaMc=await mcMemoriaCreador(env,prompt);
-    const mensajesPlan=[{role:"system",content:sys+memoriaMc},{role:"user",content:"Pedido del usuario:\n"+prompt}];
+    let apiTxt="";try{const av=await Promise.race([mcApiViva(env),new Promise(r2=>setTimeout(()=>r2(null),4000))]);apiTxt=mcApiVivaTexto(av,env.MC_SERVER_VERSION||"2.10.0");const cw=await Promise.race([contextoWeb("Minecraft Bedrock Script API @minecraft/server "+prompt.slice(0,140),env,true),new Promise(r2=>setTimeout(()=>r2(null),5000))]);if(cw&&cw.texto)apiTxt+="\n\nCONTEXTO WEB RECIENTE (puede traer ruido; manda la API oficial): "+String(cw.texto).slice(0,1800);}catch(_){}
+    const mensajesPlan=[{role:"system",content:sys+memoriaMc+apiTxt},{role:"user",content:"Pedido del usuario:\n"+prompt}];
     // Planner diseña; reasoner y auditor revisan en paralelo. Sus observaciones
     // quedan adjuntas al plan para que el generador las respete en cada módulo.
     // v14.47: planificación con presupuesto fijo (antes sin límite: podía pasar de 165 s y la app abortaba)
@@ -2292,6 +2293,7 @@ Reglas: máximo 12 partes y 12 archivos por parte; separa en partes lógicas (í
       tmoMc(90000)
     ]);
     const plan=limpiarPlan(extractJson(r.content),prompt);
+    try{const q=egoFiltrarNoPedido(plan,prompt);if(q.length)plan.avisoPlan="No se crearon (no los pediste): "+q.join(", ")+". Los ataques/transformaciones se hacen con efectos y poderes del script.";}catch(_){}
     const revisionMsgs=[
       {role:"system",content:"Eres el revisor técnico de un plan Minecraft Bedrock. Detecta requisitos omitidos, incompatibilidades y dependencias. Devuelve observaciones concretas y breves; no reescribas el plan."},
       {role:"user",content:"SOLICITUD:\n"+prompt+"\nPLAN:\n"+JSON.stringify(plan).slice(0,14000)}
@@ -4766,7 +4768,7 @@ async function repararCoberturaRequisitosAddon(files,prompt,env){
   return {audit,rounds:models.length,models};
 }
 
-// ===== v14.60.0 · Informe de calidad real (0-100) + comprobación final de PNG =====
+// ===== v14.61.0 · Informe de calidad real (0-100) + comprobación final de PNG =====
 function egoVerificarPng(files,notas){
   let malos=0;
   for(const f of files){
@@ -4952,12 +4954,209 @@ function egoEstadoHabilidades(files,pend){
     if(!err)faltan.push("sin control de errores");
     let estado;
     if(pj.some(x=>x.estado==="NO COMPATIBLE"))estado="NO COMPATIBLE";
+    else if(pj.some(x=>x.estado==="PENDIENTE"))estado="PENDIENTE";
     else if(pj.length)estado="PARCIAL";
     else if(!imp.has(f.path)||!act||!efe)estado="PENDIENTE";
     else estado=faltan.length?"PARCIAL":"IMPLEMENTADO";
     out.push({path:f.path,estado,faltan,pendientes:pj.map(x=>"línea "+x.linea+": "+x.detalle)});
   }
   return out;
+}
+// ===== v14.61 · Auditoría FUNCIONAL de habilidades + seguridad de ejecución + versiones de API en vivo =====
+const EGO_EFECTOS_VALIDOS=new Set(["speed","slowness","haste","mining_fatigue","strength","instant_health","instant_damage","jump_boost","nausea","regeneration","resistance","fire_resistance","water_breathing","invisibility","blindness","night_vision","hunger","weakness","poison","wither","health_boost","absorption","saturation","levitation","fatal_poison","slow_falling","conduit_power","bad_omen","village_hero","darkness","trial_omen","wind_charged","weaving","oozing","infested","raid_omen"]);
+const AF_EFECTO_RX=/\b(addEffect|applyDamage|applyImpulse|applyKnockback|setOnFire|kill|remove|teleport|spawnEntity|spawnItem|spawnParticle|createExplosion|setType|setPermutation|fillBlocks|setDynamicProperty|addTag|removeTag|triggerEvent|setProperty|clearVelocity|extinguishFire|setRotation|setGameMode|addItem|setItem|setCurrentValue|resetToMaxValue|resetToDefaultValue|playSound|playAnimation|startItemCooldown|setWeather|setTime|runCommand)\s*\(|\.(?:selectedSlotIndex|nameTag)\s*=[^=]|\.(?:health|hunger)\b[^;\n]*\.setCurrentValue/;
+const AF_MSG_RX=/\b(sendMessage|setActionBar|setTitle|updateSubtitle)\s*\(|runCommand(?:Async)?\(\s*[`"']\/?\s*(?:say|tellraw|title|titleraw|msg|tell|w)\b/;
+function afSinComentarios(t){return String(t).replace(/\/\*[\s\S]*?\*\//g,m=>m.replace(/[^\n]/g," ")).replace(/(^|[^:"'`\\])\/\/[^\n]*/g,(m,a)=>a+" ".repeat(m.length-a.length));}
+function afCuerpo(lim,desde){
+  let pd=0,i=desde;
+  for(;i<lim.length;i++){const c=lim[i];if(c==="(")pd++;else if(c===")")pd--;else if(pd<=0&&c===";")return null;else if(pd<=0&&c==="{")break;else if(pd<0)return null;}
+  if(i>=lim.length)return null;
+  let d=0;const ini=i;for(;i<lim.length;i++){const c=lim[i];if(c==="{")d++;else if(c==="}"){d--;if(!d)return {ini:ini+1,fin:i};}}
+  return null;
+}
+function afFunciones(t){
+  const lim=ttLimpiar(t),out=[];
+  const rx=/function\s+([A-Za-z_$][\w$]*)\s*\(|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\s*\(|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/g;
+  for(const m of lim.matchAll(rx)){const cu=afCuerpo(lim,m.index+m[0].length-(m[0].endsWith("(")?1:0));if(!cu)continue;out.push({nombre:m[1]||m[2],ini:cu.ini,fin:cu.fin,cuerpo:t.slice(cu.ini,cu.fin),linea:t.slice(0,m.index).split("\n").length});}
+  return out;
+}
+function afHandlers(t){
+  const lim=ttLimpiar(t),out=[];
+  for(const m of lim.matchAll(/\.(subscribe|runInterval|runTimeout|then)\s*\(/g)){
+    const cu=afCuerpo(lim,m.index+m[0].length);if(!cu)continue;
+    const cab=lim.slice(m.index+m[0].length,cu.ini);if(!/=>|function/.test(cab)||/^\s*[A-Za-z_$][\w$]*\s*,/.test(cab))continue;
+    out.push({tipo:m[1],ini:cu.ini,fin:cu.fin,cuerpo:t.slice(cu.ini,cu.fin),linea:t.slice(0,m.index).split("\n").length});
+  }
+  return out;
+}
+function afEfectivo(cuerpo){
+  const c=afSinComentarios(cuerpo);
+  const tieneEf=(()=>{const re=new RegExp(AF_EFECTO_RX.source,"g");let m;while((m=re.exec(c))){if(/^runCommand/.test(m[0])){const ar=c.slice(m.index,m.index+80);if(AF_MSG_RX.test(ar))continue;}return true;}return false;})();
+  return {efecto:tieneEf,mensaje:AF_MSG_RX.test(c),vacio:!c.replace(/\s+/g,"").length,llamadas:[...c.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)].map(m=>m[1])};
+}
+function egoAuditoriaFuncional(files,plan){
+  const H=[],add=(sev,tipo,path,detalle,linea)=>H.push({sev,tipo,path,detalle:String(detalle).slice(0,200),linea:linea||0});
+  const sc=files.filter(f=>/^BP\/scripts\/.+\.js$/i.test(f.path)&&typeof f.content==="string");
+  const todo=files.filter(f=>typeof f.content==="string");
+  // 1) funciones y su efecto real (transitivo)
+  const info=new Map();
+  for(const f of sc)for(const fn of afFunciones(f.content)){const a=afEfectivo(fn.cuerpo);info.set(fn.nombre,{...a,path:f.path,linea:fn.linea});}
+  const efTrans=(n,prof=0,vis=new Set())=>{const x=info.get(n);if(!x||vis.has(n))return false;vis.add(n);if(x.efecto)return true;if(prof>=4)return false;return x.llamadas.some(q=>efTrans(q,prof+1,vis));};
+  const llamadasUsadas=new Set();
+  for(const f of sc){for(const m of afSinComentarios(f.content).matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g))llamadasUsadas.add(m[1]);for(const m of afSinComentarios(f.content).matchAll(/[,(=:]\s*([A-Za-z_$][\w$]*)\s*[,)]/g))llamadasUsadas.add(m[1]);}
+  for(const f of sc){
+    for(const fn of afFunciones(f.content)){
+      const a=afEfectivo(fn.cuerpo);
+      if(a.vacio&&!/^(noop|_|nada)$/i.test(fn.nombre))add("aviso","funcion_vacia",f.path,"la función «"+fn.nombre+"» está vacía",fn.linea);
+      else if(!efTrans(fn.nombre)&&a.mensaje&&!a.efecto)add("aviso","solo_mensaje",f.path,"la función «"+fn.nombre+"» solo muestra mensajes (no ejecuta ningún efecto)",fn.linea);
+    }
+    for(const h of afHandlers(f.content)){
+      if(h.tipo==="then")continue;
+      const a=afEfectivo(h.cuerpo);
+      if(a.vacio)add("aviso","funcion_vacia",f.path,"un evento ("+h.tipo+") tiene el cuerpo vacío",h.linea);
+      else if(a.mensaje&&!a.efecto&&!a.llamadas.some(q=>efTrans(q)))add("aviso","solo_mensaje",f.path,"un evento ("+h.tipo+") solo muestra mensajes",h.linea);
+    }
+    const lim=ttLimpiar(f.content);
+    for(const m of lim.matchAll(/function\s+([A-Za-z_$][\w$]*)/g)){const n=m[1];if(!/^(main|init|inicializar)$/i.test(n)&&![...lim.matchAll(new RegExp("(?<![\\w$])"+n.replace(/\$/g,"\\$")+"(?![\\w$])","g"))].slice(1).length&&!todo.some(o=>o!==f&&typeof o.content==="string"&&new RegExp("(?<![\\w$])"+n.replace(/\$/g,"\\$")+"(?![\\w$])").test(o.content)))add("aviso","funcion_sin_uso",f.path,"la función «"+n+"» nunca se usa",lim.slice(0,m.index).split("\n").length);}
+    // 2) menús: botones ↔ acciones
+    if(/ActionFormData/.test(f.content)){
+      const botones=(afSinComentarios(f.content).match(/\.button\(/g)||[]).length;
+      const hs=afHandlers(f.content).filter(h=>h.tipo==="then"&&/selection|canceled/.test(h.cuerpo));
+      if(botones&&!hs.length)add("critico","menu_sin_accion",f.path,"el menú tiene "+botones+" botón(es) pero no procesa la selección (response.selection)");
+      for(const h of hs){
+        const c=afSinComentarios(h.cuerpo);
+        const casos=(c.match(/\bcase\s+\d+\s*:/g)||[]).length+(c.match(/selection\s*===?\s*\d+|\d+\s*===?\s*[\w.]*selection/g)||[]).length;
+        const indexado=/\[\s*[\w.]*selection\s*\]/.test(c)||/\.(find|get)\(\s*[\w.]*selection/.test(c);
+        const a=afEfectivo(h.cuerpo);const ejecuta=a.efecto||a.llamadas.some(q=>efTrans(q))||/\[\s*[\w.]*selection\s*\]\s*(?:\.\w+)?\s*\(/.test(c);
+        if(!ejecuta&&!indexado)add("critico","menu_sin_accion",f.path,"ningún botón del menú ejecuta un poder (solo muestra mensajes o no hace nada)",h.linea);
+        else if(!indexado&&casos&&casos<botones)add("critico","menu_sin_accion",f.path,"el menú tiene "+botones+" botones pero solo "+casos+" tienen acción",h.linea);
+      }
+    }
+  }
+  // 3) identificadores reales
+  const idsBP=new Set(),ns=new Set(),ents=new Set(),itemsBloques=new Set();
+  for(const f of files){if(!/^BP\/(items|blocks|entities)\/.+\.json$/i.test(f.path)||typeof f.content!=="string")continue;try{const j=JSON.parse(f.content);const r=j["minecraft:item"]||j["minecraft:block"]||j["minecraft:entity"];const id=r&&r.description&&r.description.identifier;if(id){idsBP.add(id);ns.add(id.split(":")[0]);if(j["minecraft:entity"])ents.add(id);else itemsBloques.add(id);}}catch(_){}}
+  if(plan&&plan.ns)ns.add(plan.ns);
+  const partRP=new Set();for(const f of files){if(/^RP\/particles\/.+\.json$/i.test(f.path)&&typeof f.content==="string"){try{const id=JSON.parse(f.content).particle_effect.description.identifier;if(id)partRP.add(id);}catch(_){}}}
+  const vanPart=new Set(MC_PARTICULAS.map(x=>String(x).replace(/^minecraft:/,"")));
+  const vanEnt=new Set(Object.keys(MC_VANILLA_J));
+  for(const f of sc){
+    const c=afSinComentarios(f.content);
+    for(const m of c.matchAll(/spawnEntity\(\s*[`"']([a-z0-9_.-]+:[a-z0-9_.\/-]+)[`"']/g)){const id=m[1],p=id.split(":")[0];
+      if(ns.has(p)&&!ents.has(id))add("critico","id_inexistente",f.path,"spawnEntity(\""+id+"\"): esa entidad no existe en el add-on");
+      else if(p==="minecraft"&&!vanEnt.has(id))add("aviso","id_dudoso",f.path,"spawnEntity(\""+id+"\"): no está en la lista de entidades vanilla conocida");}
+    for(const m of c.matchAll(/summon\s+([a-z0-9_.-]+:[a-z0-9_.\/-]+)/g)){const id=m[1],p=id.split(":")[0];if(ns.has(p)&&!ents.has(id))add("critico","id_inexistente",f.path,"/summon "+id+": esa entidad no existe en el add-on");}
+    for(const m of c.matchAll(/new\s+ItemStack\(\s*[`"']([a-z0-9_.-]+:[a-z0-9_.\/-]+)[`"']/g)){const id=m[1],p=id.split(":")[0];if(ns.has(p)&&!itemsBloques.has(id))add("critico","id_inexistente",f.path,"new ItemStack(\""+id+"\"): ese ítem/bloque no existe en el add-on");}
+    for(const m of c.matchAll(/spawnParticle\(\s*[`"']([a-z0-9_.-]+(?::[a-z0-9_.\/-]+)?)[`"']/g)){const id=m[1];if(!(partRP.has(id)||vanPart.has(id.replace(/^minecraft:/,""))))add("critico","particula_inexistente",f.path,"spawnParticle(\""+id+"\"): esa partícula no existe (ni oficial ni definida en RP/particles)");}
+    for(const m of c.matchAll(/addEffect\(\s*[`"']([a-z_]+)[`"']/g))if(!EGO_EFECTOS_VALIDOS.has(m[1]))add("critico","efecto_invalido",f.path,"addEffect(\""+m[1]+"\"): ese efecto no existe");
+  }
+  // 4) partículas y animaciones declaradas pero sin conectar
+  const corpus=todo.map(f=>f.content).join("\n");
+  for(const id of partRP)if(!corpus.split(id).slice(2).length&&!sc.some(f=>f.content.includes(id))&&!todo.some(f=>!/^RP\/particles\//.test(f.path)&&f.content.includes(id)))add("aviso","particula_sin_conexion","RP/particles","la partícula «"+id+"» está definida pero nadie la usa");
+  const animDef=new Map();for(const f of files){if(/^RP\/animations\/.+\.json$/i.test(f.path)&&typeof f.content==="string"){try{for(const k of Object.keys(JSON.parse(f.content).animations||{}))animDef.set(k,f.path);}catch(_){}}}
+  for(const [k,p] of animDef)if(!todo.some(f=>f.path!==p&&typeof f.content==="string"&&f.content.includes(k)))add("aviso","animacion_sin_conexion",p,"la animación «"+k+"» no está conectada a ninguna entidad ni controlador");
+  for(const f of files){if(!/^RP\/entity\/.+\.json$/i.test(f.path)||typeof f.content!=="string")continue;try{const d=JSON.parse(f.content)["minecraft:client_entity"].description;for(const a of Object.values(d.animations||{}))if(typeof a==="string"&&/^animation\./.test(a)&&!animDef.has(a)&&!/^animation\.(humanoid|player|zombie|skeleton|creeper|pig|cow|chicken|sheep|villager|iron_golem|enderman|spider|wolf|cat|horse|bat|blaze|ghast|slime|squid|dragon|wither|warden|armor_stand|quadruped|biped|common)\b/.test(a))add("aviso","animacion_inexistente",f.path,"usa la animación «"+a+"» y no está definida");}catch(_){}}
+  const snd=files.find(f=>f.path==="RP/sounds/sound_definitions.json");
+  if(snd&&typeof snd.content==="string"){try{const sd=JSON.parse(snd.content).sound_definitions||{};for(const [k,v] of Object.entries(sd))for(const s of (v.sounds||[])){const n=typeof s==="string"?s:s&&s.name;if(n&&!["ogg","wav","mp3","fsb"].some(e=>files.some(q=>q.path==="RP/"+n+"."+e)))add("aviso","sonido_faltante","RP/sounds/sound_definitions.json","el sonido «"+k+"» apunta a "+n+" y ese archivo no existe");}}catch(_){}}
+  // 5) comandos peligrosos y procesos que pueden bloquear Minecraft
+  for(const f of sc){
+    const c=afSinComentarios(f.content),lim=ttLimpiar(f.content);
+    if(/while\s*\(\s*(true|1)\s*\)|for\s*\(\s*;\s*;\s*\)/.test(lim))add("critico","bucle_infinito",f.path,"bucle sin fin (while(true) / for(;;)): congelaría Minecraft");
+    for(const m of lim.matchAll(/for\s*\([^;)]*;[^;)]*[<≤]=?\s*(\d{6,})/g))add("aviso","bucle_enorme",f.path,"bucle de "+m[1]+" iteraciones: puede congelar el juego");
+    for(const m of c.matchAll(/runCommand(?:Async)?\(\s*[`"']\/?\s*([^`"']{1,160})/g)){const cmd=m[1].trim();
+      if(/^(stop|op|deop|ban|ban-ip|kick|whitelist|reload|transfer|permission|allowlist|setmaxplayers)\b/i.test(cmd))add("critico","comando_peligroso",f.path,"comando de administración /"+cmd.split(" ")[0]+" (no debe usarse en un add-on)");
+      else if(/^kill\s+@e(?!\[[^\]]*type=)/i.test(cmd))add("aviso","comando_peligroso",f.path,"/kill @e sin filtro de tipo: borra TODO (incluye aldeanos, mascotas y otros add-ons)");
+      else if(/^gamerule\b|^difficulty\b|^setworldspawn\b|^tickingarea\b/i.test(cmd))add("aviso","comando_peligroso",f.path,"/"+cmd.split(" ")[0]+" cambia ajustes del mundo");
+      else if(/^fill\s+(-?\d+|~-?\d*)\s+(-?\d+|~-?\d*)\s+(-?\d+|~-?\d*)\s+(-?\d+|~-?\d*)\s+(-?\d+|~-?\d*)\s+(-?\d+|~-?\d*)/i.test(cmd)){const n=cmd.match(/-?\d+/g)||[];if(n.length>=6){const v=Math.abs(n[3]-n[0]+1)*Math.abs(n[4]-n[1]+1)*Math.abs(n[5]-n[2]+1);if(v>32768)add("aviso","comando_peligroso",f.path,"/fill de "+v+" bloques supera el límite de 32768");}}}
+    for(const m of c.matchAll(/runInterval\(([\s\S]{0,1500}?)\},\s*([01])\s*\)/g))if(/getEntities\(\s*\)|fillBlocks|getAllPlayers\(\)\.[\w.]*getEntities\(/.test(m[1]))add("aviso","lag_posible",f.path,"runInterval cada tick con consulta pesada (getEntities/fillBlocks): puede dar lag");
+  }
+  return {hallazgos:H};
+}
+function egoCorregirBloqueos(files){
+  const out=[];
+  for(const f of files){
+    if(!/^BP\/scripts\/.+\.js$/i.test(f.path)||typeof f.content!=="string")continue;
+    const t=f.content;
+    const nt=t.replace(/\bwhile\s*\(\s*(?:true|1)\s*\)/g,"for (let __ego = 0; __ego < 10000; __ego++)").replace(/\bfor\s*\(\s*;\s*;\s*\)/g,"for (let __ego = 0; __ego < 10000; __ego++)");
+    if(nt!==t&&!balanceJs(nt)){f.content=nt;out.push(f.path+": bucle infinito limitado a 10 000 vueltas (para que no congele Minecraft)");}
+  }
+  return out;
+}
+function egoPendientesDeAuditoria(hallazgos){
+  const P=[];
+  for(const h of hallazgos){
+    if(h.tipo==="solo_mensaje"||h.tipo==="funcion_vacia")P.push({path:h.path,linea:h.linea,estado:"PARCIAL",detalle:h.detalle});
+    else if(["menu_sin_accion","id_inexistente","particula_inexistente","efecto_invalido","comando_peligroso"].includes(h.tipo)&&h.sev==="critico")P.push({path:h.path,linea:h.linea,estado:"PENDIENTE",detalle:h.detalle});
+  }
+  return P;
+}
+// Reparación funcional TRANSACCIONAL: copia de seguridad, cambios solo en los archivos con hallazgos, validación antes/después y reversión si no mejora.
+async function egoReparacionFuncional(files,hallazgos,prompt,env,ver,plan){
+  const log={rondas:0,aplicados:[],revertidos:[],modelos:[]};
+  const malos=hallazgos.filter(h=>/^BP\/scripts\//.test(h.path)&&(h.sev==="critico"||h.tipo==="solo_mensaje"||h.tipo==="funcion_vacia")&&h.tipo!=="bucle_infinito");
+  if(!malos.length||env.EGO_AUTO_REPAIR==="0")return log;
+  const afectados=[...new Set(malos.map(h=>h.path))].slice(0,3);
+  const contar=(fs)=>{const h=egoAuditoriaFuncional(fs,plan).hallazgos;return h.filter(x=>x.sev==="critico"||x.tipo==="solo_mensaje"||x.tipo==="funcion_vacia").length;};
+  const ids=files.filter(f=>/^BP\/(items|blocks|entities)\//.test(f.path)).map(f=>{try{const j=JSON.parse(f.content);const r=j["minecraft:item"]||j["minecraft:block"]||j["minecraft:entity"];return r&&r.description&&r.description.identifier;}catch(_){return null;}}).filter(Boolean);
+  for(let ronda=0;ronda<2;ronda++){
+    const actuales=egoAuditoriaFuncional(files,plan).hallazgos.filter(h=>afectados.includes(h.path)&&(h.sev==="critico"||h.tipo==="solo_mensaje"||h.tipo==="funcion_vacia"));
+    if(!actuales.length)break;
+    const ctx=afectados.map(p=>{const f=files.find(x=>x.path===p);return f?"=== ARCHIVO: "+p+" ===\n"+String(f.content).slice(0,9000)+"\n=== FIN ===":"";}).join("\n");
+    const msgs=[
+      {role:"system",content:"Eres el reparador FUNCIONAL de EGO AI para Minecraft Bedrock Script API @minecraft/server "+ver+". Corrige SOLO los hallazgos indicados: haz que cada botón/evento EJECUTE de verdad el poder (efectos reales: addEffect, applyDamage, applyKnockback, spawnParticle, spawnEntity, setOnFire, teleport, etc.), sin quitar habilidades ni cambiar menús. RESTRICCIONES: modifica únicamente los archivos listados; conserva todo lo que ya funciona; usa solo identificadores que existan ("+ids.slice(0,40).join(", ")+") o vanilla reales; efectos válidos: "+[...EGO_EFECTOS_VALIDOS].join(", ")+"; no uses comandos de administración ni bucles infinitos; no inventes funciones de la API. Responde SOLO con los archivos completos en el formato === ARCHIVO: ruta === contenido === FIN ==="},
+      {role:"user",content:"PEDIDO ORIGINAL:\n"+String(prompt).slice(0,3500)+"\n\nHALLAZGOS A CORREGIR:\n- "+actuales.map(h=>h.path+(h.linea?":"+h.linea:"")+" — "+h.detalle).join("\n- ")+"\n\nARCHIVOS ACTUALES:\n"+ctx}
+    ];
+    let res;try{res=await egoRoleChat("reparador",msgs,env,7000,{maxTotalMs:40000,maxModels:2,perModelMs:18000,providerModels:Math.min(2,egoExternalProviders(env,"code").length),providerTimeoutMs:18000,providerOffset:ronda,cfModels:1,cfTimeoutMs:9000,validateContent:(c)=>{const p=parsearSalidaMc(c,ver);return p.files.length>0&&p.errores.length===0;}});}catch(e){log.revertidos.push("sin respuesta de IA: "+String(e&&e.message||e).slice(0,80));break;}
+    log.rondas++;log.modelos.push(res.model||"proveedor");
+    const parsed=parsearSalidaMc(res.content,ver);
+    for(const patch of parsed.files){
+      if(!afectados.includes(patch.path)){log.revertidos.push(patch.path+": ignorado (archivo ajeno al hallazgo)");continue;}
+      const ix=files.findIndex(f=>f.path===patch.path);if(ix<0)continue;
+      const respaldo=files[ix].content,antesLint=lintScriptApiTipado(respaldo,ver).length,antesN=contar(files);
+      files[ix]={path:patch.path,content:patch.content};
+      const sintaxis=balanceJs(patch.content),lintN=lintScriptApiTipado(patch.content,ver).length,despN=contar(files);
+      if(sintaxis||lintN>antesLint||despN>=antesN){files[ix]={path:patch.path,content:respaldo};log.revertidos.push(patch.path+": revertido ("+(sintaxis?"sintaxis rota":lintN>antesLint?"más errores de API":"no mejoró")+")");}
+      else log.aplicados.push(patch.path+": hallazgos "+antesN+" → "+despN);
+    }
+  }
+  return log;
+}
+// Versiones oficiales de los módulos (registro npm de Microsoft), con caché de 6 h
+async function mcApiViva(env){
+  const g=globalThis;if(g.__egoApiViva&&Date.now()-g.__egoApiViva.ts<6*3600*1000)return g.__egoApiViva.val;
+  let val=null;
+  try{if(env&&env.EGO_BIBLIOTECA){const raw=await Promise.race([env.EGO_BIBLIOTECA.get("mc_apiviva","json"),new Promise(r=>setTimeout(()=>r(null),1500))]);if(raw&&raw.ts&&Date.now()-raw.ts<6*3600*1000){g.__egoApiViva={ts:raw.ts,val:raw};return raw;}}}catch(_){}
+  const sem=(v)=>v.split(".").map(Number);const mayor=(a,b)=>{const x=sem(a),y=sem(b);for(let i=0;i<3;i++){if(x[i]!==y[i])return x[i]-y[i];}return 0;};
+  const leer=async(pkg)=>{const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),4500);try{const r=await fetch("https://registry.npmjs.org/"+pkg.replace("/","%2f"),{headers:{Accept:"application/vnd.npm.install-v1+json"},signal:ctl.signal});if(!r.ok)return null;const j=await r.json();const vs=Object.keys(j.versions||{});const est=vs.filter(v=>/^\d+\.\d+\.\d+$/.test(v)).sort(mayor).pop()||null;const betas=vs.filter(v=>/-beta\./.test(v));return {estable:est,beta:betas.length?betas[betas.length-1]:null,etiquetas:j["dist-tags"]||{}};}catch(_){return null;}finally{clearTimeout(t);}};
+  const [s,u]=await Promise.all([leer("@minecraft/server"),leer("@minecraft/server-ui")]);
+  if(s||u){val={ts:Date.now(),fuente:"registry.npmjs.org (paquetes oficiales @minecraft de Microsoft)",server:s,ui:u};g.__egoApiViva={ts:val.ts,val};try{if(env&&env.EGO_BIBLIOTECA)await env.EGO_BIBLIOTECA.put("mc_apiviva",JSON.stringify(val),{expirationTtl:86400});}catch(_){}}
+  return val;
+}
+function mcApiVivaTexto(v,verObjetivo){
+  if(!v)return "";
+  return "\n\nVERSIONES OFICIALES CONSULTADAS EN VIVO ("+v.fuente+"): @minecraft/server estable "+(v.server&&v.server.estable||"?")+(v.server&&v.server.beta?" (beta "+v.server.beta+")":"")+"; @minecraft/server-ui estable "+(v.ui&&v.ui.estable||"?")+". Este add-on se genera para @minecraft/server "+verObjetivo+": usa SOLO funciones que existan en esa versión estable; NUNCA APIs beta ni inventadas.";
+}
+// Evita crear lo que el usuario NO pidió (criaturas inventadas para «esferas», «transformaciones», «ataques»)
+function egoFiltrarNoPedido(plan,prompt){
+  const norm=(s)=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const np=norm(prompt);
+  const quiereCriatura=/(criatura|mob\b|jefe|boss|invoca|summon|entidad|monstruo|npc|aldean|compan|mascota|enemigo)/.test(np);
+  const efectoRx=/(transformation|transformaci|sphere|esfera|\borb\b|beam|rayo\b|ataque|attack|explosion|explosi|aura|wave|onda|blast|slash)/i;
+  const quitados=[];
+  plan.objetos=(plan.objetos||[]).filter(o=>{
+    if(!o||o.tipo!=="entity")return true;
+    const nom=norm(o.nombre||""),slug=norm(String(o.id||"").split(":")[1]||"").replace(/_/g," ");
+    const literal=(nom&&np.includes(nom))||(slug&&np.includes(slug));
+    if(efectoRx.test((o.nombre||"")+" "+(o.id||""))&&!literal&&!quiereCriatura){quitados.push(o.nombre||o.id);return false;}
+    return true;
+  });
+  if(quitados.length){
+    const qn=quitados.map(norm);
+    plan.requisitos=(plan.requisitos||[]).filter(r=>!qn.some(n=>norm(r).includes(n)));
+    if(!(plan.objetos||[]).some(o=>o&&o.tipo==="entity"))plan.partes=(plan.partes||[]).filter(p=>!(p&&p.tipo==="entities"));
+    plan.omitidos=quitados;
+  }
+  return quitados;
 }
 async function mcBuild(body,env,request){
   let prompt=String(body.prompt||"").slice(0,12000);
@@ -5011,7 +5210,26 @@ async function mcBuild(body,env,request){
       }catch(e){console.error("cuarentena",String(e&&e.message||e).slice(0,120));}
     }
     try{for(const x of egoAsegurarDeps(r.files,env.MC_SERVER_VERSION||"2.10.0"))r.notas.push("Corregido: "+x);}catch(_){}
+    // v14.61: auditoría FUNCIONAL (menús↔poderes, mensajes vacíos, ids, partículas, comandos/bucles peligrosos) + reparación transaccional
+    let af={hallazgos:[]},reparFun=null;
+    try{
+      for(const x of egoCorregirBloqueos(r.files))r.notas.push("Seguridad: "+x);
+      af=egoAuditoriaFuncional(r.files,plan);
+      if(af.hallazgos.some(h=>h.sev==="critico"||h.tipo==="solo_mensaje"||h.tipo==="funcion_vacia")){
+        reparFun=await egoReparacionFuncional(r.files,af.hallazgos,prompt,env,env.MC_SERVER_VERSION||"2.10.0",plan);
+        for(const x of reparFun.aplicados)r.notas.push("Reparación funcional (con copia de seguridad): "+x);
+        for(const x of reparFun.revertidos)r.notas.push("Reparación funcional revertida: "+x);
+        af=egoAuditoriaFuncional(r.files,plan);
+      }
+      pendientes=pendientes.concat(egoPendientesDeAuditoria(af.hallazgos));
+      const crit=af.hallazgos.filter(h=>h.sev==="critico"||h.tipo==="solo_mensaje"||h.tipo==="funcion_vacia");
+      for(const h of crit.slice(0,10))r.notas.push("Auditoría funcional · "+h.path.replace("BP/scripts/","")+(h.linea?":"+h.linea:"")+" — "+h.detalle);
+      const av=af.hallazgos.filter(h=>!crit.includes(h));
+      for(const h of av.slice(0,6))r.notas.push("Aviso · "+h.path.replace("BP/scripts/","")+" — "+h.detalle);
+    }catch(e){console.error("auditoria_funcional",String(e&&e.message||e).slice(0,120));}
     let estadoHab=[];try{estadoHab=egoEstadoHabilidades(r.files,pendientes);}catch(_){}
+    let apiViva=null;try{apiViva=await Promise.race([mcApiViva(env),new Promise(r2=>setTimeout(()=>r2(null),5000))]);}catch(_){}
+    if(apiViva&&apiViva.server&&apiViva.server.estable){const vo=env.MC_SERVER_VERSION||"2.10.0";r.notas.push("API oficial consultada en vivo: @minecraft/server estable "+apiViva.server.estable+(apiViva.ui&&apiViva.ui.estable?" · server-ui "+apiViva.ui.estable:"")+". Este add-on usa "+vo+(apiViva.server.estable!==vo?" (se mantiene esa versión para no romper packs en tu juego; si tu Minecraft es más nuevo, ponle al worker la variable MC_SERVER_VERSION="+apiViva.server.estable+")":"")+".");}
     const auditoriaIA = auditarArquitecturaIAAddon(r.files, prompt);
     for (const aviso of auditoriaIA.warnings) r.notas.push(aviso);
     const auditoriaRequisitos = auditarRequisitosAddonAvanzado(r.files, prompt, {
@@ -5026,7 +5244,9 @@ async function mcBuild(body,env,request){
     if (!auditoriaRequisitos.ok && env.MC_ESTRICTO === "1") {
       return json({error:"El add-on no se empaquetó como completo porque siguen faltando requisitos funcionales.",codigo:"cobertura_funcional_incompleta",cobertura:auditoriaRequisitos,recuperacion:{rondas:reparacionCobertura.rounds,modelos:reparacionCobertura.models}},422);
     }
-    const esParcial = !auditoriaRequisitos.ok;
+    const hayPend=estadoHab.some(h=>h.estado==="PENDIENTE"||h.estado==="NO COMPATIBLE"||h.estado==="PARCIAL")||(pendientes||[]).length>0;
+    const esParcial = !auditoriaRequisitos.ok||hayPend;
+    if(hayPend&&auditoriaRequisitos.ok)r.notas.unshift("ESTE ADD-ON NO ESTÁ COMPLETO: hay habilidades pendientes, parciales o no verificadas (ver el README). Pasó la validación ESTRUCTURAL; eso NO prueba que funcione dentro del juego.");
     for (const faltante of auditoriaRequisitos.missing) r.notas.unshift("REQUISITO NO VERIFICADO: " + faltante);
     if (!auditoriaRequisitos.ok) r.notas.unshift(`Cobertura real: ${auditoriaRequisitos.passed}/${auditoriaRequisitos.total} verificaciones; el add-on NO debe considerarse completo.`);
     if(reparacionCobertura.rounds)r.notas.push(`Reparación de cobertura: ${reparacionCobertura.rounds} intento(s); proveedores: ${reparacionCobertura.models.join(", ")}`);
@@ -5048,6 +5268,7 @@ async function mcBuild(body,env,request){
       if(rd2&&typeof rd2.content==="string")rd2.content+="\n## Estado de las habilidades (verificación ESTÁTICA, sin prueba dentro del juego)\n"+estadoHab.map(h=>"- "+h.estado+" · "+h.path.replace("BP/scripts/","")+((h.faltan&&h.faltan.length)?" — falta: "+h.faltan.join("; "):"")+((h.pendientes&&h.pendientes.length)?" — pendiente: "+h.pendientes.join("; "):"")).join("\n")+"\nIMPLEMENTADO = lógica conectada que pasó las comprobaciones estáticas. PARCIAL = existe pero le faltan piezas. PENDIENTE = no está bien implementado. NO COMPATIBLE = la API de Minecraft no permite hacerlo como se pidió.\n";
       r.notas.push("Habilidades: "+Object.entries(cnt).map(([k,v])=>v+" "+k).join(" · ")+" (revisión estática; falta probarlas en el juego)");
     }
+    {const rd3=r.files.find(f=>/^BP\/README\.md$/i.test(f.path));if(rd3&&typeof rd3.content==="string")rd3.content+="\n## Qué significa «validado»\nValidación ESTRUCTURAL = archivos, JSON, manifests, UUID, dependencias, sintaxis y API revisados por el programa. Funcionamiento REAL = que los poderes se vean y actúen dentro de Minecraft: eso solo se comprueba jugando. Estado de este add-on: "+(esParcial?"PARCIAL (hay pendientes)":"validado estáticamente; falta probarlo en el juego")+".\n";}
     r.notas.push("Calidad: "+informe.score+"/100"+(informe.problemas.length?" ("+informe.problemas.join("; ")+")":""));
     const zip=await createZip(r.files);
     let guardado=false;try{guardado=await mcGuardarUltimo(env,uid,{ver:verNueva,plan,prompt,files:r.files,modelos3d:plan._modelos3d,nivelTex:plan._nivelTex});}catch(e){console.error("mc_ult",String(e&&e.message||e).slice(0,120));}
@@ -5055,7 +5276,7 @@ async function mcBuild(body,env,request){
     const nombre="ego-"+slugAscii(plan.nombre)+(verNueva>1?"-v"+verNueva:"")+(esParcial?"-parcial":"");
     const c=r.conteo;
     const resumen=`${plan.nombre}: ${c.items} ítem(s), ${c.bloques} bloque(s), ${c.criaturas} criatura(s), ${c.scripts} script(s), ${c.texturas} textura(s) PNG`+(c.habilidades&&c.habilidades.length?". Habilidades programadas: "+c.habilidades.join("; "):"")+(au?". Revisión final: "+au.cumplidos+" de "+au.total+" cosas pedidas verificadas dentro del archivo":"");
-    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,...egoTamHeaders(zip),"X-EGO-Files":String(r.files.length),"X-EGO-Version":String(verNueva),"X-EGO-Score":String(informe.score),"X-EGO-Habilidades":encodeURIComponent(JSON.stringify(estadoHab.map(h=>[h.path.replace("BP/scripts/",""),h.estado])).slice(0,1500)),"X-EGO-Model":"por-partes","X-EGO-Parcial":esParcial?"1":"0","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
+    return new Response(zip,{status:200,headers:{...corsPara(request,env),"Content-Type":"application/zip","Content-Disposition":`attachment; filename="${nombre}.mcaddon"`,...egoTamHeaders(zip),"X-EGO-Files":String(r.files.length),"X-EGO-Version":String(verNueva),"X-EGO-Score":String(informe.score),"X-EGO-Estado":esParcial?"PARCIAL":"VALIDADO_ESTATICO","X-EGO-Habilidades":encodeURIComponent(JSON.stringify(estadoHab.map(h=>[h.path.replace("BP/scripts/",""),h.estado])).slice(0,1500)),"X-EGO-Model":"por-partes","X-EGO-Parcial":esParcial?"1":"0","X-EGO-Avisos":String(r.notas.length),"X-EGO-Notas":encodeURIComponent(r.notas.slice(0,6).join(" | ").slice(0,1500)),"X-EGO-Validacion":encodeURIComponent(JSON.stringify(validacionCompacta(validacion))),"X-EGO-Cobertura":encodeURIComponent(JSON.stringify(auditoriaRequisitos).slice(0,4000)),"X-EGO-Reparacion":encodeURIComponent(JSON.stringify({estado:ciclo.informe.estado,rondas:ciclo.informe.rondas,modelos:ciclo.informe.modelos||[],cambios:(ciclo.informe.historial||[]).length,erroresFinales:(ciclo.informe.erroresFinales||[]).slice(0,5).map(x=>String(x).slice(0,160))}).slice(0,2500)),"X-EGO-Resumen":encodeURIComponent(resumen),"X-EGO-Ficha":encodeURIComponent(JSON.stringify(fichaAddon(plan,r,au)).slice(0,6000)),"Cache-Control":"no-store"}});
   }catch(e){
     console.error("mc_build",String(e&&e.message||e).slice(0,200));
     if((e?.code==="EGO_PROJECT_TOO_LARGE"||e?.code==="EGO_WORKER_MEMORY_CAP")) return json({error:String(e.message),code:e.code,limiteBytes:e.projectLimitBytes,tamanoMinimoBytes:e.projectBytes},413);
@@ -5165,7 +5386,7 @@ function tipoTarea(text) {
 
 async function runDiag(env, correoUsuario) {
   return {
-    version: "14.60.0",
+    version: "14.61.0",
     enLinea: true,
     memoriaPersonal: !!env.EGO_MEMORY,
     biblioteca: !!env.EGO_BIBLIOTECA,
@@ -5829,7 +6050,7 @@ Todos los packs deben tener manifest v2, UUID v4 únicos, rutas relativas y arch
 // El modelo solo decide nombre/tipo/habilidad/color; los archivos los arma el código,
 // así el manifest, el ícono, la textura PNG y el script siempre salen correctos.
 // ============================================================
-// ===== v14.60.0 · Texturas HD (hasta 128×128; armadura hasta 256×128) =====
+// ===== v14.61.0 · Texturas HD (hasta 128×128; armadura hasta 256×128) =====
 // Nivel según el pedido: pixel (16) · normal (32, por defecto) · alta (64) · max (128). Se reduce solo si el peso se acerca al límite.
 function egoNivelTexturas(prompt){
   const t=String(prompt||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
@@ -6849,7 +7070,7 @@ function medirProyectoBytes(files){
   }
   return { bytes: total, megabytes: total / 1048576, files: n, limitBytes: limite, safeBytes: safe };
 }
-// v14.60.0: categoría según el tamaño real del paquete. Pequeño ≤ 1 MiB · Mediano ≤ 10 MiB · Grande hasta el límite (25 MiB por defecto).
+// v14.61.0: categoría según el tamaño real del paquete. Pequeño ≤ 1 MiB · Mediano ≤ 10 MiB · Grande hasta el límite (25 MiB por defecto).
 function egoCategoria(bytes){ return bytes <= 1048576 ? "pequeño" : bytes <= 10485760 ? "mediano" : "grande"; }
 function egoTextoTam(bytes){
   const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(2) + " MB";
@@ -6977,7 +7198,7 @@ async function manejar(request, env) {
 
   if (url.searchParams.get("web")) { const c = await contextoWeb(url.searchParams.get("web"), env, true); return json({ fuentes: c.fuentes, usadas: c.usadas, vista: c.texto.slice(0, 3000) }); }
   if (url.searchParams.has("health")) return json({
-    ok: true, version: "14.60.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
+    ok: true, version: "14.61.0", projectValidator: true, autoRepair: true, aiConfigured: !!env.AI,
     memoryConfigured: !!env.EGO_MEMORY, libraryConfigured: !!env.EGO_BIBLIOTECA,
     openRouterFallbackConfigured: !!routerApiKey(env),
     teamConfigured: !!routerApiKey(env) && env.EGO_TEAM_MODE !== "0",
@@ -7006,7 +7227,7 @@ async function manejar(request, env) {
   }
 
   if (request.method !== "POST") {
-    return new Response("🧠 EGO AI v14.60.0 — Código, matemáticas, ciencias y creación\n\n" +
+    return new Response("🧠 EGO AI v14.61.0 — Código, matemáticas, ciencias y creación\n\n" +
       `📖 Biblioteca: ${env.EGO_BIBLIOTECA ? '✅' : '❌'}\n` +
       `👤 Perfiles: ${env.EGO_PERFILES ? '✅' : '❌'}\n` +
       "🔒 Enseñanza: solo el creador (sesión verificada)",
